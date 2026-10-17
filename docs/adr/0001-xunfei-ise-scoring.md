@@ -1,0 +1,9 @@
+# ADR-0001: 发音评分引擎选用讯飞语音评测（ISE）
+
+**Status**: accepted
+
+MVP 需要英文句子朗读评测（0-100 句子级总分，映射为星级反馈）。调研对比见 `research/scoring-engines.md`，决定采用**讯飞开放平台语音评测 ISE（流式 WebSocket 版）**：其 read_sentence 题型专为中国学生课文朗读打分设计（中高考同源），个人实名认证即可开通，免费额度 500 次/天，覆盖家庭使用全部用量。
+
+**已知取舍**：讯飞不区分英美口音（按美式基准打分），而沪教版牛津教材偏英式发音。接受此偏差，通过星级阈值校准补偿。否决的备选：Azure pronunciation assessment（唯一支持 en-GB，但需国际信用卡、大陆访问延迟高）；腾讯云智聆 SOE-N（REST 接入更省事，但同样不分口音且无免费额度）。
+
+**实现约束**：评测调用收敛在评测服务接口后，换引擎只改一处；iPad Safari MediaRecorder 产出 AAC 音频，须在服务端经 ffmpeg 转码为 16kHz/16bit 单声道 WAV 再提交（所有候选引擎均不收 AAC）。

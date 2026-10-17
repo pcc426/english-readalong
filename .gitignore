@@ -1,0 +1,22 @@
+# macOS
+.DS_Store
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# 环境变量与密钥（讯飞密钥等）
+.env
+.env.*
+!.env.example
+
+# 教科书电子版（版权源文件，仅本地保留，不入库）
+materials/textbook/
+
+# SQLite 数据库文件（运行时数据）
+*.db
+*.db-journal
+*.sqlite
