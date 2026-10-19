@@ -1,6 +1,6 @@
 // 一次性素材对齐工具（票 01）：whisper 词级转写 JSON + 教材权威句子清单
 // → 每句的起止时间与对齐状态。
-// 用法: node --experimental-strip-types scripts/align.ts <whisper.json> <sentences.json> <out.json>
+// 用法: npx tsx scripts/align.ts <whisper.json> <sentences.json> <out.json>
 import { readFileSync, writeFileSync } from "node:fs";
 import { alignSentences, type WhisperWord } from "../src/lib/alignment/align.ts";
 
