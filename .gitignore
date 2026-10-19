@@ -20,3 +20,6 @@ materials/textbook/
 *.db
 *.db-journal
 *.sqlite
+
+# whisper 本地模型（147MB+，仅本机）
+models/

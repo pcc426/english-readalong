@@ -4,9 +4,12 @@
   "source": "沪教版五上 Unit 2 · Story time",
   "video": "五上_U2.mp4",
   "sentences": [
-    { "text": "Minmin, listen to the music and follow it.", "start": null, "end": null },
-    { "text": "To play well, all the students at the dragon's head, body and tail need to be in step.", "start": null, "end": null },
-    { "text": "Head of the dragon, slow down!", "start": null, "end": null },
-    { "text": "This time, all the players keep the same pace and the long dragon comes to life.", "start": null, "end": null }
+    { "text": "Head of the dragon, slow down! We can't keep up with you!", "start": 0.0, "end": 5.5 },
+    { "text": "Stop!", "start": 5.5, "end": 6.05 },
+    { "text": "To play well, all the students at the dragon's head, body and tail need to be in step.", "start": 6.05, "end": 12.98 },
+    { "text": "Minmin, listen to the music and follow it.", "start": 14.54, "end": 17.58 },
+    { "text": "Everyone, follow Minmin.", "start": 17.58, "end": 19.58 },
+    { "text": "Let's try again.", "start": 21.03, "end": 21.87 },
+    { "text": "This time, all the players keep the same pace and the long dragon comes to life.", "start": 22.17, "end": 29.2 }
   ]
 }
