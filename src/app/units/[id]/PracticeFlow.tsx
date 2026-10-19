@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useReducer, useRef } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import {
-  ADVANCE_DELAY_MS,
+  TICK_MS,
   initialFlow,
   reduceFlow,
   type FlowEvent,
@@ -17,6 +17,22 @@ export default function PracticeFlow({ unit }: { unit: UnitDetail }) {
     initialFlow()
   );
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [isPaused, setIsPaused] = useState(false);
+
+  const current = state.step === "finished" ? null : unit.sentences[state.index];
+
+  // 暂停图标跟随视频真实状态（含系统级中断）
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const sync = () => setIsPaused(video.paused);
+    video.addEventListener("play", sync);
+    video.addEventListener("pause", sync);
+    return () => {
+      video.removeEventListener("play", sync);
+      video.removeEventListener("pause", sync);
+    };
+  }, []);
 
   // 播放态：seek 到句起点，等 seek 完成再播放（iPad Safari 直接 play 会竞态）；
   // 没有起止时间的句子（防御，正常内容包不会出现）直接跳过
@@ -67,25 +83,78 @@ export default function PracticeFlow({ unit }: { unit: UnitDetail }) {
     return () => video.removeEventListener("timeupdate", onTimeUpdate);
   }, [state, unit.sentences]);
 
-  // 等待态：定时自动进下一句
+  // 倒计时态：每秒一跳
   useEffect(() => {
     if (state.step !== "waiting") return;
-    const timer = setTimeout(() => dispatch({ type: "advance" }), ADVANCE_DELAY_MS);
+    const timer = setTimeout(() => dispatch({ type: "tick" }), TICK_MS);
     return () => clearTimeout(timer);
   }, [state]);
 
-  const current =
-    state.step === "finished" ? null : unit.sentences[state.index];
+  const togglePlay = () => {
+    const video = videoRef.current;
+    if (!video || state.step !== "playing") return;
+    if (video.paused) video.play().catch(() => {});
+    else video.pause();
+  };
+
+  const prevSentence = () => {
+    if (state.step === "finished") dispatch({ type: "select", index: total - 1 });
+    else if (state.step !== "idle") dispatch({ type: "select", index: Math.max(0, state.index - 1) });
+  };
+  const nextSentence = () => {
+    if (state.step === "waiting") dispatch({ type: "skip" });
+    else if (state.step === "playing" && state.index + 1 < total)
+      dispatch({ type: "select", index: state.index + 1 });
+  };
 
   return (
     <div className="mt-6">
-      <video
-        ref={videoRef}
-        src={encodeURI(unit.video)}
-        playsInline
-        preload="metadata"
-        className="w-full rounded-2xl bg-black shadow-md"
-      />
+      <div className="relative">
+        <video
+          ref={videoRef}
+          src={encodeURI(unit.video)}
+          playsInline
+          preload="metadata"
+          className="w-full rounded-2xl bg-black shadow-md"
+        />
+        {/* 倒计时浮层 */}
+        {state.step === "waiting" && (
+          <button
+            onClick={() => dispatch({ type: "skip" })}
+            className="absolute inset-0 flex flex-col items-center justify-center rounded-2xl bg-black/50 text-white"
+          >
+            <span className="text-8xl font-bold tabular-nums">
+              {state.secondsLeft}
+            </span>
+            <span className="mt-2 text-xl">下一句马上来，点击跳过</span>
+          </button>
+        )}
+      </div>
+
+      {/* 三大控制按钮：上一句 / 暂停·播放 / 下一句 */}
+      <div className="mt-4 grid grid-cols-3 gap-3">
+        <button
+          onClick={prevSentence}
+          disabled={state.step === "idle"}
+          className="rounded-2xl bg-white py-5 text-xl font-bold text-slate-700 shadow-md ring-1 ring-slate-200 active:bg-slate-100 disabled:opacity-40"
+        >
+          ⏮ 上一句
+        </button>
+        <button
+          onClick={togglePlay}
+          disabled={state.step !== "playing"}
+          className="rounded-2xl bg-slate-700 py-5 text-xl font-bold text-white shadow-md active:bg-slate-800 disabled:opacity-40"
+        >
+          {isPaused ? "▶ 继续" : "⏸ 暂停"}
+        </button>
+        <button
+          onClick={nextSentence}
+          disabled={state.step === "idle" || state.step === "finished" || (state.step === "playing" && state.index + 1 >= total)}
+          className="rounded-2xl bg-white py-5 text-xl font-bold text-slate-700 shadow-md ring-1 ring-slate-200 active:bg-slate-100 disabled:opacity-40"
+        >
+          下一句 ⏭
+        </button>
+      </div>
 
       {/* 当前句大字卡 */}
       {current && (
@@ -94,7 +163,7 @@ export default function PracticeFlow({ unit }: { unit: UnitDetail }) {
             {current.index + 1}. {current.text}
           </p>
           <p className="mt-3 text-lg text-slate-500">
-            {state.step === "playing" && "🔊 示范播放中，仔细听…"}
+            {state.step === "playing" && (isPaused ? "⏸ 已暂停，点「继续」接着听" : "🔊 示范播放中，仔细听…")}
             {state.step === "waiting" && "⏭ 即将播放下一句"}
             {state.step === "idle" && "准备好就开始吧！"}
             {current.bestScore != null
@@ -128,10 +197,12 @@ export default function PracticeFlow({ unit }: { unit: UnitDetail }) {
       )}
 
       {/* 句子导航（手动跳转） */}
-      <nav className="mt-6 grid grid-cols-5 gap-2">
+      <nav
+        className="mt-6 grid gap-2"
+        style={{ gridTemplateColumns: `repeat(${Math.min(total, 7)}, minmax(0, 1fr))` }}
+      >
         {unit.sentences.map((s) => {
-          const isCurrent =
-            state.step !== "finished" && state.index === s.index;
+          const isCurrent = state.step !== "finished" && state.index === s.index;
           return (
             <button
               key={s.index}
@@ -150,6 +221,10 @@ export default function PracticeFlow({ unit }: { unit: UnitDetail }) {
           );
         })}
       </nav>
+
+      <a href={`/units/${unit.id}/calibrate`} className="mt-8 block text-center text-base text-slate-400">
+        🔧 校对模式（家长调句子边界用）
+      </a>
     </div>
   );
 }
