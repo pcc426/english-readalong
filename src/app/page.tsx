@@ -21,9 +21,10 @@ export default function HomePage() {
 
       <div className="mt-8 space-y-6">
         {units.map((unit) => (
-          <section
+          <a
             key={unit.id}
-            className="rounded-3xl bg-white p-7 shadow-md ring-1 ring-slate-100"
+            href={`/units/${unit.id}`}
+            className="block rounded-3xl bg-white p-7 shadow-md ring-1 ring-slate-100 active:bg-slate-50"
           >
             <h2 className="text-2xl font-bold">{unit.title}</h2>
             <p className="mt-1 text-lg text-slate-500">
@@ -44,7 +45,7 @@ export default function HomePage() {
             <p className="mt-4 text-xl leading-relaxed text-emerald-700">
               {unit.encouragement}
             </p>
-          </section>
+          </a>
         ))}
       </div>
     </main>

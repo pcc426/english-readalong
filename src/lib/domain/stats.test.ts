@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { openDb } from "../db";
-import { completionDistribution } from "./stats";
+import { bestAttemptsBySentence, completionDistribution } from "./stats";
 import type { UnitPack } from "../content/schema";
 
 const tmpDirs: string[] = [];
@@ -76,5 +76,18 @@ describe("单元完成度分布", () => {
     const dist = completionDistribution(db, unit);
     expect(dist.percentages.threeStar).toBe(33);
     expect(dist.percentages.unpracticed).toBe(67);
+  });
+
+  it("最好成绩平手时取最新一次的达成时间", () => {
+    const db = makeDb();
+    const unit = makeUnit(1);
+    // 先插入一条旧的 90 分，再插入新的 90 分（id 更大），平手应取 id 最新的
+    db.prepare(
+      "INSERT INTO practice_attempts (unit_id, sentence_index, score, stars, created_at) VALUES (?, ?, ?, ?, ?)"
+    ).run(unit.id, 0, 90, 3, "2000-01-01 00:00:00");
+    attempt(db, unit.id, 0, 90, 3);
+    const best = bestAttemptsBySentence(db, unit.id).get(0);
+    expect(best?.score).toBe(90);
+    expect(best?.createdAt).not.toBe("2000-01-01 00:00:00");
   });
 });
