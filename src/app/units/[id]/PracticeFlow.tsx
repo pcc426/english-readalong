@@ -79,8 +79,15 @@ export default function PracticeFlow({ unit }: { unit: UnitDetail }) {
         dispatch({ type: "clipEnded" });
       }
     };
+    // 防御：句尾时间超过视频实际时长时，视频会自然播完，timeupdate 永远到不了终点——
+    // 以 ended 事件兜底触发流转
+    const onEnded = () => dispatch({ type: "clipEnded" });
     video.addEventListener("timeupdate", onTimeUpdate);
-    return () => video.removeEventListener("timeupdate", onTimeUpdate);
+    video.addEventListener("ended", onEnded);
+    return () => {
+      video.removeEventListener("timeupdate", onTimeUpdate);
+      video.removeEventListener("ended", onEnded);
+    };
   }, [state, unit.sentences]);
 
   // 倒计时态：每秒一跳
