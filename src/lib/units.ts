@@ -19,12 +19,12 @@ export interface UnitOverview {
   encouragement: string;
 }
 
-function contentDir(): string {
+export function contentDir(): string {
   // 用 || 而非 ??：.env 里的空值行（CONTENT_DIR=）应视为未设置
   return process.env.CONTENT_DIR || path.join(process.cwd(), "content", "units");
 }
 
-function dbPath(): string {
+export function dbPath(): string {
   const p =
     process.env.DB_PATH || path.join(process.cwd(), "data", "readalong.db");
   mkdirSync(path.dirname(p), { recursive: true });

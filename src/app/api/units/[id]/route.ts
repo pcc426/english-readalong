@@ -10,7 +10,10 @@ export async function GET(
   const { id } = await ctx.params;
   const unit = getUnitDetail(id);
   if (!unit) {
-    return NextResponse.json({ error: "单元不存在" }, { status: 404 });
+    return NextResponse.json(
+      { error: { code: "UNIT_NOT_FOUND", message: "单元不存在" } },
+      { status: 404 }
+    );
   }
   return NextResponse.json({ unit });
 }
