@@ -9,6 +9,7 @@ import {
   type FlowEvent,
   type FlowState,
 } from "@/lib/domain/practice-flow";
+import { mapScoreToStars } from "@/lib/domain/stars";
 import type { UnitDetail } from "@/lib/units";
 
 // 录音最长秒数：超时自动提交，防止孩子忘按"读好了"一直录
@@ -38,11 +39,18 @@ export default function PracticeFlow({ unit }: { unit: UnitDetail }) {
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [micNotice, setMicNotice] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [minePlaying, setMinePlaying] = useState(false);
+  const mineAudioRef = useRef<HTMLAudioElement | null>(null);
+  const mineUrlRef = useRef<string | null>(null);
   const [localBest, setLocalBest] = useState<Record<number, number>>(() =>
     Object.fromEntries(
-      unit.sentences.filter((s) => s.bestScore != null).map((s) => [s.index, s.bestScore!])
+      unit.sentences
+        .filter((s) => s.bestScore != null)
+        .map((s) => [s.index, Math.round(s.bestScore!)])
     )
   );
+  // 本次会话练过（出过分）的句子，用于收尾时统计"本次练习"总星级
+  const [sessionPracticed, setSessionPracticed] = useState<Set<number>>(new Set());
 
   const current = state.step === "finished" ? null : unit.sentences[state.index];
   const index = state.step === "finished" ? 0 : state.index;
@@ -119,10 +127,10 @@ export default function PracticeFlow({ unit }: { unit: UnitDetail }) {
           ...prev,
           [sentenceIndex]: Math.max(prev[sentenceIndex] ?? 0, result.score),
         }));
+        setSessionPracticed((prev) => new Set(prev).add(sentenceIndex));
         setMicNotice(null);
+        // 出分后保留录音，供"听我读的"回放；离开该句时统一清理
         dispatch({ type: "scored", result });
-        blobRef.current = null;
-        setHasBlob(false);
       } else {
         dispatch({ type: "submitFailed" });
         const code = body?.error?.code as string | undefined;
@@ -147,7 +155,6 @@ export default function PracticeFlow({ unit }: { unit: UnitDetail }) {
     if (state.step === "recording" && !hasBlob && !recorderActive && !micNotice) {
       void startRecording();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.step, hasBlob, recorderActive, micNotice]);
 
   // 录音计时 + 超时自动提交
@@ -162,17 +169,55 @@ export default function PracticeFlow({ unit }: { unit: UnitDetail }) {
     return () => clearTimeout(timer);
   }, [state.step, recorderActive, recordSeconds]);
 
-  // 离开录音/提交态（跳句、出分）时：丢弃进行中的录音与陈旧 blob，
+  // 离开本句（跳句、出分后离开、收尾）时：丢弃进行中的录音与回放 URL，
   // 防止上一句的音频混进下一次提交
   useEffect(() => {
-    if (state.step !== "recording" && state.step !== "submitting") {
+    if (state.step !== "recording" && state.step !== "submitting" && state.step !== "scored") {
       if (recorderRef.current?.state === "recording") stopRecording("discard");
       if (blobRef.current) {
         blobRef.current = null;
         setHasBlob(false);
       }
+      if (mineUrlRef.current) {
+        URL.revokeObjectURL(mineUrlRef.current);
+        mineUrlRef.current = null;
+        mineAudioRef.current?.pause();
+        mineAudioRef.current = null;
+        setMinePlaying(false);
+      }
     }
   }, [state.step]);
+
+  /** 出分页"听我读的"：回放孩子刚才的录音，切换播放/停止 */
+  function toggleMine() {
+    if (!blobRef.current) return;
+    dispatch({ type: "hold" });
+    if (minePlaying) {
+      mineAudioRef.current?.pause();
+      return;
+    }
+    if (!mineUrlRef.current) mineUrlRef.current = URL.createObjectURL(blobRef.current);
+    if (!mineAudioRef.current) {
+      mineAudioRef.current = new Audio(mineUrlRef.current);
+      mineAudioRef.current.onended = () => setMinePlaying(false);
+    }
+    mineAudioRef.current.currentTime = 0;
+    mineAudioRef.current.play().then(() => setMinePlaying(true)).catch(() => setMinePlaying(false));
+  }
+
+  /** 出分页"再练一次这句"：暂停回放、丢弃旧录音，回录音态重新开录 */
+  function retrySentence() {
+    mineAudioRef.current?.pause();
+    setMinePlaying(false);
+    if (mineUrlRef.current) {
+      URL.revokeObjectURL(mineUrlRef.current);
+      mineUrlRef.current = null;
+      mineAudioRef.current = null;
+    }
+    blobRef.current = null;
+    setHasBlob(false);
+    dispatch({ type: "retry" });
+  }
 
   // 卸载：按"丢弃"处理并释放麦克风
   useEffect(() => {
@@ -263,14 +308,14 @@ export default function PracticeFlow({ unit }: { unit: UnitDetail }) {
   const result = state.step === "scored" ? state.result : null;
 
   return (
-    <div className="mt-6">
-      <div className="relative">
+    <div className="mt-2 flex min-h-0 flex-1 flex-col">
+      <div className="relative flex min-h-0 flex-1 justify-center">
         <video
           ref={videoRef}
           src={encodeURI(unit.video)}
           playsInline
           preload="metadata"
-          className="w-full rounded-2xl bg-black shadow-md"
+          className="max-h-full w-auto max-w-full rounded-2xl bg-black shadow-md"
         />
         {state.step === "recording" && recorderActive && (
           <div className="absolute left-3 top-3 flex items-center gap-2 rounded-full bg-red-600 px-3 py-1 text-lg font-bold text-white">
@@ -281,25 +326,25 @@ export default function PracticeFlow({ unit }: { unit: UnitDetail }) {
       </div>
 
       {/* 三大控制按钮：上一句 / 暂停·继续 / 下一句 */}
-      <div className="mt-4 grid grid-cols-3 gap-3">
+      <div className="mt-2 grid shrink-0 grid-cols-3 gap-3">
         <button
           onClick={prevSentence}
           disabled={state.step === "idle"}
-          className="rounded-2xl bg-white py-5 text-xl font-bold text-slate-700 shadow-md ring-1 ring-slate-200 active:bg-slate-100 disabled:opacity-40"
+          className="rounded-2xl bg-white py-4 text-xl font-bold text-slate-700 shadow-md ring-1 ring-slate-200 active:bg-slate-100 disabled:opacity-40"
         >
           ⏮ 上一句
         </button>
         <button
           onClick={togglePlay}
           disabled={state.step !== "playing"}
-          className="rounded-2xl bg-slate-700 py-5 text-xl font-bold text-white shadow-md active:bg-slate-800 disabled:opacity-40"
+          className="rounded-2xl bg-slate-700 py-4 text-xl font-bold text-white shadow-md active:bg-slate-800 disabled:opacity-40"
         >
           {isPaused ? "▶ 继续" : "⏸ 暂停"}
         </button>
         <button
           onClick={nextSentence}
           disabled={state.step === "idle" || state.step === "finished" || (state.step === "playing" && state.index + 1 >= total)}
-          className="rounded-2xl bg-white py-5 text-xl font-bold text-slate-700 shadow-md ring-1 ring-slate-200 active:bg-slate-100 disabled:opacity-40"
+          className="rounded-2xl bg-white py-4 text-xl font-bold text-slate-700 shadow-md ring-1 ring-slate-200 active:bg-slate-100 disabled:opacity-40"
         >
           下一句 ⏭
         </button>
@@ -307,7 +352,7 @@ export default function PracticeFlow({ unit }: { unit: UnitDetail }) {
 
       {/* 当前句 / 录音 / 出分 主卡 */}
       {current && (
-        <section className="mt-5 rounded-3xl bg-white p-6 shadow-md ring-1 ring-slate-100">
+        <section className="mt-3 shrink-0 rounded-3xl bg-white p-4 shadow-md ring-1 ring-slate-100">
           <p className="text-2xl leading-relaxed font-semibold">
             {current.index + 1}. {current.text}
           </p>
@@ -375,8 +420,8 @@ export default function PracticeFlow({ unit }: { unit: UnitDetail }) {
           {state.step === "scored" && result && (
             <div className="mt-3">
               <p className="text-5xl font-bold tabular-nums">
-                {result.score}
-                <span className="ml-3 text-3xl text-amber-500">
+                {Math.round(result.score)}
+                <span className="ml-2 text-5xl text-amber-500">
                   {"★".repeat(result.stars)}
                   <span className="text-slate-200">{"☆".repeat(3 - result.stars)}</span>
                 </span>
@@ -384,17 +429,26 @@ export default function PracticeFlow({ unit }: { unit: UnitDetail }) {
               <p className="mt-2 text-lg">
                 {result.isNewBest && <span className="font-bold text-emerald-600">🏅 新纪录！</span>}
                 <span className="ml-2 text-slate-500">
-                  最好成绩 {localBest[state.index] ?? result.score} 分
-                  {" · "}
-                  {state.secondsLeft} 秒后下一句
+                  最好成绩 {localBest[state.index] ?? Math.round(result.score)} 分
+                  {!state.held && (
+                    <span className="ml-2 text-slate-400">{state.secondsLeft} 秒后下一句</span>
+                  )}
                 </span>
               </p>
-              <button
-                onClick={() => dispatch({ type: "retry" })}
-                className="mt-3 w-full rounded-xl bg-slate-100 py-3 text-lg font-bold text-slate-700 active:bg-slate-200"
-              >
-                ↺ 再练一次这句
-              </button>
+              <div className="mt-3 grid grid-cols-2 gap-3 text-lg font-bold">
+                <button
+                  onClick={toggleMine}
+                  className="rounded-xl bg-slate-100 py-4 text-slate-700 active:bg-slate-200"
+                >
+                  {minePlaying ? "⏹ 停止播放" : "🎧 听我读的"}
+                </button>
+                <button
+                  onClick={retrySentence}
+                  className="rounded-xl bg-emerald-500 py-4 text-white active:bg-emerald-600"
+                >
+                  ↺ 再练一次这句
+                </button>
+              </div>
             </div>
           )}
 
@@ -409,33 +463,49 @@ export default function PracticeFlow({ unit }: { unit: UnitDetail }) {
       {state.step === "idle" && (
         <button
           onClick={() => dispatch({ type: "begin" })}
-          className="mt-5 w-full rounded-2xl bg-emerald-500 py-5 text-2xl font-bold text-white shadow-md active:bg-emerald-600"
+          className="mt-3 w-full rounded-2xl bg-emerald-500 py-4 text-2xl font-bold text-white shadow-md active:bg-emerald-600"
         >
           ▶ 开始练这一单元
         </button>
       )}
-      {state.step === "finished" && (
-        <section className="mt-5 rounded-3xl bg-emerald-50 p-6 text-center ring-1 ring-emerald-100">
-          <p className="text-2xl font-bold text-emerald-700">
-            🎉 整个单元练完啦！
-          </p>
-          <button
-            onClick={() => dispatch({ type: "select", index: 0 })}
-            className="mt-4 w-full rounded-2xl bg-emerald-500 py-4 text-xl font-bold text-white active:bg-emerald-600"
-          >
-            ↺ 再练一遍
-          </button>
-        </section>
-      )}
+          {state.step === "finished" && (() => {
+            const earned = unit.sentences.reduce((sum, s) => {
+              if (!sessionPracticed.has(s.index) || localBest[s.index] == null) return sum;
+              return sum + mapScoreToStars(localBest[s.index]);
+            }, 0);
+            const practiced = sessionPracticed.size;
+            return (
+              <section className="mt-5 rounded-3xl bg-emerald-50 p-6 text-center ring-1 ring-emerald-100">
+                <p className="text-2xl font-bold text-emerald-700">
+                  🎉 整个单元练完啦！
+                </p>
+                {practiced > 0 && (
+                  <p className="mt-3 text-3xl font-bold text-amber-500">
+                    本次练习共收获 {earned} 颗星
+                    <span className="ml-2 text-lg font-normal text-slate-500">
+                      （练了 {practiced} 句，满 {practiced * 3} 颗）
+                    </span>
+                  </p>
+                )}
+                <button
+                  onClick={() => dispatch({ type: "select", index: 0 })}
+                  className="mt-4 w-full rounded-2xl bg-emerald-500 py-4 text-xl font-bold text-white active:bg-emerald-600"
+                >
+                  ↺ 再练一遍
+                </button>
+              </section>
+            );
+          })()}
 
       {/* 句子导航 */}
       <nav
-        className="mt-6 grid gap-2"
+        className="mt-3 grid shrink-0 gap-2"
         style={{ gridTemplateColumns: `repeat(${Math.min(total, 7)}, minmax(0, 1fr))` }}
       >
         {unit.sentences.map((s) => {
           const isCurrent = state.step !== "finished" && state.index === s.index;
           const best = localBest[s.index];
+          const stars = best != null ? mapScoreToStars(best) : null;
           return (
             <button
               key={s.index}
@@ -447,17 +517,13 @@ export default function PracticeFlow({ unit }: { unit: UnitDetail }) {
               }`}
             >
               {s.index + 1}
-              <span className="block text-xs font-normal">
-                {best != null ? `${best}分` : "未练"}
+              <span className="block text-xs font-normal text-amber-400">
+                {stars != null ? "★".repeat(stars) : "未练"}
               </span>
             </button>
           );
         })}
       </nav>
-
-      <a href={`/units/${unit.id}/calibrate`} className="mt-8 block text-center text-base text-slate-400">
-        🔧 校对模式（家长调句子边界用）
-      </a>
     </div>
   );
 }

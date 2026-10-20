@@ -40,24 +40,50 @@ describe("逐句练习流转状态机（含录音评分）", () => {
       index: 0,
       result: { score: 92, stars: 3, isNewBest: true },
       secondsLeft: SCORE_DISPLAY_SECONDS,
+      held: false,
     });
   });
 
   it("出分后可 retry 回录音态重录本句", () => {
     const state = reduceFlow(
-      { step: "scored", index: 1, result: { score: 80, stars: 2, isNewBest: false }, secondsLeft: 2 },
+      { step: "scored", index: 1, result: { score: 80, stars: 2, isNewBest: false }, secondsLeft: 2, held: false },
       { type: "retry" },
       TOTAL
     );
     expect(state).toEqual({ step: "recording", index: 1 });
   });
 
-  it("出分展示约 2 秒后自动进下一句示范", () => {
+  it("出分后 hold 冻结自动流转（听自己录音时不被切走）；skip 仍可用", () => {
+    let state: FlowState = {
+      step: "scored",
+      index: 0,
+      result: { score: 60, stars: 1, isNewBest: false },
+      secondsLeft: 2,
+      held: false,
+    };
+    state = reduceFlow(state, { type: "hold" }, TOTAL);
+    expect(state).toEqual({
+      step: "scored",
+      index: 0,
+      result: { score: 60, stars: 1, isNewBest: false },
+      secondsLeft: 2,
+      held: true,
+    });
+    // hold 后 tick 不再倒计时
+    const afterTick = reduceFlow(state, { type: "tick" }, TOTAL);
+    expect(afterTick).toEqual(state);
+    // 但 skip 仍然有效
+    const skipped = reduceFlow(afterTick, { type: "skip" }, TOTAL);
+    expect(skipped).toEqual({ step: "playing", index: 1 });
+  });
+
+  it("出分展示 5 秒后自动进下一句示范", () => {
     let state: FlowState = {
       step: "scored",
       index: 0,
       result: { score: 92, stars: 3, isNewBest: true },
       secondsLeft: SCORE_DISPLAY_SECONDS,
+      held: false,
     };
     state = reduceFlow(state, { type: "tick" }, TOTAL);
     expect(state).toEqual({
@@ -65,6 +91,7 @@ describe("逐句练习流转状态机（含录音评分）", () => {
       index: 0,
       result: { score: 92, stars: 3, isNewBest: true },
       secondsLeft: SCORE_DISPLAY_SECONDS - 1,
+      held: false,
     });
     while (state.step === "scored") state = reduceFlow(state, { type: "tick" }, TOTAL);
     expect(state).toEqual({ step: "playing", index: 1 });
@@ -76,6 +103,7 @@ describe("逐句练习流转状态机（含录音评分）", () => {
       index: TOTAL - 1,
       result: { score: 80, stars: 2, isNewBest: false },
       secondsLeft: 1,
+      held: false,
     };
     state = reduceFlow(state, { type: "tick" }, TOTAL);
     expect(state).toEqual({ step: "finished" });
@@ -98,7 +126,7 @@ describe("逐句练习流转状态机（含录音评分）", () => {
     expect(state).toEqual({ step: "finished" });
 
     state = reduceFlow(
-      { step: "scored", index: 0, result: { score: 90, stars: 3, isNewBest: true }, secondsLeft: 2 },
+      { step: "scored", index: 0, result: { score: 90, stars: 3, isNewBest: true }, secondsLeft: 2, held: false },
       { type: "skip" },
       TOTAL
     );

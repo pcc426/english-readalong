@@ -81,6 +81,8 @@ export async function POST(
   } catch {
     return errorResponse(502, "SCORING_FAILED", "评分服务开小差了，稍等再试一次");
   }
+  // 展示、落库、比较都用整数分（讯飞返回带小数）
+  score = Math.round(score);
 
   const stars = mapScoreToStars(score);
   const db = openDb(dbPath());

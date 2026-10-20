@@ -10,7 +10,14 @@ export type FlowState =
   | { step: "playing"; index: number } // 正在播放该句示范
   | { step: "recording"; index: number } // 示范播完，孩子跟读中
   | { step: "submitting"; index: number } // 录音已提交，评分中
-  | { step: "scored"; index: number; result: ScoreResult; secondsLeft: number } // 出分展示，倒计时后自动进下一句
+  | {
+      step: "scored";
+      index: number;
+      result: ScoreResult;
+      secondsLeft: number;
+      /** 孩子点了"听我读"/"再练一次"后冻结自动流转 */
+      held: boolean;
+    } // 出分展示，倒计时后自动进下一句
   | { step: "finished" }; // 整个单元练完
 
 export interface ScoreResult {
@@ -25,13 +32,14 @@ export type FlowEvent =
   | { type: "submitting" }
   | { type: "submitFailed" }
   | { type: "scored"; result: ScoreResult }
+  | { type: "hold" }
   | { type: "retry" }
   | { type: "tick" }
   | { type: "skip" }
   | { type: "select"; index: number };
 
 /** 出分展示的秒数（之后自动进下一句） */
-export const SCORE_DISPLAY_SECONDS = 2;
+export const SCORE_DISPLAY_SECONDS = 5;
 /** 出分展示与录音计时共用每秒一跳 */
 export const TICK_MS = 1000;
 
@@ -72,12 +80,16 @@ export function reduceFlow(state: FlowState, event: FlowEvent, total: number): F
         index: state.index,
         result: event.result,
         secondsLeft: SCORE_DISPLAY_SECONDS,
+        held: false,
       };
+    case "hold":
+      // 听自己录音/再练一次时冻结自动流转，把节奏交还给孩子
+      return state.step === "scored" ? { ...state, held: true } : state;
     case "retry":
       // 出分后"再练一次"：回录音态重录本句
       return state.step === "scored" ? { step: "recording", index: state.index } : state;
     case "tick": {
-      if (state.step !== "scored") return state;
+      if (state.step !== "scored" || state.held) return state;
       return state.secondsLeft > 1
         ? { ...state, secondsLeft: state.secondsLeft - 1 }
         : advanceFrom(state.index, total);

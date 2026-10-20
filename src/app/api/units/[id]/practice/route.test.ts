@@ -58,22 +58,22 @@ function post(sentenceIndex: number, audio: Blob | null) {
 }
 
 describe("POST /api/units/[id]/practice", () => {
-  it("正常提交：返回分数星级与新纪录，数据落库并反映到详情与完成度", async () => {
+  it("正常提交：分数取整、返回星级与新纪录，数据落库并反映到详情与完成度", async () => {
     setupEnv();
-    setScoringService(new FakeScoringService(88));
+    setScoringService(new FakeScoringService(92.6)); // 讯飞返回小数 → 取整为 93
     const res = await post(0, fakeWav());
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toMatchObject({ score: 88, stars: 2, isNewBest: true, bestScore: 88 });
+    expect(body).toMatchObject({ score: 93, stars: 3, isNewBest: true, bestScore: 93 });
 
     // 句卡最好成绩反映新数据
     const detail = getUnitDetail("u2-dragon-dance");
-    expect(detail?.sentences[0].bestScore).toBe(88);
+    expect(detail?.sentences[0].bestScore).toBe(93);
     expect(detail?.sentences[0].bestAt).not.toBeNull();
 
-    // 单元完成度分布反映新数据（2 句中 1 句两星 → 50%）
+    // 单元完成度分布反映新数据（2 句中 1 句三星 → 50%）
     const overview = getUnitsOverview().find((u) => u.id === "u2-dragon-dance");
-    expect(overview?.percentages.twoStar).toBe(50);
+    expect(overview?.percentages.threeStar).toBe(50);
   });
 
   it("星级边界：89/90/74/75 → 两星/三星/一星/两星，且每次练习都落库", async () => {
