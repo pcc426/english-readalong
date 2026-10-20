@@ -1,29 +1,54 @@
 /**
  * 逐句练习的流转状态机（纯逻辑，供 UI 的 useReducer 使用）。
- * 节奏：播一句示范 → 播完 3-2-1 倒计时 → 自动进下一句；任意时刻可手动跳句。
+ * 节奏：播一句示范 → 播完进入录音态（轮到孩子跟读）→ 提交评分 → 出分展示
+ * 约 2 秒 → 自动进下一句；任意时刻可手动跳句。
  * "开始"门槛是刻意的：iPad Safari 要求用户手势后才能自动播放带声音的视频。
  */
 
 export type FlowState =
   | { step: "idle"; index: number } // 页面打开、还没按"开始"
   | { step: "playing"; index: number } // 正在播放该句示范
-  | { step: "waiting"; index: number; secondsLeft: number } // 播完该句，倒计时后自动进下一句
-  | { step: "finished" }; // 整个单元的示范连播完毕
+  | { step: "recording"; index: number } // 示范播完，孩子跟读中
+  | { step: "submitting"; index: number } // 录音已提交，评分中
+  | { step: "scored"; index: number; result: ScoreResult; secondsLeft: number } // 出分展示，倒计时后自动进下一句
+  | { step: "finished" }; // 整个单元练完
+
+export interface ScoreResult {
+  score: number;
+  stars: number;
+  isNewBest: boolean;
+}
 
 export type FlowEvent =
   | { type: "begin" }
   | { type: "clipEnded" }
+  | { type: "submitting" }
+  | { type: "submitFailed" }
+  | { type: "scored"; result: ScoreResult }
+  | { type: "retry" }
   | { type: "tick" }
   | { type: "skip" }
   | { type: "select"; index: number };
 
-/** 倒计时起始秒数（3-2-1 后自动进下一句） */
-export const COUNTDOWN_START = 3;
-/** 倒计时每秒一跳 */
+/** 出分展示的秒数（之后自动进下一句） */
+export const SCORE_DISPLAY_SECONDS = 2;
+/** 出分展示与录音计时共用每秒一跳 */
 export const TICK_MS = 1000;
+
+type SkippableState = Extract<FlowState, { step: "recording" | "submitting" | "scored" }>;
+
+/** 这些状态下可以跳过当前句直接进下一句 */
+export function canSkip(state: FlowState): state is SkippableState {
+  return state.step === "recording" || state.step === "submitting" || state.step === "scored";
+}
 
 export function initialFlow(): FlowState {
   return { step: "idle", index: 0 };
+}
+
+/** 从 index 的展示态推进到下一句；没有下一句则收尾 */
+function advanceFrom(index: number, total: number): FlowState {
+  return index + 1 < total ? { step: "playing", index: index + 1 } : { step: "finished" };
 }
 
 export function reduceFlow(state: FlowState, event: FlowEvent, total: number): FlowState {
@@ -34,22 +59,32 @@ export function reduceFlow(state: FlowState, event: FlowEvent, total: number): F
       return { step: "playing", index: Math.min(from, total - 1) };
     }
     case "clipEnded":
-      return state.step === "playing"
-        ? { step: "waiting", index: state.index, secondsLeft: COUNTDOWN_START }
-        : state;
+      return state.step === "playing" ? { step: "recording", index: state.index } : state;
+    case "submitting":
+      return state.step === "recording" ? { step: "submitting", index: state.index } : state;
+    case "submitFailed":
+      // 回到录音态：录音进度不丢（UI 保留上一段录音可直接重试提交）
+      return state.step === "submitting" ? { step: "recording", index: state.index } : state;
+    case "scored":
+      if (state.step !== "submitting") return state;
+      return {
+        step: "scored",
+        index: state.index,
+        result: event.result,
+        secondsLeft: SCORE_DISPLAY_SECONDS,
+      };
+    case "retry":
+      // 出分后"再练一次"：回录音态重录本句
+      return state.step === "scored" ? { step: "recording", index: state.index } : state;
     case "tick": {
-      if (state.step !== "waiting") return state;
+      if (state.step !== "scored") return state;
       return state.secondsLeft > 1
         ? { ...state, secondsLeft: state.secondsLeft - 1 }
-        : state.index + 1 < total
-          ? { step: "playing", index: state.index + 1 }
-          : { step: "finished" };
+        : advanceFrom(state.index, total);
     }
     case "skip":
-      if (state.step !== "waiting") return state;
-      return state.index + 1 < total
-        ? { step: "playing", index: state.index + 1 }
-        : { step: "finished" };
+      if (canSkip(state)) return advanceFrom(state.index, total);
+      return state;
     case "select":
       if (event.index < 0 || event.index >= total) return state;
       return { step: "playing", index: event.index };

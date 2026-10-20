@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  COUNTDOWN_START,
+  SCORE_DISPLAY_SECONDS,
   initialFlow,
   reduceFlow,
   type FlowState,
@@ -8,68 +8,115 @@ import {
 
 const TOTAL = 3;
 
-describe("逐句练习流转状态机", () => {
-  it("初始状态停在第一句等待开始", () => {
+/** 快速走到"录音中"第 index 句 */
+function toRecording(index: number): FlowState {
+  return { step: "recording", index };
+}
+
+describe("逐句练习流转状态机（含录音评分）", () => {
+  it("初始停在第一句等待开始；开始后播放示范", () => {
     expect(initialFlow()).toEqual({ step: "idle", index: 0 });
-  });
-
-  it("开始后播放当前句，播完进入倒计时等待", () => {
-    let state: FlowState = initialFlow();
-    state = reduceFlow(state, { type: "begin" }, TOTAL);
+    const state = reduceFlow(initialFlow(), { type: "begin" }, TOTAL);
     expect(state).toEqual({ step: "playing", index: 0 });
-
-    state = reduceFlow(state, { type: "clipEnded" }, TOTAL);
-    expect(state).toEqual({ step: "waiting", index: 0, secondsLeft: COUNTDOWN_START });
   });
 
-  it("倒计时逐秒递减，归零自动进下一句", () => {
-    let state: FlowState = { step: "waiting", index: 0, secondsLeft: COUNTDOWN_START };
+  it("示范播完进入录音态（轮到孩子读）", () => {
+    const state = reduceFlow({ step: "playing", index: 0 }, { type: "clipEnded" }, TOTAL);
+    expect(state).toEqual({ step: "recording", index: 0 });
+  });
+
+  it("录音 → 提交中 → 出分（分数+星级+是否新纪录）", () => {
+    let state: FlowState = toRecording(0);
+    state = reduceFlow(state, { type: "submitting" }, TOTAL);
+    expect(state).toEqual({ step: "submitting", index: 0 });
+
+    state = reduceFlow(
+      state,
+      { type: "scored", result: { score: 92, stars: 3, isNewBest: true } },
+      TOTAL
+    );
+    expect(state).toEqual({
+      step: "scored",
+      index: 0,
+      result: { score: 92, stars: 3, isNewBest: true },
+      secondsLeft: SCORE_DISPLAY_SECONDS,
+    });
+  });
+
+  it("出分后可 retry 回录音态重录本句", () => {
+    const state = reduceFlow(
+      { step: "scored", index: 1, result: { score: 80, stars: 2, isNewBest: false }, secondsLeft: 2 },
+      { type: "retry" },
+      TOTAL
+    );
+    expect(state).toEqual({ step: "recording", index: 1 });
+  });
+
+  it("出分展示约 2 秒后自动进下一句示范", () => {
+    let state: FlowState = {
+      step: "scored",
+      index: 0,
+      result: { score: 92, stars: 3, isNewBest: true },
+      secondsLeft: SCORE_DISPLAY_SECONDS,
+    };
     state = reduceFlow(state, { type: "tick" }, TOTAL);
-    expect(state).toEqual({ step: "waiting", index: 0, secondsLeft: COUNTDOWN_START - 1 });
-
-    // 连续 tick 直到归零
-    while (state.step === "waiting") state = reduceFlow(state, { type: "tick" }, TOTAL);
+    expect(state).toEqual({
+      step: "scored",
+      index: 0,
+      result: { score: 92, stars: 3, isNewBest: true },
+      secondsLeft: SCORE_DISPLAY_SECONDS - 1,
+    });
+    while (state.step === "scored") state = reduceFlow(state, { type: "tick" }, TOTAL);
     expect(state).toEqual({ step: "playing", index: 1 });
   });
 
-  it("最后一句倒计时结束进入收尾，而不是越界", () => {
-    let state: FlowState = { step: "waiting", index: TOTAL - 1, secondsLeft: COUNTDOWN_START };
-    while (state.step === "waiting") state = reduceFlow(state, { type: "tick" }, TOTAL);
+  it("最后一句出分展示完进入收尾", () => {
+    let state: FlowState = {
+      step: "scored",
+      index: TOTAL - 1,
+      result: { score: 80, stars: 2, isNewBest: false },
+      secondsLeft: 1,
+    };
+    state = reduceFlow(state, { type: "tick" }, TOTAL);
     expect(state).toEqual({ step: "finished" });
   });
 
-  it("非等待态的 tick 被忽略", () => {
-    const state = reduceFlow(initialFlow(), { type: "tick" }, TOTAL);
-    expect(state).toEqual({ step: "idle", index: 0 });
+  it("提交失败回到录音态（进度不丢，可重试）", () => {
+    const state = reduceFlow(
+      { step: "submitting", index: 1 },
+      { type: "submitFailed" },
+      TOTAL
+    );
+    expect(state).toEqual({ step: "recording", index: 1 });
   });
 
-  it("非等待态的 skip 同样被忽略（对称防御）", () => {
-    const state = reduceFlow(initialFlow(), { type: "skip" }, TOTAL);
-    expect(state).toEqual({ step: "idle", index: 0 });
-  });
-
-  it("倒计时中可跳过：中间句跳到下一句，最后一句跳到收尾", () => {
-    let state: FlowState = { step: "waiting", index: 0, secondsLeft: 3 };
-    state = reduceFlow(state, { type: "skip" }, TOTAL);
+  it("录音中/出分中可跳过到下一句，最后一句跳过进收尾", () => {
+    let state: FlowState = reduceFlow(toRecording(0), { type: "skip" }, TOTAL);
     expect(state).toEqual({ step: "playing", index: 1 });
 
-    state = { step: "waiting", index: TOTAL - 1, secondsLeft: 2 };
-    state = reduceFlow(state, { type: "skip" }, TOTAL);
+    state = reduceFlow(toRecording(TOTAL - 1), { type: "skip" }, TOTAL);
     expect(state).toEqual({ step: "finished" });
+
+    state = reduceFlow(
+      { step: "scored", index: 0, result: { score: 90, stars: 3, isNewBest: true }, secondsLeft: 2 },
+      { type: "skip" },
+      TOTAL
+    );
+    expect(state).toEqual({ step: "playing", index: 1 });
   });
 
-  it("手动跳转到任意句子立即开始播放该句", () => {
-    const state = reduceFlow(initialFlow(), { type: "select", index: 2 }, TOTAL);
-    expect(state).toEqual({ step: "playing", index: 2 });
-  });
-
-  it("收尾后仍可手动跳回任意句子重练", () => {
-    const state = reduceFlow({ step: "finished" }, { type: "select", index: 0 }, TOTAL);
-    expect(state).toEqual({ step: "playing", index: 0 });
-  });
-
-  it("跳转越界被忽略（防御）", () => {
-    const state = reduceFlow(initialFlow(), { type: "select", index: 99 }, TOTAL);
-    expect(state).toEqual({ step: "idle", index: 0 });
+  it("手动跳句立即播放该句；收尾后可跳回；越界忽略", () => {
+    expect(reduceFlow(initialFlow(), { type: "select", index: 2 }, TOTAL)).toEqual({
+      step: "playing",
+      index: 2,
+    });
+    expect(reduceFlow({ step: "finished" }, { type: "select", index: 0 }, TOTAL)).toEqual({
+      step: "playing",
+      index: 0,
+    });
+    expect(reduceFlow(initialFlow(), { type: "select", index: 99 }, TOTAL)).toEqual({
+      step: "idle",
+      index: 0,
+    });
   });
 });
