@@ -215,17 +215,11 @@ export default function PracticeFlow({ unit }: { unit: UnitDetail }) {
     if (!blobRef.current) return;
     dispatch({ type: "hold" });
     praiseAudioRef.current?.pause(); // 听自己的录音时暂停鼓励语音
-    if (minePlaying) {
-      mineAudioRef.current?.pause();
-      return;
-    }
-    if (!mineUrlRef.current) mineUrlRef.current = URL.createObjectURL(blobRef.current);
-    if (!mineAudioRef.current) {
-      mineAudioRef.current = new Audio(mineUrlRef.current);
-      mineAudioRef.current.onended = () => setMinePlaying(false);
-    }
-    mineAudioRef.current.currentTime = 0;
-    mineAudioRef.current.play().then(() => setMinePlaying(true)).catch(() => setMinePlaying(false));
+    const audio = mineAudioRef.current;
+    if (!audio) return;
+    // 只切换播放状态，按钮文案由 onplay/onpause 事件同步
+    if (audio.paused) audio.play().catch(() => {});
+    else audio.pause();
   }
 
   /** 出分页"再练一次这句"：暂停回放、丢弃旧录音，回录音态重新开录 */
