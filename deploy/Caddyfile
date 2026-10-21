@@ -1,8 +1,7 @@
-# 方案 b（自签证书，无需域名/备案）：
-# Caddy 用内置 CA 给 IP 签发证书，监听 8443。
-# 首次部署后需从服务器导出根证书并在孩子设备上安装信任：
-#   scp english-vps:/var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt .
-# （华为 Pad：设置 → 安全 → 更多安全设置 → 加密和凭据 → 安装证书 → CA 证书）
+{
+	default_sni 118.89.182.62
+}
+
 https://118.89.182.62:8443 {
 	tls internal
 	reverse_proxy 127.0.0.1:3000
