@@ -15,6 +15,23 @@ import type { UnitDetail } from "@/lib/units";
 // 录音最长秒数：超时自动提交，防止孩子忘按"读好了"一直录
 const MAX_RECORD_SECONDS = 15;
 
+// 出分鼓励语：按星级分池轮换（同档不连续重复），语音文件由 edge-tts 预生成
+const PRAISE: Record<number, Array<{ text: string; src: string }>> = {
+  3: [
+    { text: "Excellent!", src: "/media/audio/3-excellent.mp3" },
+    { text: "Perfect!", src: "/media/audio/3-perfect.mp3" },
+    { text: "Amazing!", src: "/media/audio/3-amazing.mp3" },
+    { text: "Fantastic!", src: "/media/audio/3-fantastic.mp3" },
+  ],
+  2: [
+    { text: "Good!", src: "/media/audio/2-good.mp3" },
+    { text: "Not bad!", src: "/media/audio/2-not-bad.mp3" },
+    { text: "Good job!", src: "/media/audio/2-good-job.mp3" },
+    { text: "Well done!", src: "/media/audio/2-well-done.mp3" },
+  ],
+  1: [{ text: "Try again!", src: "/media/audio/1-try-again.mp3" }],
+};
+
 /** 停止录音的意图：提交评分 / 弃旧重录 / 纯丢弃（不重录不提交） */
 type StopIntent = "submit" | "rerecord" | "discard";
 
@@ -42,6 +59,9 @@ export default function PracticeFlow({ unit }: { unit: UnitDetail }) {
   const [minePlaying, setMinePlaying] = useState(false);
   const mineAudioRef = useRef<HTMLAudioElement | null>(null);
   const mineUrlRef = useRef<string | null>(null);
+  const [praiseText, setPraiseText] = useState<string | null>(null);
+  const praiseAudioRef = useRef<HTMLAudioElement | null>(null);
+  const praiseCursor = useRef<Record<number, number>>({});
   const [localBest, setLocalBest] = useState<Record<number, number>>(() =>
     Object.fromEntries(
       unit.sentences
@@ -53,6 +73,8 @@ export default function PracticeFlow({ unit }: { unit: UnitDetail }) {
   const [sessionPracticed, setSessionPracticed] = useState<Set<number>>(new Set());
 
   const current = state.step === "finished" ? null : unit.sentences[state.index];
+  // 依赖 key：只在"进入某个句子的某个步骤"时触发相关 effect（tick/held 等细节变化不触发）
+  const flowKey = state.step === "finished" ? "finished" : `${state.step}-${state.index}`;
   const index = state.step === "finished" ? 0 : state.index;
 
   async function ensureStream(): Promise<MediaStream> {
@@ -192,6 +214,7 @@ export default function PracticeFlow({ unit }: { unit: UnitDetail }) {
   function toggleMine() {
     if (!blobRef.current) return;
     dispatch({ type: "hold" });
+    praiseAudioRef.current?.pause(); // 听自己的录音时暂停鼓励语音
     if (minePlaying) {
       mineAudioRef.current?.pause();
       return;
@@ -286,6 +309,29 @@ export default function PracticeFlow({ unit }: { unit: UnitDetail }) {
     const timer = setTimeout(() => dispatch({ type: "tick" }), TICK_MS);
     return () => clearTimeout(timer);
   }, [state]);
+
+  // 出分时播放星级对应的鼓励语音（同档轮换），并把说的短语显示在卡上
+  useEffect(() => {
+    if (state.step !== "scored") return;
+    const pool = PRAISE[state.result.stars] ?? [];
+    if (pool.length === 0) return;
+    const level = state.result.stars;
+    const i = (praiseCursor.current[level] ?? 0) % pool.length;
+    praiseCursor.current[level] = i + 1;
+    const pick = pool[i];
+    setPraiseText(pick.text);
+    const audio = new Audio(pick.src);
+    praiseAudioRef.current?.pause();
+    praiseAudioRef.current = audio;
+    audio.play().catch(() => {
+    /* 自动播放被拦截时保持静音，文字鼓励仍在 */
+    });
+    return () => {
+      audio.pause();
+      setPraiseText(null);
+    };
+    // 只在进入出分态时触发一次（tick/held 变化不重播）
+  }, [flowKey]);
 
   const togglePlay = () => {
     const video = videoRef.current;
@@ -419,6 +465,9 @@ export default function PracticeFlow({ unit }: { unit: UnitDetail }) {
 
           {state.step === "scored" && result && (
             <div className="mt-3">
+              {praiseText && (
+                <p className="text-2xl font-bold text-emerald-600">{praiseText}</p>
+              )}
               <p className="text-5xl font-bold tabular-nums">
                 {Math.round(result.score)}
                 <span className="ml-2 text-5xl text-amber-500">
