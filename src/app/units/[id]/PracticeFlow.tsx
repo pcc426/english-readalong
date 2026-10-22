@@ -44,6 +44,20 @@ export default function PracticeFlow({ unit }: { unit: UnitDetail }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPaused, setIsPaused] = useState(false);
 
+  // isPaused 跟随视频真实状态：点按钮暂停、系统中断、自动暂停都会同步到按钮文案
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const sync = () => setIsPaused(video.paused);
+    sync();
+    video.addEventListener("play", sync);
+    video.addEventListener("pause", sync);
+    return () => {
+      video.removeEventListener("play", sync);
+      video.removeEventListener("pause", sync);
+    };
+  }, []);
+
   // —— 录音（流与录音器用 ref 管理，避免渲染期抖动） ——
   const mountedRef = useRef(true);
   const streamRef = useRef<MediaStream | null>(null);
