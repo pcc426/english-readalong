@@ -53,6 +53,18 @@ describe("逐句练习流转状态机（含录音评分）", () => {
     expect(state).toEqual({ step: "recording", index: 1 });
   });
 
+  it("录音态点 replay 重播本句示范，其他态忽略", () => {
+    expect(reduceFlow({ step: "recording", index: 1 }, { type: "replay" }, TOTAL)).toEqual({
+      step: "playing",
+      index: 1,
+    });
+    expect(reduceFlow({ step: "playing", index: 0 }, { type: "replay" }, TOTAL)).toEqual({
+      step: "playing",
+      index: 0,
+    });
+    expect(reduceFlow(initialFlow(), { type: "replay" }, TOTAL)).toEqual({ step: "idle", index: 0 });
+  });
+
   it("出分后 hold 冻结自动流转（听自己录音时不被切走）；skip 仍可用", () => {
     let state: FlowState = {
       step: "scored",

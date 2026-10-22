@@ -215,11 +215,22 @@ export default function PracticeFlow({ unit }: { unit: UnitDetail }) {
     if (!blobRef.current) return;
     dispatch({ type: "hold" });
     praiseAudioRef.current?.pause(); // 听自己的录音时暂停鼓励语音
+    // 首次播放时创建 Audio；按钮文案由 onplay/onpause 事件同步
+    if (!mineUrlRef.current) mineUrlRef.current = URL.createObjectURL(blobRef.current);
+    if (!mineAudioRef.current) {
+      mineAudioRef.current = new Audio(mineUrlRef.current);
+      mineAudioRef.current.onplay = () => setMinePlaying(true);
+      mineAudioRef.current.onpause = () => setMinePlaying(false);
+      mineAudioRef.current.onended = () => setMinePlaying(false);
+    }
     const audio = mineAudioRef.current;
-    if (!audio) return;
-    // 只切换播放状态，按钮文案由 onplay/onpause 事件同步
-    if (audio.paused) audio.play().catch(() => {});
-    else audio.pause();
+    // 只切换播放状态：暂停着就从头播，播着就暂停
+    if (audio.paused) {
+      audio.currentTime = 0;
+      audio.play().catch(() => setMinePlaying(false));
+    } else {
+      audio.pause();
+    }
   }
 
   /** 出分页"再练一次这句"：暂停回放、丢弃旧录音，回录音态重新开录 */
@@ -334,6 +345,16 @@ export default function PracticeFlow({ unit }: { unit: UnitDetail }) {
     else video.pause();
   };
 
+  // 录音态点"再读一遍"：中断录音、丢弃旧录音，重播本句示范
+  const replaySentence = () => {
+    if (recorderRef.current?.state === "recording") stopRecording("discard");
+    blobRef.current = null;
+    setHasBlob(false);
+    setMicNotice(null);
+    setSubmitError(null);
+    dispatch({ type: "replay" });
+  };
+
   const prevSentence = () => {
     if (state.step === "finished") dispatch({ type: "select", index: total - 1 });
     else if (state.step !== "idle")
@@ -375,11 +396,11 @@ export default function PracticeFlow({ unit }: { unit: UnitDetail }) {
           ⏮ 上一句
         </button>
         <button
-          onClick={togglePlay}
-          disabled={state.step !== "playing"}
+          onClick={state.step === "recording" ? replaySentence : togglePlay}
+          disabled={state.step !== "playing" && state.step !== "recording"}
           className="rounded-2xl bg-slate-700 py-4 text-xl font-bold text-white shadow-md active:bg-slate-800 disabled:opacity-40"
         >
-          {isPaused ? "▶ 继续" : "⏸ 暂停"}
+          {state.step === "recording" ? "🔁 再读一遍" : isPaused ? "▶ 继续" : "⏸ 暂停"}
         </button>
         <button
           onClick={nextSentence}

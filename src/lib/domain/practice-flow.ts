@@ -34,6 +34,7 @@ export type FlowEvent =
   | { type: "scored"; result: ScoreResult }
   | { type: "hold" }
   | { type: "retry" }
+  | { type: "replay" }
   | { type: "tick" }
   | { type: "skip" }
   | { type: "select"; index: number };
@@ -88,6 +89,9 @@ export function reduceFlow(state: FlowState, event: FlowEvent, total: number): F
     case "retry":
       // 出分后"再练一次"：回录音态重录本句
       return state.step === "scored" ? { step: "recording", index: state.index } : state;
+    case "replay":
+      // 录音态点"再读一遍"：中断录音，重播本句示范
+      return state.step === "recording" ? { step: "playing", index: state.index } : state;
     case "tick": {
       if (state.step !== "scored" || state.held) return state;
       return state.secondsLeft > 1
