@@ -20,7 +20,7 @@ rsync -az --delete \
   --exclude .git \
   --exclude .env \
   --exclude data \
-  --exclude "materials/textbook" \
+  --exclude materials \
   --exclude .scratch \
   --exclude research \
   --exclude docs \
