@@ -31,6 +31,13 @@ export function readSessionId(req: Request): string | undefined {
   return undefined;
 }
 
+/** 客户端 IP（登录限速的 IP 维度用）：生产在 Caddy 后，取 x-forwarded-for 首段；
+ * 缺失回退 "unknown"（dev 直连场景共用一个计数桶，可接受）。 */
+export function clientIp(req: Request): string {
+  const first = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  return first || "unknown";
+}
+
 /** 受保护 API 的统一入口：未登录返回 401 响应（route 直接透传），已登录带账号 */
 export function requireAccount(req: Request): AuthResult {
   const sessionId = readSessionId(req);

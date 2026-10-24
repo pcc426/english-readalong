@@ -23,11 +23,21 @@ function setupDb() {
   return openDb(process.env.DB_PATH);
 }
 
-function post(email: unknown, password: unknown) {
+// 限速计数是模块级内存态、跨测试用例共享——按邮箱的用例各自用独立邮箱；
+// post 默认给每次请求发不同的 x-forwarded-for，避免 IP 维度累计串扰。
+let ipSeq = 0;
+const nextIp = () => `10.7.0.${++ipSeq}`;
+
+/** ip 传 "" 表示不带 x-forwarded-for（测 unknown 回退） */
+function post(email: unknown, password: unknown, ip: string = nextIp()) {
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+  };
+  if (ip) headers["x-forwarded-for"] = ip;
   return POST(
     new Request("http://x/api/auth/login", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers,
       body: JSON.stringify({ email, password }),
     })
   );
@@ -101,6 +111,34 @@ describe("POST /api/auth/login", () => {
     const locked = await post("lock@test.com", "secret123");
     expect(locked.status).toBe(429);
     expect((await locked.json()).error.code).toBe("RATE_LIMITED");
+  });
+
+  it("同邮箱从不同 IP（x-forwarded-for）失败也累计限速", async () => {
+    const db = setupDb();
+    createAccount(db, { email: "cross@test.com", password: "secret123" });
+    db.close();
+
+    // 每次失败来自不同 IP，邮箱维度仍累计到锁定
+    for (let i = 0; i < MAX_LOGIN_FAILURES; i++) {
+      const res = await post("cross@test.com", "wrong-pass", `10.8.${i}.1`);
+      expect(res.status).toBe(401);
+    }
+    const locked = await post("cross@test.com", "wrong-pass", "10.8.99.1");
+    expect(locked.status).toBe(429);
+  });
+
+  it("缺失 x-forwarded-for 时回退 unknown 维度：同源无头请求的失败累计锁 IP", async () => {
+    const db = setupDb();
+    createAccount(db, { email: "headless@test.com", password: "secret123" });
+    db.close();
+
+    // 每次失败用不同邮箱、都不带转发头 → unknown IP 维度累计到锁定
+    for (let i = 0; i < MAX_LOGIN_FAILURES; i++) {
+      const res = await post(`nomad-${i}@test.com`, "whatever", "");
+      expect(res.status).toBe(401);
+    }
+    const locked = await post("headless@test.com", "secret123", "");
+    expect(locked.status).toBe(429);
   });
 
   it(`锁定 ${LOGIN_LOCK_MS} 后自动解除，可以重新尝试登录`, async () => {
