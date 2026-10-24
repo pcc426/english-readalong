@@ -27,7 +27,11 @@ interface AccountRow {
   created_at: string;
 }
 
-function toAccount(row: AccountRow): Account {
+/** 行 → Account 映射的唯一来源：sessions 的联表查询等处也复用，
+ * Account 加字段时只改这里，不会出现第二份映射漂移 */
+export function toAccount(
+  row: Pick<AccountRow, "id" | "email" | "is_admin" | "created_at">
+): Account {
   return {
     id: row.id,
     email: row.email,

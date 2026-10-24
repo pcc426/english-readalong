@@ -2,7 +2,7 @@
 // 不用签名 cookie/JWT——单进程 + SQLite 部署下，吊销能力与简单性优于无状态方案。
 import { randomBytes } from "node:crypto";
 import type { Db } from "@/lib/db";
-import type { Account } from "./accounts";
+import { toAccount, type Account } from "./accounts";
 
 /** 浏览器侧承载会话 id 的 cookie 名 */
 export const SESSION_COOKIE = "session";
@@ -15,6 +15,7 @@ interface SessionAccountRow {
   email: string;
   is_admin: number;
   created_at: string;
+  expires_at: string;
 }
 
 /** 创建会话：返回 256-bit 随机不透明 id（cookie 安全字符集） */
@@ -35,18 +36,13 @@ export function getAccountBySession(db: Db, sessionId: string): Account | undefi
        FROM sessions s JOIN accounts a ON a.id = s.account_id
        WHERE s.id = ?`
     )
-    .get(sessionId) as (SessionAccountRow & { expires_at: string }) | undefined;
+    .get(sessionId) as SessionAccountRow | undefined;
   if (!row) return undefined;
   if (Date.parse(row.expires_at) <= Date.now()) {
     deleteSession(db, sessionId);
     return undefined;
   }
-  return {
-    id: row.id,
-    email: row.email,
-    isAdmin: row.is_admin === 1,
-    createdAt: row.created_at,
-  };
+  return toAccount(row);
 }
 
 /** 退出/吊销：删行即失效 */
