@@ -10,9 +10,10 @@ import {
   createAccount,
   DuplicateAccountError,
 } from "../src/lib/auth/accounts.ts";
-
-const MIN_PASSWORD_LENGTH = 8;
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+import {
+  isValidEmail,
+  MIN_PASSWORD_LENGTH,
+} from "../src/lib/admin/validation.ts";
 
 async function main() {
   let [email, password] = process.argv.slice(2);
@@ -25,7 +26,7 @@ async function main() {
     console.log("（提示：密码输入会明文回显，注意避开旁人与录屏）");
   }
 
-  if (!EMAIL_PATTERN.test(email)) {
+  if (!isValidEmail(email)) {
     console.error("create-admin: 邮箱格式不对");
     process.exit(1);
   }
