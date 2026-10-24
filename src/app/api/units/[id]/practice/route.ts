@@ -7,6 +7,7 @@ import { transcodeTo16kWav } from "@/lib/scoring/transcode";
 import { getScoringService } from "@/lib/scoring/current";
 import { contentDir, dbPath } from "@/lib/units";
 import { requireAccount } from "@/lib/auth/guard";
+import { errorResponse } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
 
@@ -15,10 +16,6 @@ const MIN_AUDIO_BYTES = 100;
 
 function isWav(buf: Buffer): boolean {
   return buf.length > 44 && buf.toString("ascii", 0, 4) === "RIFF";
-}
-
-function errorResponse(status: number, code: string, message: string) {
-  return NextResponse.json({ error: { code, message } }, { status });
 }
 
 export async function POST(

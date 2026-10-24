@@ -10,7 +10,8 @@ export type AuthResult =
   | { ok: true; account: Account }
   | { ok: false; response: NextResponse };
 
-export function unauthorized(): NextResponse {
+// 模块内私有：外部调用方一律走 requireAccount 拿 401 响应，不直接构造
+function unauthorized(): NextResponse {
   return NextResponse.json(
     { error: { code: "UNAUTHORIZED", message: "未登录" } },
     { status: 401 }

@@ -11,6 +11,7 @@ import {
 } from "@/lib/auth/rate-limit";
 import { createSession } from "@/lib/auth/sessions";
 import { setSessionCookie, clientIp } from "@/lib/auth/guard";
+import { errorResponse } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
 
@@ -18,10 +19,6 @@ const loginSchema = z.object({
   email: z.string(),
   password: z.string(),
 });
-
-function errorResponse(status: number, code: string, message: string) {
-  return NextResponse.json({ error: { code, message } }, { status });
-}
 
 export async function POST(req: Request) {
   let input: { email: string; password: string };

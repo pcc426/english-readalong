@@ -7,6 +7,7 @@ import { dbPath } from "@/lib/units";
 import { findAccountByEmail, updatePassword } from "@/lib/auth/accounts";
 import { requireAccount } from "@/lib/auth/guard";
 import { isValidEmail, MIN_PASSWORD_LENGTH } from "@/lib/admin/validation";
+import { errorResponse } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
 
@@ -14,10 +15,6 @@ const resetSchema = z.object({
   email: z.string(),
   newPassword: z.string(),
 });
-
-function errorResponse(status: number, code: string, message: string) {
-  return NextResponse.json({ error: { code, message } }, { status });
-}
 
 export async function POST(req: Request) {
   const auth = requireAccount(req);
