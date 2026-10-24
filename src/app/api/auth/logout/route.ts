@@ -1,7 +1,6 @@
 // 退出（ADR-0003）：删行即吊销 + 清 cookie；未登录也 200（幂等）。
 import { NextResponse } from "next/server";
-import { openDb } from "@/lib/db";
-import { dbPath } from "@/lib/units";
+import { openDb, dbPath } from "@/lib/db";
 import { deleteSession } from "@/lib/auth/sessions";
 import { clearSessionCookie, readSessionId } from "@/lib/auth/guard";
 

@@ -1,8 +1,7 @@
 // 登录（ADR-0003）：邮箱 + 密码换会话 cookie；连续失败按邮箱/IP 双维度限速锁定。
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { openDb } from "@/lib/db";
-import { dbPath } from "@/lib/units";
+import { openDb, dbPath } from "@/lib/db";
 import { authenticate, normalizeEmail } from "@/lib/auth/accounts";
 import {
   getLoginLockRemainingMs,

@@ -1,6 +1,5 @@
 import path from "node:path";
-import { mkdirSync } from "node:fs";
-import { openDb } from "@/lib/db";
+import { openDb, dbPath } from "@/lib/db";
 import { listUnitPacks } from "@/lib/content/loader";
 import { bestAttemptsBySentence, completionDistribution } from "@/lib/domain/stats";
 import { encouragementFor } from "@/lib/domain/encouragement";
@@ -22,13 +21,6 @@ export interface UnitOverview {
 export function contentDir(): string {
   // 用 || 而非 ??：.env 里的空值行（CONTENT_DIR=）应视为未设置
   return process.env.CONTENT_DIR || path.join(process.cwd(), "content", "units");
-}
-
-export function dbPath(): string {
-  const p =
-    process.env.DB_PATH || path.join(process.cwd(), "data", "readalong.db");
-  mkdirSync(path.dirname(p), { recursive: true });
-  return p;
 }
 
 export interface SentenceDetail {

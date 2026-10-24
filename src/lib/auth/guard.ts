@@ -1,8 +1,7 @@
 // API 守卫（ADR-0003）：受保护路由统一从这里拿当前登录账号，
 // 未登录/会话失效一律 401 JSON；会话 cookie 的设置与清除也收敛在这里。
 import { NextResponse } from "next/server";
-import { openDb } from "@/lib/db";
-import { dbPath } from "@/lib/units";
+import { openDb, dbPath } from "@/lib/db";
 import { getAccountBySession, SESSION_COOKIE, SESSION_TTL_MS } from "./sessions";
 import type { Account } from "./accounts";
 

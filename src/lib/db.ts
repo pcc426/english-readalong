@@ -1,4 +1,15 @@
+import path from "node:path";
+import { mkdirSync } from "node:fs";
 import Database from "better-sqlite3";
+
+/** 数据库文件路径：DB_PATH 覆盖，默认 <cwd>/data/readalong.db；确保父目录存在。
+ * 与 openDb 同住 db 模块——连接与库文件位置是一件事的两半。 */
+export function dbPath(): string {
+  const p =
+    process.env.DB_PATH || path.join(process.cwd(), "data", "readalong.db");
+  mkdirSync(path.dirname(p), { recursive: true });
+  return p;
+}
 
 export function openDb(dbPath: string): Database.Database {
   const db = new Database(dbPath);

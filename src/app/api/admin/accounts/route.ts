@@ -2,8 +2,7 @@
 // 邮箱重复映射为 409；账号创建复用 01 号票的 auth 原语。
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { openDb } from "@/lib/db";
-import { dbPath } from "@/lib/units";
+import { openDb, dbPath } from "@/lib/db";
 import { createAccount, DuplicateAccountError } from "@/lib/auth/accounts";
 import { requireAccount } from "@/lib/auth/guard";
 import { isValidEmail, MIN_PASSWORD_LENGTH } from "@/lib/admin/validation";

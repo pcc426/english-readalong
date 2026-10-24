@@ -2,8 +2,7 @@
 // 未知邮箱 404（对管理员如实反馈，与登录接口的防探测口径不同——调用方是管理员）。
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { openDb } from "@/lib/db";
-import { dbPath } from "@/lib/units";
+import { openDb, dbPath } from "@/lib/db";
 import { findAccountByEmail, updatePassword } from "@/lib/auth/accounts";
 import { requireAccount } from "@/lib/auth/guard";
 import { isValidEmail, MIN_PASSWORD_LENGTH } from "@/lib/admin/validation";

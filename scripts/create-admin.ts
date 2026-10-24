@@ -4,8 +4,7 @@
 //       缺参时进入交互输入。邮箱重复时报错退出（exit 1）。
 import readline from "node:readline/promises";
 import { stdin, stdout } from "node:process";
-import { openDb } from "../src/lib/db.ts";
-import { dbPath } from "../src/lib/units.ts";
+import { openDb, dbPath } from "../src/lib/db.ts";
 import {
   createAccount,
   DuplicateAccountError,

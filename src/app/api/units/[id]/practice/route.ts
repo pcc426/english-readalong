@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { openDb } from "@/lib/db";
+import { openDb, dbPath } from "@/lib/db";
 import { listUnitPacks } from "@/lib/content/loader";
 import { mapScoreToStars } from "@/lib/domain/stars";
 import { bestAttemptsBySentence } from "@/lib/domain/stats";
 import { transcodeTo16kWav } from "@/lib/scoring/transcode";
 import { getScoringService } from "@/lib/scoring/current";
-import { contentDir, dbPath } from "@/lib/units";
+import { contentDir } from "@/lib/units";
 import { requireAccount } from "@/lib/auth/guard";
 import { errorResponse } from "@/lib/http";
 
