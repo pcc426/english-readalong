@@ -89,9 +89,20 @@ function SubmitButton(props: { submitting: boolean; children: ReactNode }) {
   );
 }
 
-function CreateAccountForm() {
+/** 创建/重置共用表单：两处仅标题、文案与提交端点不同，校验、布局、反馈完全一致 */
+function AccountForm(props: {
+  title: string;
+  emailFieldId: string;
+  passwordFieldId: string;
+  passwordLabel: string;
+  hint: string;
+  submittingLabel: string;
+  submitLabel: string;
+  submit: (body: { email: string; password: string }) => Promise<AdminFormResult>;
+  successMessage: (email: string) => string;
+}) {
   const [email, setEmail] = useState("");
-  const [initialPassword, setInitialPassword] = useState("");
+  const [password, setPassword] = useState("");
   const [result, setResult] = useState<AdminFormResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -102,24 +113,21 @@ function CreateAccountForm() {
       setResult({ ok: false, message: "邮箱格式不对" });
       return;
     }
-    if (initialPassword.length < MIN_PASSWORD_LENGTH) {
+    if (password.length < MIN_PASSWORD_LENGTH) {
       setResult({
         ok: false,
-        message: `初始密码至少 ${MIN_PASSWORD_LENGTH} 位`,
+        message: `${props.passwordLabel}至少 ${MIN_PASSWORD_LENGTH} 位`,
       });
       return;
     }
     setSubmitting(true);
     setResult(null);
-    const res = await postAdmin("/api/admin/accounts", {
-      email,
-      initialPassword,
-    });
+    const res = await props.submit({ email, password });
     setSubmitting(false);
     if (res.ok) {
-      setResult({ ok: true, message: `已创建家长账号 ${email.trim().toLowerCase()}` });
+      setResult({ ok: true, message: props.successMessage(email) });
       setEmail("");
-      setInitialPassword("");
+      setPassword("");
     } else {
       setResult(res);
     }
@@ -130,9 +138,9 @@ function CreateAccountForm() {
       onSubmit={handleSubmit}
       className="w-full max-w-sm rounded-3xl bg-white p-8 shadow-md ring-1 ring-slate-100"
     >
-      <h2 className="text-2xl font-bold tracking-tight">创建家长账号</h2>
+      <h2 className="text-2xl font-bold tracking-tight">{props.title}</h2>
       <Field
-        id="create-email"
+        id={props.emailFieldId}
         label="邮箱"
         type="email"
         value={email}
@@ -140,87 +148,58 @@ function CreateAccountForm() {
         onChange={setEmail}
       />
       <Field
-        id="create-password"
-        label="初始密码"
+        id={props.passwordFieldId}
+        label={props.passwordLabel}
         type="password"
-        value={initialPassword}
+        value={password}
         autoComplete="new-password"
-        onChange={setInitialPassword}
+        onChange={setPassword}
       />
-      <p className="mt-2 text-base text-slate-400">
-        至少 {MIN_PASSWORD_LENGTH} 位，创建后告知家长
-      </p>
+      <p className="mt-2 text-base text-slate-400">{props.hint}</p>
       {result && <Feedback message={result.message} ok={result.ok} />}
       <SubmitButton submitting={submitting}>
-        {submitting ? "创建中…" : "创建账号"}
+        {submitting ? props.submittingLabel : props.submitLabel}
       </SubmitButton>
     </form>
   );
 }
 
-function ResetPasswordForm() {
-  const [email, setEmail] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [result, setResult] = useState<AdminFormResult | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-
-  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (submitting) return;
-    if (!isValidEmail(email)) {
-      setResult({ ok: false, message: "邮箱格式不对" });
-      return;
-    }
-    if (newPassword.length < MIN_PASSWORD_LENGTH) {
-      setResult({ ok: false, message: `新密码至少 ${MIN_PASSWORD_LENGTH} 位` });
-      return;
-    }
-    setSubmitting(true);
-    setResult(null);
-    const res = await postAdmin("/api/admin/accounts/password-reset", {
-      email,
-      newPassword,
-    });
-    setSubmitting(false);
-    if (res.ok) {
-      setResult({ ok: true, message: `已重置 ${email.trim().toLowerCase()} 的密码` });
-      setEmail("");
-      setNewPassword("");
-    } else {
-      setResult(res);
-    }
-  }
-
+function CreateAccountForm() {
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="w-full max-w-sm rounded-3xl bg-white p-8 shadow-md ring-1 ring-slate-100"
-    >
-      <h2 className="text-2xl font-bold tracking-tight">重置密码</h2>
-      <Field
-        id="reset-email"
-        label="邮箱"
-        type="email"
-        value={email}
-        autoComplete="off"
-        onChange={setEmail}
-      />
-      <Field
-        id="reset-password"
-        label="新密码"
-        type="password"
-        value={newPassword}
-        autoComplete="new-password"
-        onChange={setNewPassword}
-      />
-      <p className="mt-2 text-base text-slate-400">
-        至少 {MIN_PASSWORD_LENGTH} 位，旧密码立即失效
-      </p>
-      {result && <Feedback message={result.message} ok={result.ok} />}
-      <SubmitButton submitting={submitting}>
-        {submitting ? "重置中…" : "重置密码"}
-      </SubmitButton>
-    </form>
+    <AccountForm
+      title="创建家长账号"
+      emailFieldId="create-email"
+      passwordFieldId="create-password"
+      passwordLabel="初始密码"
+      hint={`至少 ${MIN_PASSWORD_LENGTH} 位，创建后告知家长`}
+      submittingLabel="创建中…"
+      submitLabel="创建账号"
+      submit={({ email, password }) =>
+        postAdmin("/api/admin/accounts", { email, initialPassword: password })
+      }
+      successMessage={(email) => `已创建家长账号 ${email.trim().toLowerCase()}`}
+    />
+  );
+}
+
+function ResetPasswordForm() {
+  return (
+    <AccountForm
+      title="重置密码"
+      emailFieldId="reset-email"
+      passwordFieldId="reset-password"
+      passwordLabel="新密码"
+      hint={`至少 ${MIN_PASSWORD_LENGTH} 位，旧密码立即失效`}
+      submittingLabel="重置中…"
+      submitLabel="重置密码"
+      submit={({ email, password }) =>
+        postAdmin("/api/admin/accounts/password-reset", {
+          email,
+          newPassword: password,
+        })
+      }
+      successMessage={(email) => `已重置 ${email.trim().toLowerCase()} 的密码`}
+    />
   );
 }
 
