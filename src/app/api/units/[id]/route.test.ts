@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { GET } from "./route";
 import { openDb } from "@/lib/db";
+import { createAccount } from "@/lib/auth/accounts";
+import { createSession } from "@/lib/auth/sessions";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
@@ -43,10 +45,29 @@ function ctx(id: string) {
   return { params: Promise.resolve({ id }) };
 }
 
+/** 建一个登录家长并返回带会话 cookie 的请求（单元接口受 ADR-0003 鉴权保护） */
+function authedGet() {
+  const db = openDb(process.env.DB_PATH!);
+  const account = createAccount(db, {
+    email: "parent@test.com",
+    password: "secret123",
+  });
+  const sessionId = createSession(db, account.id);
+  db.close();
+  return new Request("http://x", { headers: { cookie: `session=${sessionId}` } });
+}
+
 describe("GET /api/units/[id]", () => {
-  it("空库时返回句子列表与视频地址，最好成绩为空态", async () => {
+  it("未登录访问返回 401 JSON", async () => {
     setupEnv();
     const res = await GET(new Request("http://x"), ctx("u2-dragon-dance"));
+    expect(res.status).toBe(401);
+    expect((await res.json()).error.code).toBe("UNAUTHORIZED");
+  });
+
+  it("空库时返回句子列表与视频地址，最好成绩为空态", async () => {
+    setupEnv();
+    const res = await GET(authedGet(), ctx("u2-dragon-dance"));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.unit.id).toBe("u2-dragon-dance");
@@ -72,7 +93,7 @@ describe("GET /api/units/[id]", () => {
     insert.run("u2-dragon-dance", 0, 92, 3, "2026-10-19 09:00:00"); // 最好成绩
     insert.run("u2-dragon-dance", 1, 70, 1, "2026-10-19 10:00:00");
     db.close();
-    const res = await GET(new Request("http://x"), ctx("u2-dragon-dance"));
+    const res = await GET(authedGet(), ctx("u2-dragon-dance"));
     const body = await res.json();
     expect(body.unit.sentences[0].bestScore).toBe(92);
     expect(body.unit.sentences[0].bestAt).toBe("2026-10-19 09:00:00");
@@ -80,9 +101,9 @@ describe("GET /api/units/[id]", () => {
     expect(body.unit.sentences[2].bestScore).toBeNull();
   });
 
-  it("未知单元返回 404", async () => {
+  it("已登录时未知单元返回 404", async () => {
     setupEnv();
-    const res = await GET(new Request("http://x"), ctx("nope"));
+    const res = await GET(authedGet(), ctx("nope"));
     expect(res.status).toBe(404);
   });
 });

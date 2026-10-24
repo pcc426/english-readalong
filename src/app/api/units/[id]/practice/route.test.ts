@@ -6,11 +6,16 @@ import { POST } from "./route";
 import { setScoringService } from "@/lib/scoring/current";
 import { FakeScoringService } from "@/lib/scoring/fake";
 import { getUnitDetail, getUnitsOverview } from "@/lib/units";
+import { openDb } from "@/lib/db";
+import { createAccount } from "@/lib/auth/accounts";
+import { createSession } from "@/lib/auth/sessions";
 
 const cleanups: Array<() => void> = [];
+let sessionCookie: string | null = null;
 afterEach(() => {
   for (const fn of cleanups) fn();
   cleanups.length = 0;
+  sessionCookie = null;
   delete process.env.CONTENT_DIR;
   delete process.env.DB_PATH;
   setScoringService(null);
@@ -46,18 +51,42 @@ function fakeWav(): Blob {
   return new Blob([buf], { type: "audio/wav" });
 }
 
-function post(sentenceIndex: number, audio: Blob | null) {
+/** 建一个登录家长，返回其会话 cookie（练习接口受 ADR-0003 鉴权保护） */
+function authCookie(): string {
+  if (!sessionCookie) {
+    const db = openDb(process.env.DB_PATH!);
+    const account = createAccount(db, {
+      email: "parent@test.com",
+      password: "secret123",
+    });
+    sessionCookie = `session=${createSession(db, account.id)}`;
+    db.close();
+  }
+  return sessionCookie;
+}
+
+async function post(sentenceIndex: number, audio: Blob | null, cookie?: string) {
   const form = new FormData();
   if (audio) form.append("audio", audio, "rec.wav");
   form.append("sentenceIndex", String(sentenceIndex));
   const req = new Request("http://x/api/units/u2-dragon-dance/practice", {
     method: "POST",
+    headers: { cookie: cookie ?? authCookie() },
     body: form,
   });
   return POST(req, { params: Promise.resolve({ id: "u2-dragon-dance" }) });
 }
 
 describe("POST /api/units/[id]/practice", () => {
+  it("未登录提交返回 401，不触发评分也不落库", async () => {
+    setupEnv();
+    setScoringService(new FakeScoringService(92));
+    const res = await post(0, fakeWav(), "session=forged-id");
+    expect(res.status).toBe(401);
+    expect((await res.json()).error.code).toBe("UNAUTHORIZED");
+    expect(getUnitDetail("u2-dragon-dance")?.sentences[0].bestScore).toBeNull();
+  });
+
   it("正常提交：分数取整、返回星级与新纪录，数据落库并反映到详情与完成度", async () => {
     setupEnv();
     setScoringService(new FakeScoringService(92.6)); // 讯飞返回小数 → 取整为 93

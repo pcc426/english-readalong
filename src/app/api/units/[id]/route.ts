@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server";
 import { getUnitDetail } from "@/lib/units";
+import { requireAccount } from "@/lib/auth/guard";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(
-  _req: Request,
+  req: Request,
   ctx: { params: Promise<{ id: string }> }
 ) {
+  const auth = requireAccount(req);
+  if (!auth.ok) return auth.response;
   const { id } = await ctx.params;
   const unit = getUnitDetail(id);
   if (!unit) {

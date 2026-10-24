@@ -6,6 +6,7 @@ import { bestAttemptsBySentence } from "@/lib/domain/stats";
 import { transcodeTo16kWav } from "@/lib/scoring/transcode";
 import { getScoringService } from "@/lib/scoring/current";
 import { contentDir, dbPath } from "@/lib/units";
+import { requireAccount } from "@/lib/auth/guard";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,8 @@ export async function POST(
   req: Request,
   ctx: { params: Promise<{ id: string }> }
 ) {
+  const auth = requireAccount(req);
+  if (!auth.ok) return auth.response;
   const { id } = await ctx.params;
 
   let form: FormData;
