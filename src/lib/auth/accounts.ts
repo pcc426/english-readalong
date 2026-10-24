@@ -67,6 +67,16 @@ export function findAccountByEmail(db: Db, email: string): Account | undefined {
   return row ? toAccount(row) : undefined;
 }
 
+// 防时序探测（ADR-0003）：未知邮箱也对固定哑哈希跑一次 bcrypt 比对，
+// 让"查无此邮箱"与"密码不对"两条路径都恰好做一次 bcrypt，响应耗时不可区分，
+// 公网探测者无法靠响应快慢推断邮箱是否已注册。惰性生成，避免不涉及登录的
+// 模块加载（多数测试文件）也吃一次哈希开销。
+let dummyHash: string | null = null;
+function dummyHashForProbe(): string {
+  if (!dummyHash) dummyHash = hashPassword("timing-probe-deflection");
+  return dummyHash;
+}
+
 /** 登录校验：邮箱未知或密码不对一律返回 undefined（不区分，防探测账号是否存在） */
 export function authenticate(
   db: Db,
@@ -76,7 +86,12 @@ export function authenticate(
   const row = db
     .prepare("SELECT * FROM accounts WHERE email = ?")
     .get(normalizeEmail(email)) as AccountRow | undefined;
-  if (!row || !verifyPassword(password, row.password_hash)) return undefined;
+  if (!row) {
+    // 查无此邮箱：对哑哈希补一次等价开销的比对再返回（见上方注释）
+    verifyPassword(password, dummyHashForProbe());
+    return undefined;
+  }
+  if (!verifyPassword(password, row.password_hash)) return undefined;
   return toAccount(row);
 }
 

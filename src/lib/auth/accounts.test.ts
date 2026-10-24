@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { openDb } from "@/lib/db";
 import {
+  authenticate,
   createAccount,
   findAccountByEmail,
   updatePassword,
@@ -95,5 +96,30 @@ describe("updatePassword", () => {
       .get(account.id) as { password_hash: string };
     expect(verifyPassword("old-secret-1", row.password_hash)).toBe(false);
     expect(verifyPassword("new-secret-2", row.password_hash)).toBe(true);
+  });
+});
+
+describe("authenticate", () => {
+  it("凭据正确返回账号；错误密码与未知邮箱一律 undefined", () => {
+    const db = setupDb();
+    const account = createAccount(db, {
+      email: "fam@test.com",
+      password: "secret123",
+    });
+    expect(authenticate(db, "fam@test.com", "secret123")?.id).toBe(account.id);
+    expect(authenticate(db, "fam@test.com", "wrong")).toBeUndefined();
+    expect(authenticate(db, "nobody@test.com", "whatever")).toBeUndefined();
+  });
+
+  // 防时序探测（ADR-0003）：未知邮箱也要对哑哈希跑一次 bcrypt 比对，
+  // 否则"查无此邮箱"立即返回，响应耗时差异可被用来探测账号是否存在。
+  // 用耗时下限证明比对真的执行了（cost 10 的 bcrypt 比对不可能快过 20ms）。
+  it("未知邮箱也执行一次 bcrypt 比对（不因查无此账号而短路）", () => {
+    const db = setupDb();
+    const start = performance.now();
+    const result = authenticate(db, "nobody@test.com", "guess-attempt");
+    const elapsedMs = performance.now() - start;
+    expect(result).toBeUndefined();
+    expect(elapsedMs).toBeGreaterThanOrEqual(20);
   });
 });
