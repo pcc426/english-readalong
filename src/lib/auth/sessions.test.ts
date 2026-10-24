@@ -1,28 +1,8 @@
-import { describe, it, expect, afterEach } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
+import { describe, it, expect } from "vitest";
+import { setupDb } from "@/lib/testing/auth-test-utils";
 import { openDb } from "@/lib/db";
 import { createAccount } from "./accounts";
 import { createSession, getAccountBySession, deleteSession } from "./sessions";
-
-const cleanups: Array<() => void> = [];
-afterEach(() => {
-  for (const fn of cleanups) fn();
-  cleanups.length = 0;
-  delete process.env.DB_PATH;
-});
-
-function setupDb() {
-  const dbDir = mkdtempSync(path.join(tmpdir(), "ra-sessions-"));
-  process.env.DB_PATH = path.join(dbDir, "readalong.db");
-  const db = openDb(process.env.DB_PATH);
-  cleanups.push(() => {
-    db.close();
-    rmSync(dbDir, { recursive: true, force: true });
-  });
-  return db;
-}
 
 function seedAccount(db: ReturnType<typeof openDb>) {
   return createAccount(db, { email: "fam@test.com", password: "secret123" });

@@ -1,8 +1,5 @@
-import { describe, it, expect, afterEach } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { openDb } from "@/lib/db";
+import { describe, it, expect } from "vitest";
+import { setupDb } from "@/lib/testing/auth-test-utils";
 import {
   authenticate,
   createAccount,
@@ -11,24 +8,6 @@ import {
   DuplicateAccountError,
 } from "./accounts";
 import { verifyPassword } from "./password";
-
-const cleanups: Array<() => void> = [];
-afterEach(() => {
-  for (const fn of cleanups) fn();
-  cleanups.length = 0;
-  delete process.env.DB_PATH;
-});
-
-function setupDb() {
-  const dbDir = mkdtempSync(path.join(tmpdir(), "ra-accounts-"));
-  process.env.DB_PATH = path.join(dbDir, "readalong.db");
-  const db = openDb(process.env.DB_PATH);
-  cleanups.push(() => {
-    db.close();
-    rmSync(dbDir, { recursive: true, force: true });
-  });
-  return db;
-}
 
 describe("createAccount", () => {
   it("创建账号：密码只存 bcrypt 哈希，返回值不含密码", () => {

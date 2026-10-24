@@ -4,8 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { GET } from "./route";
 import { openDb } from "@/lib/db";
-import { createAccount } from "@/lib/auth/accounts";
-import { createSession } from "@/lib/auth/sessions";
+import { authedGet } from "@/lib/testing/auth-test-utils";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
@@ -42,20 +41,6 @@ function setupEnv() {
   return { contentDir, dbPath };
 }
 
-/** 建一个登录家长并返回带会话 cookie 的请求（单元接口受 ADR-0003 鉴权保护） */
-function authedGet() {
-  const db = openDb(process.env.DB_PATH!);
-  const account = createAccount(db, {
-    email: "parent@test.com",
-    password: "secret123",
-  });
-  const sessionId = createSession(db, account.id);
-  db.close();
-  return new Request("http://x/api/units", {
-    headers: { cookie: `session=${sessionId}` },
-  });
-}
-
 describe("GET /api/units", () => {
   it("未登录访问返回 401 JSON", async () => {
     setupEnv();
@@ -66,7 +51,7 @@ describe("GET /api/units", () => {
 
   it("返回单元列表，含句数、完成度与鼓励语", async () => {
     setupEnv();
-    const res = await GET(authedGet());
+    const res = await GET(authedGet("http://x/api/units"));
     const body = await res.json();
     expect(body.units).toHaveLength(1);
     const unit = body.units[0];
@@ -89,7 +74,7 @@ describe("GET /api/units", () => {
       "INSERT INTO practice_attempts (unit_id, sentence_index, score, stars) VALUES (?, ?, ?, ?)"
     ).run("u2-dragon-dance", 0, 92, 3);
     db.close();
-    const res = await GET(authedGet());
+    const res = await GET(authedGet("http://x/api/units"));
     const body = await res.json();
     expect(body.units[0].percentages.threeStar).toBe(33);
     expect(body.units[0].percentages.unpracticed).toBe(67);
@@ -105,7 +90,7 @@ describe("GET /api/units", () => {
     );
     for (let i = 0; i < 3; i++) insert.run("u2-dragon-dance", i, 95, 3);
     db.close();
-    const res = await GET(authedGet());
+    const res = await GET(authedGet("http://x/api/units"));
     const body = await res.json();
     expect(body.units[0].percentages.threeStar).toBe(100);
     expect(body.units[0].encouragement).toContain("满星");

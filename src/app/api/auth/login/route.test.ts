@@ -1,27 +1,15 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
 import { POST } from "./route";
 import { openDb } from "@/lib/db";
 import { createAccount } from "@/lib/auth/accounts";
 import { getAccountBySession } from "@/lib/auth/sessions";
 import { MAX_LOGIN_FAILURES, LOGIN_LOCK_MS } from "@/lib/auth/rate-limit";
+import { setupDb } from "@/lib/testing/auth-test-utils";
 
-const cleanups: Array<() => void> = [];
+// fake timers 由本文件自管；临时库的清理与 DB_PATH 复位在共享测试工具里
 afterEach(() => {
-  for (const fn of cleanups) fn();
-  cleanups.length = 0;
-  delete process.env.DB_PATH;
   vi.useRealTimers();
 });
-
-function setupDb() {
-  const dbDir = mkdtempSync(path.join(tmpdir(), "ra-login-"));
-  process.env.DB_PATH = path.join(dbDir, "readalong.db");
-  cleanups.push(() => rmSync(dbDir, { recursive: true, force: true }));
-  return openDb(process.env.DB_PATH);
-}
 
 // 限速计数是模块级内存态、跨测试用例共享——按邮箱的用例各自用独立邮箱；
 // post 默认给每次请求发不同的 x-forwarded-for，避免 IP 维度累计串扰。

@@ -4,8 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { GET } from "./route";
 import { openDb } from "@/lib/db";
-import { createAccount } from "@/lib/auth/accounts";
-import { createSession } from "@/lib/auth/sessions";
+import { authedGet } from "@/lib/testing/auth-test-utils";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
@@ -43,18 +42,6 @@ function setupEnv() {
 
 function ctx(id: string) {
   return { params: Promise.resolve({ id }) };
-}
-
-/** 建一个登录家长并返回带会话 cookie 的请求（单元接口受 ADR-0003 鉴权保护） */
-function authedGet() {
-  const db = openDb(process.env.DB_PATH!);
-  const account = createAccount(db, {
-    email: "parent@test.com",
-    password: "secret123",
-  });
-  const sessionId = createSession(db, account.id);
-  db.close();
-  return new Request("http://x", { headers: { cookie: `session=${sessionId}` } });
 }
 
 describe("GET /api/units/[id]", () => {

@@ -1,25 +1,8 @@
-import { describe, it, expect, afterEach } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
+import { describe, it, expect } from "vitest";
 import { POST } from "./route";
 import { openDb } from "@/lib/db";
-import { createAccount, authenticate, findAccountByEmail } from "@/lib/auth/accounts";
-import { createSession } from "@/lib/auth/sessions";
-
-const cleanups: Array<() => void> = [];
-afterEach(() => {
-  for (const fn of cleanups) fn();
-  cleanups.length = 0;
-  delete process.env.DB_PATH;
-});
-
-function setupDb() {
-  const dbDir = mkdtempSync(path.join(tmpdir(), "ra-admin-create-"));
-  process.env.DB_PATH = path.join(dbDir, "readalong.db");
-  cleanups.push(() => rmSync(dbDir, { recursive: true, force: true }));
-  return openDb(process.env.DB_PATH);
-}
+import { authenticate } from "@/lib/auth/accounts";
+import { sessionCookieFor, setupDb } from "@/lib/testing/auth-test-utils";
 
 /** 以指定身份登录后发出创建请求；不传邮箱即"未登录" */
 function post(body: unknown, actor?: { email: string; isAdmin: boolean }) {
@@ -27,17 +10,7 @@ function post(body: unknown, actor?: { email: string; isAdmin: boolean }) {
     "content-type": "application/json",
   };
   if (actor) {
-    // 同一测试里多次请求复用同一 actor 账号，避免重复建号报 DuplicateAccountError
-    const db = openDb(process.env.DB_PATH!);
-    const account =
-      findAccountByEmail(db, actor.email) ??
-      createAccount(db, {
-        email: actor.email,
-        password: "secret123",
-        isAdmin: actor.isAdmin,
-      });
-    headers.cookie = `session=${createSession(db, account.id)}`;
-    db.close();
+    headers.cookie = sessionCookieFor(actor.email, actor.isAdmin);
   }
   return POST(
     new Request("http://x/api/admin/accounts", {

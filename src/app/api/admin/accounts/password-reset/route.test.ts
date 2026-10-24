@@ -1,42 +1,16 @@
-import { describe, it, expect, afterEach } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
+import { describe, it, expect } from "vitest";
 import { POST as resetPost } from "./route";
 import { POST as loginPost } from "@/app/api/auth/login/route";
 import { openDb } from "@/lib/db";
-import { createAccount, findAccountByEmail } from "@/lib/auth/accounts";
-import { createSession } from "@/lib/auth/sessions";
-
-const cleanups: Array<() => void> = [];
-afterEach(() => {
-  for (const fn of cleanups) fn();
-  cleanups.length = 0;
-  delete process.env.DB_PATH;
-});
-
-function setupDb() {
-  const dbDir = mkdtempSync(path.join(tmpdir(), "ra-admin-reset-"));
-  process.env.DB_PATH = path.join(dbDir, "readalong.db");
-  cleanups.push(() => rmSync(dbDir, { recursive: true, force: true }));
-  return openDb(process.env.DB_PATH);
-}
+import { createAccount } from "@/lib/auth/accounts";
+import { sessionCookieFor, setupDb } from "@/lib/testing/auth-test-utils";
 
 function adminPost(body: unknown, actor?: { email: string; isAdmin: boolean }) {
   const headers: Record<string, string> = {
     "content-type": "application/json",
   };
   if (actor) {
-    const db = openDb(process.env.DB_PATH!);
-    const account =
-      findAccountByEmail(db, actor.email) ??
-      createAccount(db, {
-        email: actor.email,
-        password: "secret123",
-        isAdmin: actor.isAdmin,
-      });
-    headers.cookie = `session=${createSession(db, account.id)}`;
-    db.close();
+    headers.cookie = sessionCookieFor(actor.email, actor.isAdmin);
   }
   return resetPost(
     new Request("http://x/api/admin/accounts/password-reset", {
