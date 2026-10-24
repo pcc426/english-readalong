@@ -70,6 +70,8 @@ export default function PracticeFlow({ unit }: { unit: UnitDetail }) {
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [micNotice, setMicNotice] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // 会话过期（提交练习遇 401）：与普通提交失败分开处理，提示重新登录
+  const [sessionExpired, setSessionExpired] = useState(false);
   const [minePlaying, setMinePlaying] = useState(false);
   const mineAudioRef = useRef<HTMLAudioElement | null>(null);
   const mineUrlRef = useRef<string | null>(null);
@@ -169,6 +171,11 @@ export default function PracticeFlow({ unit }: { unit: UnitDetail }) {
         dispatch({ type: "scored", result });
       } else {
         dispatch({ type: "submitFailed" });
+        if (res.status === 401) {
+          // API 守卫判会话失效（ADR-0003）：普通"再试一次"救不回来，引导重新登录
+          setSessionExpired(true);
+          return;
+        }
         const code = body?.error?.code as string | undefined;
         if (code === "EMPTY_AUDIO") {
           // 不自动重录：让孩子看到提示、自己点"开始读"再读一遍
@@ -424,6 +431,21 @@ export default function PracticeFlow({ unit }: { unit: UnitDetail }) {
           下一句 ⏭
         </button>
       </div>
+
+      {/* 会话过期：覆盖普通提交错误提示，引导去重新登录（回来后本页重新加载即恢复） */}
+      {sessionExpired && (
+        <section className="mt-3 shrink-0 rounded-3xl bg-amber-50 p-4 text-center ring-1 ring-amber-100">
+          <p className="text-lg font-semibold text-amber-700">
+            登录已过期，请重新登录
+          </p>
+          <a
+            href="/login"
+            className="mt-3 block rounded-2xl bg-emerald-500 py-3 text-xl font-bold text-white active:bg-emerald-600"
+          >
+            去登录
+          </a>
+        </section>
+      )}
 
       {/* 当前句 / 录音 / 出分 主卡 */}
       {current && (
