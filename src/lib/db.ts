@@ -18,6 +18,21 @@ export function openDb(dbPath: string): Database.Database {
     );
     CREATE INDEX IF NOT EXISTS idx_attempts_unit_sentence
       ON practice_attempts (unit_id, sentence_index);
+
+    -- 账号与会话（ADR-0003）：邀请制建号，公网无自助注册入口
+    CREATE TABLE IF NOT EXISTS accounts (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      is_admin INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    -- 会话 id 是服务端生成的随机不透明 id（ADR-0003），退出即删行吊销
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      account_id TEXT NOT NULL REFERENCES accounts(id),
+      expires_at TEXT NOT NULL
+    );
   `);
   return db;
 }
