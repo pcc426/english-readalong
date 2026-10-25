@@ -68,6 +68,64 @@ describe("内容包校验", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it("type 缺省视为 standard：无 owner 的既有内容包通过校验", () => {
+    const dir = makePackDir({ "u2.json": JSON.stringify(validPack) });
+    try {
+      expect(listUnitPacks(dir)).toHaveLength(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("type=standard + owner=null 通过校验", () => {
+    const standard = { ...validPack, type: "standard", owner: null };
+    const dir = makePackDir({ "u2.json": JSON.stringify(standard) });
+    try {
+      expect(listUnitPacks(dir)).toHaveLength(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("type=standard 时 owner 必须为空", () => {
+    const bad = { ...validPack, type: "standard", owner: "acc-1" };
+    const dir = makePackDir({ "u2.json": JSON.stringify(bad) });
+    try {
+      expect(() => listUnitPacks(dir)).toThrow(/u2\.json/);
+      expect(() => listUnitPacks(dir)).toThrow(/owner/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("type=custom + owner=账号 id 通过校验", () => {
+    const custom = { ...validPack, type: "custom", owner: "acc-1" };
+    const dir = makePackDir({ "c1.json": JSON.stringify(custom) });
+    try {
+      expect(listUnitPacks(dir)).toHaveLength(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("type=custom 时 owner 必须为非空账号 id（缺省与 null 都报错）", () => {
+    const noOwner = { ...validPack, type: "custom" };
+    const nullOwner = { ...validPack, type: "custom", owner: null };
+    const emptyOwner = { ...validPack, type: "custom", owner: "" };
+    for (const [name, pack] of [
+      ["no-owner.json", noOwner],
+      ["null-owner.json", nullOwner],
+      ["empty-owner.json", emptyOwner],
+    ] as const) {
+      const dir = makePackDir({ [name]: JSON.stringify(pack) });
+      try {
+        expect(() => listUnitPacks(dir)).toThrow(new RegExp(name.replace(".", "\\.")));
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    }
+  });
 });
 
 describe("内容包加载", () => {
