@@ -12,11 +12,13 @@ import {
   type Draft,
   type DraftSentence,
 } from "./repo";
+import { createStandardDraft } from "./standard-drafts";
 import {
   buildContentPack,
   finalizeDraft,
   FinalizeValidationError,
   packPathFor,
+  standardPackPathFor,
   validateDraftSentences,
 } from "./finalize";
 
@@ -36,8 +38,8 @@ function setupEnv(): Db {
 }
 
 /** sessionCookieFor 惰性建号；这里显式拿账号 id 供落草稿用 */
-function accountIdOf(email: string): string {
-  sessionCookieFor(email);
+function accountIdOf(email: string, isAdmin = false): string {
+  sessionCookieFor(email, isAdmin);
   const db = openDb(process.env.DB_PATH!);
   const row = db.prepare("SELECT id FROM accounts WHERE email = ?").get(email) as {
     id: string;
@@ -193,5 +195,83 @@ describe("finalizeDraft", () => {
       expect((err as FinalizeValidationError).issues[0].index).toBeNull();
     }
     expect(existsSync(packPathFor(accountId, draft.id))).toBe(false);
+  });
+});
+
+describe("buildContentPack · 标准内容（12 号票）", () => {
+  const stdDraft: Draft = {
+    id: "std-1",
+    accountId: "admin-1",
+    title: "五上 U2 Story time",
+    type: "standard",
+    status: "proofreading",
+    videoPath: "admin-1/v.mp4",
+    transcribeTaskId: null,
+    transcribeError: null,
+    createdAt: "",
+    updatedAt: "",
+  };
+
+  it("type=standard：owner 置空、source=standard-upload，视频沿用草稿引用", () => {
+    const pack = buildContentPack(stdDraft, [sent(0, "a", 0, 900)]);
+    expect(pack.id).toBe("std-1");
+    expect(pack.title).toBe("五上 U2 Story time");
+    expect(pack.type).toBe("standard");
+    expect(pack.owner).toBeNull();
+    expect(pack.source).toBe("standard-upload");
+    expect(pack.video).toBe("admin-1/v.mp4");
+  });
+});
+
+describe("finalizeDraft · 标准内容（12 号票）", () => {
+  /** 经真实链路落一个 proofreading 标准草稿（管理员账号） */
+  function seedStandardDraft(
+    db: Db,
+    adminId: string,
+    sentences: Array<{ text: string; startMs: number; endMs: number }>
+  ): Draft {
+    const draft = createStandardDraft(db, {
+      accountId: adminId,
+      title: "五上 U2 Story time",
+      unitId: "五上-U2",
+      moduleKind: "Story time",
+    });
+    setDraftVideo(db, draft.id, `${adminId}/${draft.id}.mp4`);
+    completeTranscription(db, draft.id, sentences);
+    return getDraft(db, draft.id)!;
+  }
+
+  it("标准草稿定稿：包落在运行时标准目录（与账号目录平级）、owner 为空，状态置 published", () => {
+    const db = setupEnv();
+    const adminId = accountIdOf("admin@test.com", true);
+    const draft = seedStandardDraft(db, adminId, [
+      { text: "hello", startMs: 0, endMs: 900 },
+      { text: "world", startMs: 1234, endMs: 2345 },
+    ]);
+
+    const pack = finalizeDraft(db, draft);
+    expect(pack.type).toBe("standard");
+    expect(pack.owner).toBeNull();
+
+    // 落点契约：<customContentRoot>/standard/<draftId>.json（不进管理员账号目录）
+    const abs = standardPackPathFor(draft.id);
+    expect(existsSync(abs)).toBe(true);
+    expect(abs).toContain(path.join("standard", `${draft.id}.json`));
+    const onDisk = JSON.parse(readFileSync(abs, "utf8"));
+    expect(onDisk).toEqual(pack);
+    expect(onDisk.video).toBe(`${adminId}/${draft.id}.mp4`);
+
+    // 不写进账号自定义目录
+    expect(existsSync(packPathFor(adminId, draft.id))).toBe(false);
+    expect(getDraft(db, draft.id)?.status).toBe("published");
+  });
+
+  it("标准草稿校验失败同样不产生半成品", () => {
+    const db = setupEnv();
+    const adminId = accountIdOf("admin@test.com", true);
+    const draft = seedStandardDraft(db, adminId, []);
+    expect(() => finalizeDraft(db, draft)).toThrow(FinalizeValidationError);
+    expect(existsSync(standardPackPathFor(draft.id))).toBe(false);
+    expect(getDraft(db, draft.id)?.status).toBe("proofreading");
   });
 });

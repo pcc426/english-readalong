@@ -14,7 +14,9 @@ import {
   setDraftVideo,
   completeTranscription,
 } from "@/lib/drafts/repo";
-import { packPathFor } from "@/lib/drafts/finalize";
+import { createStandardDraft } from "@/lib/drafts/standard-drafts";
+import { packPathFor, standardPackPathFor } from "@/lib/drafts/finalize";
+import { listContent } from "@/lib/content/loader";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
@@ -32,8 +34,8 @@ function setupEnv(): Db {
 }
 
 /** sessionCookieFor 惰性建号；这里显式拿账号 id 供落草稿用 */
-function accountIdOf(email: string): string {
-  sessionCookieFor(email);
+function accountIdOf(email: string, isAdmin = false): string {
+  sessionCookieFor(email, isAdmin);
   const db = openDb(process.env.DB_PATH!);
   const row = db.prepare("SELECT id FROM accounts WHERE email = ?").get(email) as {
     id: string;
@@ -212,5 +214,52 @@ describe("POST /api/drafts/[id]/publish", () => {
     expect(res.status).toBe(500);
     expect((await res.json()).error.code).toBe("PACK_WRITE_FAILED");
     expect(getDraft(db, draft.id)?.status).toBe("proofreading");
+  });
+});
+
+describe("POST /api/drafts/[id]/publish · 标准内容（12 号票）", () => {
+  /** 经真实链路落一个 proofreading 标准草稿 */
+  function seedStandardDraft(db: Db, adminId: string): string {
+    const draft = createStandardDraft(db, {
+      accountId: adminId,
+      title: "五上 U2 Story time",
+      unitId: "五上-U2",
+      moduleKind: "Story time",
+    });
+    setDraftVideo(db, draft.id, `${adminId}/${draft.id}.mp4`);
+    completeTranscription(db, draft.id, [
+      { text: "hello", startMs: 0, endMs: 900 },
+    ]);
+    return draft.id;
+  }
+
+  it("标准草稿定稿：包落运行时标准目录、type=standard owner 空；发布后其他家长账号列表可见", async () => {
+    const db = setupEnv();
+    const adminId = accountIdOf("admin@test.com", true);
+    const draftId = seedStandardDraft(db, adminId);
+
+    const res = await post(draftId, sessionCookieFor("admin@test.com", true));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.content).toEqual({
+      id: draftId,
+      title: "五上 U2 Story time",
+      type: "standard",
+      owner: null,
+    });
+
+    // 包文件落运行时标准目录，不在管理员账号目录
+    const abs = standardPackPathFor(draftId);
+    const onDisk = JSON.parse(readFileSync(abs, "utf8"));
+    expect(onDisk.type).toBe("standard");
+    expect(onDisk.owner).toBeNull();
+    expect(existsSync(packPathFor(adminId, draftId))).toBe(false);
+
+    // 另一家长账号的列表视角可见（10 号票账号视图 + 12 号票标准目录合并）
+    const parentId = accountIdOf("parent@test.com");
+    const visible = listContent({ accountId: parentId }).map((p) => p.id);
+    expect(visible).toContain(draftId);
+    // 匿名（仅标准内容）视角同样可见
+    expect(listContent().map((p) => p.id)).toContain(draftId);
   });
 });

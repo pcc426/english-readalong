@@ -1,9 +1,11 @@
 // 定稿（票 09）：校验草稿句子完整性 → 生成带 type/owner 的内容包写入账号目录
 // → 状态置 published。先写文件后改状态：写盘失败则整体失败，不留半成品内容包，
 // 草稿停在 proofreading 可重试。状态更新的辅助函数按票面要求放本模块，不动 repo.ts。
+// 标准内容分支（票 12）：包写入运行时标准目录（data/content/standard/），
+// type=standard、owner 置空（公开），source=standard-upload。
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { customContentRoot } from "@/lib/content/loader";
+import { customContentRoot, standardRuntimeDir } from "@/lib/content/loader";
 import type { ContentPack } from "@/lib/content/schema";
 import type { Db } from "../db";
 import { listDraftSentences, type Draft, type DraftSentence } from "./repo";
@@ -26,6 +28,12 @@ export class FinalizeValidationError extends Error {
 /** 定稿产物落点契约（10/12 号票按此读包）：<customContentRoot>/<accountId>/<packId>.json */
 export function packPathFor(accountId: string, packId: string): string {
   return path.join(customContentRoot(), accountId, `${packId}.json`);
+}
+
+/** 标准内容包落点契约（12 号票）：<customContentRoot>/standard/<packId>.json
+ * ——运行时目录、部署不覆盖、与账号目录平级。 */
+export function standardPackPathFor(packId: string): string {
+  return path.join(standardRuntimeDir(), `${packId}.json`);
 }
 
 /** 内容包句子时间以秒为单位（内容模型 schema 约定），草稿内部按毫秒存 */
@@ -54,19 +62,21 @@ export function validateDraftSentences(sentences: DraftSentence[]): FinalizeIssu
   return issues;
 }
 
-/** 草稿 → 内容包：id 即草稿 id；type/owner 标记自定义归属；title 取草稿标题；
- * video 沿用草稿的视频引用（<accountId>/<file>，播放端经鉴权媒体路由取流）。 */
+/** 草稿 → 内容包：id 即草稿 id；title 取草稿标题；video 沿用草稿的视频引用
+ * （<accountId>/<file>，播放端经鉴权媒体路由取流）。
+ * custom：type/owner 标记归属；standard（12 号票）：公开内容，owner 置空。 */
 export function buildContentPack(
   draft: Draft,
   sentences: DraftSentence[]
 ): ContentPack {
+  const standard = draft.type === "standard";
   return {
     id: draft.id,
     title: draft.title,
-    source: "custom-upload",
+    source: standard ? "standard-upload" : "custom-upload",
     video: draft.videoPath,
-    type: "custom",
-    owner: draft.accountId,
+    type: draft.type,
+    owner: standard ? null : draft.accountId,
     sentences: sentences.map((s) => ({
       text: s.text,
       start: msToSeconds(s.startMs),
@@ -94,7 +104,10 @@ export function finalizeDraft(db: Db, draft: Draft): ContentPack {
   if (issues.length > 0) throw new FinalizeValidationError(issues);
 
   const pack = buildContentPack(draft, sentences);
-  const abs = packPathFor(draft.accountId, pack.id);
+  const abs =
+    draft.type === "standard"
+      ? standardPackPathFor(pack.id)
+      : packPathFor(draft.accountId, pack.id);
   mkdirSync(path.dirname(abs), { recursive: true });
   writeFileSync(abs, JSON.stringify(pack, null, 2), "utf8");
   markDraftPublished(db, draft.id);

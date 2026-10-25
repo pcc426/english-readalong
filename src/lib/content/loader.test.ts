@@ -239,3 +239,67 @@ describe("按 id 取单条", () => {
     expect(getContent("custom-a1", { accountId: "acc-a" })?.id).toBe("custom-a1");
   });
 });
+
+describe("标准双目录合并（12 号票：随代码目录 + 运行时目录）", () => {
+  const runtimeStdPack = JSON.stringify({
+    ...validPack,
+    id: "std-runtime-1",
+    title: "管理员制作的运行时标准内容",
+    video: "acc-std/v.mp4",
+    type: "standard",
+    owner: null,
+  });
+
+  /** 在运行时标准目录（<customContentRoot>/standard/，与账号目录平级）落包 */
+  function writeRuntimeStandard(files: Record<string, string>): void {
+    const dir = path.join(process.env.CONTENT_DATA_DIR!, "standard");
+    mkdirSync(dir, { recursive: true });
+    writePacks(dir, files);
+  }
+
+  it("运行时标准目录的包对不传账号的查询可见（全账号可见的前提）", () => {
+    setupContentEnv({});
+    writeRuntimeStandard({ "s1.json": runtimeStdPack });
+    expect(listContent().map((p) => p.id)).toEqual(["std-runtime-1"]);
+  });
+
+  it("传账号查询：随代码标准 + 运行时标准 + 本账号自定义全合并", () => {
+    setupContentEnv(
+      { "u2.json": JSON.stringify(validPack) },
+      { "acc-a": { "a1.json": JSON.stringify({ ...validPack, id: "custom-a1", type: "custom", owner: "acc-a" }) } }
+    );
+    writeRuntimeStandard({ "s1.json": runtimeStdPack });
+    expect(listContent({ accountId: "acc-a" }).map((p) => p.id)).toEqual([
+      "u2-dragon-dance",
+      "std-runtime-1",
+      "custom-a1",
+    ]);
+  });
+
+  it("同名 id 去重：随代码目录（content/units）优先，运行时副本被丢弃", () => {
+    setupContentEnv({ "u2.json": JSON.stringify(validPack) });
+    writeRuntimeStandard({
+      "dup.json": JSON.stringify({
+        ...validPack,
+        title: "运行时同名包（应被丢弃）",
+        type: "standard",
+        owner: null,
+      }),
+    });
+    const packs = listContent();
+    expect(packs.map((p) => p.id)).toEqual(["u2-dragon-dance"]);
+    expect(packs[0].title).toBe("The dragon dance");
+  });
+
+  it("运行时标准目录缺失（还没有管理员制作过）视为空，不报错", () => {
+    setupContentEnv({ "u2.json": JSON.stringify(validPack) });
+    expect(listContent().map((p) => p.id)).toEqual(["u2-dragon-dance"]);
+    expect(getContent("std-runtime-1")).toBeNull();
+  });
+
+  it("运行时标准目录里的坏包同样报明确错误（含文件名）", () => {
+    setupContentEnv({});
+    writeRuntimeStandard({ "broken.json": "{ not json" });
+    expect(() => listContent()).toThrow(/broken\.json/);
+  });
+});

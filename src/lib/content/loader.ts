@@ -23,6 +23,11 @@ export function customContentRoot(): string {
   );
 }
 
+/** 运行时产出的标准内容目录（12 号票：管理员定稿写入，与账号目录平级，部署不覆盖）。 */
+export function standardRuntimeDir(): string {
+  return path.join(customContentRoot(), "standard");
+}
+
 /**
  * 按文件名顺序加载目录下全部内容包。任何包不合法即抛错（含文件名上下文），
  * 不静默跳过——素材数据错了必须立刻暴露。
@@ -54,12 +59,25 @@ function loadContentPacks(dir: string, requireOwner?: string): ContentPack[] {
 }
 
 /**
+ * 标准内容 = 随代码目录（content/units）+ 运行时目录（data/content/standard）
+ * 两处合并。同名 id 去重时随代码包优先：运行时包是管理员后制作的，
+ * 不覆盖随代码已发布的素材。运行时目录缺失视为空（还没有管理员制作是常态）。
+ */
+function loadStandardPacks(): ContentPack[] {
+  const shipped = loadContentPacks(standardContentDir());
+  const runtimeDir = standardRuntimeDir();
+  const runtime = existsSync(runtimeDir) ? loadContentPacks(runtimeDir) : [];
+  const shippedIds = new Set(shipped.map((p) => p.id));
+  return [...shipped, ...runtime.filter((p) => !shippedIds.has(p.id))];
+}
+
+/**
  * 内容加载缝：标准目录 + 按账号自定义目录合并读取。
  * 不传账号参数 → 仅标准内容（既有行为）；传 accountId → 标准 + 该账号自定义，
  * 其他账号的自定义内容不可见。自定义目录缺失视为空（运行时还没有上传是常态）。
  */
 export function listContent(query: ContentQuery = {}): ContentPack[] {
-  const standard = loadContentPacks(standardContentDir());
+  const standard = loadStandardPacks();
   if (query.accountId == null) return standard;
   const accountDir = path.join(customContentRoot(), query.accountId);
   const custom = existsSync(accountDir)
