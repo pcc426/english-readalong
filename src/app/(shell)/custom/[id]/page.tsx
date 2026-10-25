@@ -127,8 +127,16 @@ export default function DraftDetailPage() {
       {draft.sentences.length === 0 && draft.status !== "transcribing" && (
         <p className="mt-3 text-lg text-slate-400">暂无句子</p>
       )}
+      {draft.status === "proofreading" && (
+        <a
+          href={`/drafts/${draft.id}/proofread`}
+          className="mt-6 block rounded-2xl bg-emerald-500 py-4 text-center text-xl font-bold text-white shadow-md active:bg-emerald-600"
+        >
+          去校对 →
+        </a>
+      )}
       <p className="mt-8 text-base text-slate-400">
-        文本校对与切点校对工具即将上线，本页暂为只读预览。
+        切点校对工具即将上线，本页暂为只读预览。
       </p>
     </div>
   );
