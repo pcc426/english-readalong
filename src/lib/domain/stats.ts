@@ -19,20 +19,29 @@ export interface BestAttempt {
   createdAt: string;
 }
 
+/** 统计的账号维度：业务路由一律传 owner（每个家庭的进度独立，票 10）；
+ * 不传为全量口径——仅供不区分账号的调用方（内容视图层）与迁移工具使用。 */
+export interface StatsQuery {
+  owner?: string;
+}
+
 /**
  * 每句最好成绩（含达成时间）。平手取最新一次（id 最大）。
  * 完成度统计与单元详情共用此口径，避免两处实现漂移。
+ * 传 owner 时只统计该账号的记录（NULL 归属视为无本人记录）。
  */
 export function bestAttemptsBySentence(
   db: Db,
-  unitId: string
+  unitId: string,
+  query: StatsQuery = {}
 ): Map<number, BestAttempt> {
+  const byOwner = query.owner != null;
   const rows = db
     .prepare(
       `SELECT sentence_index, score, created_at FROM practice_attempts
-       WHERE unit_id = ? ORDER BY id`
+       WHERE unit_id = ? ${byOwner ? "AND owner = ?" : ""} ORDER BY id`
     )
-    .all(unitId) as Array<{
+    .all(...(byOwner ? [unitId, query.owner] : [unitId])) as Array<{
     sentence_index: number;
     score: number;
     created_at: string;
@@ -50,9 +59,14 @@ export function bestAttemptsBySentence(
 /**
  * 单元完成度：每句取练习记录中的最好成绩映射为星级，
  * 百分比按全部句子数四舍五入（四类各自独立取整，合计可能 ±1%）。
+ * 传 owner 时按该账号的记录计算。
  */
-export function completionDistribution(db: Db, unit: ContentPack): CompletionDistribution {
-  const bestByIndex = bestAttemptsBySentence(db, unit.id);
+export function completionDistribution(
+  db: Db,
+  unit: ContentPack,
+  query: StatsQuery = {}
+): CompletionDistribution {
+  const bestByIndex = bestAttemptsBySentence(db, unit.id, query);
 
   const bestStars: BestStars[] = unit.sentences.map((_, index) => {
     const best = bestByIndex.get(index);

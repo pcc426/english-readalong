@@ -25,6 +25,21 @@ export async function POST(
   if (!auth.ok) return auth.response;
   const { id } = await ctx.params;
 
+  // 未发布门禁（票 09）：本人存在同 id 且未发布的草稿 → 拒绝练习。
+  // 只查本人的草稿：他人的未发布草稿 id 不在此拦截，走下方 404 不暴露存在性；
+  // 已发布草稿与标准内容（无同 id 草稿）照常放行。
+  const gateDb = openDb(dbPath());
+  try {
+    const draftRow = gateDb
+      .prepare("SELECT status FROM content_drafts WHERE id = ? AND account_id = ?")
+      .get(id, auth.account.id) as { status: string } | undefined;
+    if (draftRow && draftRow.status !== "published") {
+      return errorResponse(409, "CONTENT_NOT_PUBLISHED", "内容还没定稿，暂时不能跟读");
+    }
+  } finally {
+    gateDb.close();
+  }
+
   let form: FormData;
   try {
     form = await req.formData();
@@ -39,7 +54,7 @@ export async function POST(
   if (!Number.isInteger(sentenceIndex) || sentenceIndex < 0) {
     return errorResponse(400, "BAD_INDEX", "句子序号不对");
   }
-  const pack = getContent(id);
+  const pack = getContent(id, { accountId: auth.account.id });
   const sentence = pack?.sentences[sentenceIndex];
   if (!pack || !sentence) {
     return errorResponse(404, "UNIT_NOT_FOUND", "单元或句子不存在");
@@ -86,11 +101,14 @@ export async function POST(
   const stars = mapScoreToStars(score);
   const db = openDb(dbPath());
   try {
-    const prev = bestAttemptsBySentence(db, id).get(sentenceIndex)?.score ?? null;
+    // 最好成绩按账号隔离：新纪录判定只和本人历史比（票 10）
+    const prev = bestAttemptsBySentence(db, id, { owner: auth.account.id }).get(
+      sentenceIndex
+    )?.score ?? null;
     const isNewBest = prev === null || score > prev;
     db.prepare(
-      "INSERT INTO practice_attempts (unit_id, sentence_index, score, stars) VALUES (?, ?, ?, ?)"
-    ).run(id, sentenceIndex, score, stars);
+      "INSERT INTO practice_attempts (unit_id, sentence_index, score, stars, owner) VALUES (?, ?, ?, ?, ?)"
+    ).run(id, sentenceIndex, score, stars, auth.account.id);
     return NextResponse.json({
       score,
       stars,

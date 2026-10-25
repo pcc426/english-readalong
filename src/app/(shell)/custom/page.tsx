@@ -203,6 +203,11 @@ export default function CustomContentPage() {
           ) : (
             drafts.map((draft) => {
               const badge = STATUS_BADGES[draft.status];
+              // 待校对直达文本校对工具（票 07）；已定稿仍看详情
+              const href =
+                draft.status === "proofreading"
+                  ? `/drafts/${draft.id}/proofread`
+                  : `/custom/${draft.id}`;
               const clickable = draft.status === "proofreading" || draft.status === "published";
               const card = (
                 <>
@@ -239,7 +244,7 @@ export default function CustomContentPage() {
               return clickable ? (
                 <a
                   key={draft.id}
-                  href={`/custom/${draft.id}`}
+                  href={href}
                   className="block rounded-3xl bg-white p-7 shadow-md ring-1 ring-slate-100 active:bg-slate-50"
                 >
                   {card}

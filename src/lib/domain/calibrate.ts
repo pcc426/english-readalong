@@ -24,3 +24,32 @@ export function adjustBounds(
   const end = Math.max(bounds.start + MIN_CLIP, bounds.end + delta);
   return { start: bounds.start, end };
 }
+
+export interface ClipBoundsMs {
+  start: number;
+  end: number;
+}
+
+/** 草稿句子存整数毫秒：最短片段 0.2s = 200ms，微调步进 0.25s = 250ms */
+export const MIN_CLIP_MS = MIN_CLIP * 1000;
+export const CALIBRATE_STEP_MS = CALIBRATE_STEP * 1000;
+
+/**
+ * 草稿场景（整数毫秒）的边界微调（切点校对页用）：语义与 adjustBounds 相同，
+ * 结果钳为整数毫秒，保证能直接 PUT 给句子端点。
+ */
+export function adjustBoundsMs(
+  bounds: ClipBoundsMs,
+  field: "start" | "end",
+  deltaMs: number
+): ClipBoundsMs {
+  const adjusted = adjustBounds(
+    { start: bounds.start / 1000, end: bounds.end / 1000 },
+    field,
+    deltaMs / 1000
+  );
+  return {
+    start: Math.round(adjusted.start * 1000),
+    end: Math.round(adjusted.end * 1000),
+  };
+}
