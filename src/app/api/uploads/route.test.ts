@@ -229,6 +229,140 @@ describe("POST /api/uploads", () => {
   });
 });
 
+describe("POST /api/uploads · 标准内容（12 号票）", () => {
+  function postWithFields(
+    fields: Record<string, string>,
+    file: File | undefined,
+    email = "admin@test.com"
+  ): Promise<Response> {
+    const form = new FormData();
+    form.set("title", "标准内容制作");
+    for (const [k, v] of Object.entries(fields)) form.set(k, v);
+    if (file) form.set("file", file);
+    return POST(
+      new Request("http://x/api/uploads", {
+        method: "POST",
+        headers: { cookie: sessionCookieFor(email, email === "admin@test.com") },
+        body: form,
+      })
+    );
+  }
+
+  /** 管理员账号 id（sessionCookieFor 惰性建号后查询） */
+  function adminIdOf(db: Db): string {
+    sessionCookieFor("admin@test.com", true);
+    const account = findAccountByEmail(db, "admin@test.com");
+    if (!account) throw new Error("测试管理员未创建");
+    return account.id;
+  }
+
+  const stdFields = { type: "standard", unitId: "五上-U2", moduleKind: "Story time" };
+
+  it("非管理员传 type=standard：403 FORBIDDEN，不落盘不建草稿", async () => {
+    const db = setupEnv();
+    accountIdOf(db);
+    const res = await postWithFields(stdFields, mp4File(), "parent@test.com");
+    expect(res.status).toBe(403);
+    expect((await res.json()).error.code).toBe("FORBIDDEN");
+    expect(readdirSync(process.env.UPLOADS_DIR!)).toEqual([]);
+    expect(countDrafts(db)).toBe(0);
+  });
+
+  it("管理员 + 未知单元：400 UNKNOWN_MODULE", async () => {
+    setupEnv();
+    const res = await postWithFields(
+      { ...stdFields, unitId: "五上-U99" },
+      mp4File()
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.code).toBe("UNKNOWN_MODULE");
+  });
+
+  it("管理员 + 教材里不存在的栏目：400 UNKNOWN_MODULE", async () => {
+    setupEnv();
+    const res = await postWithFields(
+      { ...stdFields, moduleKind: "Nope time" },
+      mp4File()
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.code).toBe("UNKNOWN_MODULE");
+  });
+
+  it("管理员 + 缺 unit/module 字段：同样 400 UNKNOWN_MODULE", async () => {
+    setupEnv();
+    const res = await postWithFields({ type: "standard" }, mp4File());
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.code).toBe("UNKNOWN_MODULE");
+  });
+
+  it("管理员合法上传：201，草稿 type=standard 且 unit/module 落库，视频落管理员账号目录", async () => {
+    const db = setupEnv();
+    const adminId = adminIdOf(db);
+    setDurationProbe(async () => 30_000);
+    setTranscriptionService(new FakeTranscriptionService());
+
+    const res = await postWithFields(stdFields, mp4File());
+    expect(res.status).toBe(201);
+    const { draft } = await res.json();
+    expect(draft.status).toBe("proofreading");
+    expect(draft.type).toBe("standard");
+    expect(draft.unitId).toBe("五上-U2");
+    expect(draft.moduleKind).toBe("Story time");
+
+    const row = db
+      .prepare(
+        "SELECT account_id, type, unit_id, module_kind, status FROM content_drafts WHERE id = ?"
+      )
+      .get(draft.id) as {
+      account_id: string;
+      type: string;
+      unit_id: string;
+      module_kind: string;
+      status: string;
+    };
+    expect(row.account_id).toBe(adminId);
+    expect(row.type).toBe("standard");
+    expect(row.unit_id).toBe("五上-U2");
+    expect(row.module_kind).toBe("Story time");
+    expect(row.status).toBe("proofreading");
+
+    // 视频与其他上传一致落 data/uploads/<accountId>/（管理员目录）
+    const videoPath = (
+      db.prepare("SELECT video_path FROM content_drafts WHERE id = ?").get(draft.id) as {
+        video_path: string;
+      }
+    ).video_path;
+    expect(videoPath).toMatch(new RegExp(`^${adminId}/[0-9a-f-]{36}\\.mp4$`));
+    expect(readdirSync(path.join(process.env.UPLOADS_DIR!, adminId))).toEqual([
+      path.basename(videoPath),
+    ]);
+  });
+
+  it("未知 type 值：400 INVALID_TYPE", async () => {
+    setupEnv();
+    const res = await postWithFields({ type: "premium" }, mp4File());
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.code).toBe("INVALID_TYPE");
+  });
+
+  it("管理员不带 type 的普通上传：仍是 custom 草稿（回归）", async () => {
+    const db = setupEnv();
+    const adminId = adminIdOf(db);
+    setDurationProbe(async () => 30_000);
+    setTranscriptionService(new FakeTranscriptionService());
+
+    const res = await postWithFields({}, mp4File());
+    expect(res.status).toBe(201);
+    const { draft } = await res.json();
+    const row = db
+      .prepare("SELECT account_id, type, unit_id FROM content_drafts WHERE id = ?")
+      .get(draft.id) as { account_id: string; type: string; unit_id: string | null };
+    expect(row.account_id).toBe(adminId);
+    expect(row.type).toBe("custom");
+    expect(row.unit_id).toBeNull();
+  });
+});
+
 function countDrafts(db: Db): number {
   return (
     db.prepare("SELECT COUNT(*) AS n FROM content_drafts").get() as {

@@ -60,6 +60,10 @@ export function openDb(dbPath: string): Database.Database {
       -- transcribing 可重试（转写缝 ADR-0004）
       transcribe_task_id TEXT,
       transcribe_error TEXT,
+      -- 标准内容草稿（12 号票）指向的教材单元与栏目（如 五上-U2 / Story time）；
+      -- custom 草稿两列均为 NULL
+      unit_id TEXT,
+      module_kind TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -79,7 +83,25 @@ export function openDb(dbPath: string): Database.Database {
       PRIMARY KEY (draft_id, seq)
     );
   `);
+  // 既有库补列（12 号票）：CREATE TABLE IF NOT EXISTS 对旧库不生效，缺列时 ALTER 补上。
+  // SQLite 的 ALTER TABLE 无 IF NOT EXISTS，按 table_info 逐列判断；新库建表已含列则空操作。
+  addColumnIfMissing(db, "content_drafts", "unit_id", "unit_id TEXT");
+  addColumnIfMissing(db, "content_drafts", "module_kind", "module_kind TEXT");
   return db;
+}
+
+function addColumnIfMissing(
+  db: Database.Database,
+  table: string,
+  column: string,
+  decl: string
+): void {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{
+    name: string;
+  }>;
+  if (!columns.some((c) => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${decl}`);
+  }
 }
 
 export type Db = Database.Database;
