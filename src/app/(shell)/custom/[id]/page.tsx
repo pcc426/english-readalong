@@ -1,7 +1,7 @@
 "use client";
 
 // 草稿详情（票 05）：只读展示转写句子与起止时间 + 鉴权视频播放。
-// 文本/切点校对编辑属 07/08 号票，这里先给校对入口的落点。
+// 校对入口：文本校对（票 07）+ 切点校对（票 08）。
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -135,9 +135,14 @@ export default function DraftDetailPage() {
           去校对 →
         </a>
       )}
-      <p className="mt-8 text-base text-slate-400">
-        切点校对工具即将上线，本页暂为只读预览。
-      </p>
+      {draft.status === "proofreading" && (
+        <a
+          href={`/drafts/${draft.id}/cutpoint`}
+          className="mt-3 block rounded-2xl bg-white py-4 text-center text-xl font-bold text-slate-700 shadow-md ring-1 ring-slate-200 active:bg-slate-50"
+        >
+          切点校对（微调起止时间）→
+        </a>
+      )}
     </div>
   );
 }

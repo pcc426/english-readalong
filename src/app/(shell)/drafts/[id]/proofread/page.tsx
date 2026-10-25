@@ -352,6 +352,14 @@ export default function ProofreadPage() {
         逐句对照视频画面字幕检查文字；改动自动保存，中途退出可回来接着做。
       </p>
 
+      {/* 两个校对工具作用于同一草稿，可互相切换（spec · 校对工具） */}
+      <a
+        href={`/drafts/${id}/cutpoint`}
+        className="mt-2 inline-block text-base text-emerald-700 underline underline-offset-4"
+      >
+        要微调句子起止时间？去切点校对 →
+      </a>
+
       {/* 隐藏的视频元素：只借它按起止毫秒播片段 */}
       <video
         ref={videoRef}
