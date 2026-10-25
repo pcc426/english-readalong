@@ -1,0 +1,712 @@
+{
+  "schemaVersion": 1,
+  "textbook": {
+    "id": "grade5a",
+    "series": "沪教版（五·四学制）英语",
+    "title": "五年级上册",
+    "source": "教材 PDF（本地 materials/textbook/新版五上英语.pdf，不进仓库）",
+    "pageOffset": 5,
+    "extractedAt": "2026-10-25"
+  },
+  "units": [
+    {
+      "unitId": "五上-U1",
+      "index": 1,
+      "title": "Clubs in our school",
+      "modules": [
+        {
+          "moduleKind": "Talking time",
+          "title": "It's good to join clubs",
+          "sourcePages": "p12",
+          "sentences": [
+            "Shenshen, it's your photo.",
+            "So sweet.",
+            "I love it!",
+            "Thank you, Xiaojiang.",
+            "I'm glad you like it.",
+            "Taking photos helps me keep the sweet moments in life.",
+            "I'm going to join the Photography Club this term.",
+            "Good idea.",
+            "You can meet new friends and have fun at the same time!",
+            "Look, this is Xiaopu's painting.",
+            "Wow, the night view of the Huangpu River.",
+            "It's beautiful!",
+            "I love this painting too.",
+            "The colours are just amazing.",
+            "Xiaopu learns how to use colours well in the Art Club.",
+            "It's fun to play with colours.",
+            "That's nice.",
+            "I am going to join the Art Club.",
+            "I'd like to give it a try."
+          ],
+          "needsReview": [],
+          "notes": [
+            "对话后续页（PDF [18]）没有 14pt Regular 正文，确认无遗漏。"
+          ]
+        },
+        {
+          "moduleKind": "Story time",
+          "title": "At the Pottery Club",
+          "sourcePages": "p14-15",
+          "sentences": [
+            "At the Pottery Club, Miss Li says, All the brush pots are dry now.",
+            "Today, you need to paint them.",
+            "James gets his brush pot.",
+            "It doesn't look very nice!",
+            "Don't worry, Miss Li says.",
+            "It's about to change.",
+            "What do you think I should paint?",
+            "James asks Xiaopu.",
+            "How about bamboo?",
+            "Bamboo is one of the four noble plants in Chinese culture.",
+            "Good idea!",
+            "James begins to paint.",
+            "Oh, it's hard to draw the leaves!",
+            "James says.",
+            "Don't give up.",
+            "Draw like this!",
+            "Xiaopu shows James.",
+            "At last, James makes a nice bamboo brush pot.",
+            "With your help, it becomes easier!",
+            "James says."
+          ],
+          "needsReview": [
+            0
+          ],
+          "notes": [
+            "句子 0 疑似引语边界拼接，请人工核对：At the Pottery Club, Miss Li says, All the brush pots are dry now."
+          ]
+        }
+      ]
+    },
+    {
+      "unitId": "五上-U2",
+      "index": 2,
+      "title": "Traditional games",
+      "modules": [
+        {
+          "moduleKind": "Talking time",
+          "title": "As fast as the wind",
+          "sourcePages": "p20",
+          "sentences": [
+            "Mr Zhong, is this Shaolin kung fu?",
+            "This is changquan — Long Fist.",
+            "It's the mother of many kung fu styles.",
+            "Oh, I see.",
+            "Many kung fu styles come from Long Fist?",
+            "That's right!",
+            "It's amazing!",
+            "There are twelve kinds of actions.",
+            "Look, what does this look like?",
+            "A tree?",
+            "Correct.",
+            "Stand like a pine tree.",
+            "Very strong and proud.",
+            "Look at us.",
+            "Three straight trees!",
+            "Excellent!",
+            "Let me show you another one.",
+            "What does this look like?",
+            "I know!",
+            "Sit like a bell.",
+            "Clever girl!",
+            "How about this?",
+            "Wow, you move so fast!",
+            "As fast as the wind.",
+            "I use all my strength for every action.",
+            "That's why it's so fast!"
+          ],
+          "needsReview": [],
+          "notes": [
+            "对话后续页（PDF [26]）没有 14pt Regular 正文，确认无遗漏。"
+          ]
+        },
+        {
+          "moduleKind": "Story time",
+          "title": "The dragon dance",
+          "sourcePages": "p22-23",
+          "sentences": [
+            "The students in the dragon dance team are training hard for the coming garden party.",
+            "As the head of the dragon, Minmin runs very fast.",
+            "Head of the dragon, slow down!",
+            "We can't keep up with you!",
+            "Xiaopu calls out at the tail of the dragon.",
+            "The background music is loud.",
+            "Minmin can't hear Xiaopu.",
+            "He runs even faster.",
+            "The players at the tail of the dragon lose control of the sticks.",
+            "Stop!",
+            "Mr Zhong calls out.",
+            "To play well, all the students at the dragon's head, body and tail need to be in step.",
+            "Minmin, listen to the music and follow it.",
+            "Everyone, follow Minmin.",
+            "Let's try again.",
+            "Mr Zhong says.",
+            "This time, all the players keep the same pace and the long dragon comes to life."
+          ],
+          "needsReview": [],
+          "notes": []
+        }
+      ]
+    },
+    {
+      "unitId": "五上-U3",
+      "index": 3,
+      "title": "Amazing plants",
+      "modules": [
+        {
+          "moduleKind": "Chant time",
+          "title": "Parts of plants",
+          "sourcePages": "p27",
+          "sentences": [
+            "The roots hold the plant in place, and take in food and water.",
+            "The stem moves water up the plant, and brings water to the leaves.",
+            "The leaves take in the sunlight, and grow bigger and bigger.",
+            "The flowers soon come out, and grow into a fruit holding seeds.",
+            "The seeds fall into the soil, and a new plant grows."
+          ],
+          "needsReview": [],
+          "notes": []
+        },
+        {
+          "moduleKind": "Talking time",
+          "title": "A visit to the botanical gardens",
+          "sourcePages": "p28",
+          "sentences": [
+            "Xiaopu, Xiaotian and Xiaojiang are visiting the botanical gardens.",
+            "Wow, the tulips are so beautiful!",
+            "This one looks like an ice cream cone.",
+            "It has a long stem and big leaves.",
+            "Look at the name tag.",
+            "It's called an ice cream tulip.",
+            "How lovely!",
+            "The wall is covered with plants.",
+            "They're creepers.",
+            "They have short, thick stems.",
+            "They can grow all over a wall in a very short time.",
+            "Look!",
+            "That plant has special leaves, like a mouth with many teeth!",
+            "It's a meat-eating plant.",
+            "It eats small insects.",
+            "That's my favourite flower.",
+            "Ah, water lilies.",
+            "These broad leaves look like lovely green umbrellas.",
+            "Look, the pink flowers are so beautiful!",
+            "The flowers grow from the mud under the water.",
+            "But they are still clean and beautiful.",
+            "Isn't it amazing?"
+          ],
+          "needsReview": [],
+          "notes": [
+            "对话后续页（PDF [34]）没有 14pt Regular 正文，确认无遗漏。"
+          ]
+        },
+        {
+          "moduleKind": "Reading time",
+          "title": "Plants and the weather",
+          "sourcePages": "p30-31",
+          "sentences": [
+            "Can plants tell us about the weather?",
+            "The marvel of Peru or the four-o'clock flower can tell you about the day's weather.",
+            "If the flowers close up or fade early in the morning, it is going to be a sunny day.",
+            "If the flowers are still open after 6 a.m., it is going to be cloudy or rainy.",
+            "Some plants react to weather changes.",
+            "For example, on sunny days, pine cones' scales are open.",
+            "On rainy days, they fold their scales to protect their seeds.",
+            "Morning glory petals open during nice days, but close tightly when rain is coming.",
+            "Many other plants are wonderful weather reporters too.",
+            "Can you find out some of them?"
+          ],
+          "needsReview": [],
+          "notes": []
+        }
+      ]
+    },
+    {
+      "unitId": "五上-U4",
+      "index": 4,
+      "title": "Together with animals",
+      "modules": [
+        {
+          "moduleKind": "Talking time",
+          "title": "In a safari park",
+          "sourcePages": "p36",
+          "sentences": [
+            "I love this safari truck tour.",
+            "I feel so close to all the animals.",
+            "I do too.",
+            "Look at the beautiful flamingos there.",
+            "Not all of them are pink.",
+            "Now I know pandas eat more than bamboos.",
+            "Look!",
+            "Mommy giraffes are taking care of their babies.",
+            "How sweet!",
+            "Is that animal keeper trying to feed the giraffes?",
+            "Well, he's going to give the baby giraffes injections to keep them healthy.",
+            "He tries to get closer to them with their favourite food.",
+            "See?",
+            "They are good friends.",
+            "Yes.",
+            "We're all friends to animals."
+          ],
+          "needsReview": [],
+          "notes": [
+            "对话后续页（PDF [42]）没有 14pt Regular 正文，确认无遗漏。"
+          ]
+        },
+        {
+          "moduleKind": "Reading time",
+          "title": "The animal observation diary",
+          "sourcePages": "p38-39",
+          "sentences": [
+            "Sangsang is a panda cub.",
+            "I saw her birth last week.",
+            "She looks different from her mother.",
+            "She isn't black and white, but pink with a little bit of white hair.",
+            "She can't open her eyes, but she can crawl.",
+            "She is so lovely!",
+            "Momo, the hippo is one month old.",
+            "He spends the day resting in water.",
+            "He can walk in the water.",
+            "At night, he goes with his mother to sleep on land.",
+            "Momo is learning how to dive.",
+            "Today, I saw Momo keeping his head under water for 5 minutes.",
+            "Kangkang is a nineteen-year-old Asian elephant.",
+            "In eight months, she will give birth to a little baby.",
+            "At noon, I saw her standing under the tree and sleeping.",
+            "In the afternoon, I fed her grass and leaves.",
+            "She ate a lot!"
+          ],
+          "needsReview": [],
+          "notes": []
+        }
+      ]
+    },
+    {
+      "unitId": "五上-U5",
+      "index": 5,
+      "title": "Seeing a doctor",
+      "modules": [
+        {
+          "moduleKind": "Rhyme time",
+          "title": "Nice doctors",
+          "sourcePages": "p43",
+          "sentences": [
+            "My arm hurts badly, so I come to see Dr Cai.",
+            "He is very nice and says kindly, I know it hurts.",
+            "It's OK to cry.",
+            "He treats the wound carefully.",
+            "Try not to touch it.",
+            "And keep it dry.",
+            "Let it heal up nicely.",
+            "My nose is runny and I cough badly, so I come to see Dr Li.",
+            "A nurse takes my temperature, and Dr Li is very nice and says gently, You have a fever.",
+            "And it's the flu.",
+            "Take some medicine and have a good rest.",
+            "Drink lots of water.",
+            "And take it easy."
+          ],
+          "needsReview": [
+            1,
+            8
+          ],
+          "notes": [
+            "句子 1 疑似引语边界拼接，请人工核对：He is very nice and says kindly, I know it hurts.",
+            "句子 8 疑似引语边界拼接，请人工核对：A nurse takes my temperature, and Dr Li is very nice and says gently, You have a fever."
+          ]
+        },
+        {
+          "moduleKind": "Talking time",
+          "title": "At the eye clinic",
+          "sourcePages": "p44",
+          "sentences": [
+            "How can I help you?",
+            "Doctor, I can't see clearly these days.",
+            "Let me check your eyes. ...",
+            "Do you watch TV or play computer games a lot?",
+            "Yes, I do.",
+            "Well, I'm afraid you use your eyes too much.",
+            "What should I do then?",
+            "Can you give me some medicine for my eyes, please?",
+            "There is no need for medicine, young man.",
+            "You need to watch less TV and play fewer computer games.",
+            "Go out and do your favourite outdoor activities more.",
+            "For example, you can go cycling or play football more.",
+            "They are good for your eyes.",
+            "And don't forget to do eye exercises twice a day.",
+            "Thank you, doctor.",
+            "I will take good care of my eyes."
+          ],
+          "needsReview": [],
+          "notes": [
+            "对话后续页（PDF [50]）没有 14pt Regular 正文，确认无遗漏。"
+          ]
+        },
+        {
+          "moduleKind": "Story time",
+          "title": "The story of Hua Tuo",
+          "sourcePages": "p46-47",
+          "sentences": [
+            "Ouch!",
+            "Ouch!",
+            "The patient cried.",
+            "How can I reduce his pain during the treatment?",
+            "Hua Tuo thought.",
+            "One day, Hua Tuo had a patient with a broken leg.",
+            "The man broke his leg after drinking.",
+            "During the whole treatment, the man stayed asleep.",
+            "Hua Tuo was surprised.",
+            "He had an idea: I need some medicine to keep my patients asleep during the treatment.",
+            "A few days later, a mother came in with a child in her arms.",
+            "The child ate some white flowers by mistake and his mother couldn't wake him up.",
+            "But an hour later, the boy woke up by himself and everything was OK with him.",
+            "The white flower was choumazi.",
+            "With this plant, Hua Tuo created a medicine called mafeisan.",
+            "It helped many patients in need of operation."
+          ],
+          "needsReview": [],
+          "notes": []
+        }
+      ]
+    },
+    {
+      "unitId": "五上-U6",
+      "index": 6,
+      "title": "Rise to the challenge",
+      "modules": [
+        {
+          "moduleKind": "Talking time",
+          "title": "Be better",
+          "sourcePages": "p52",
+          "sentences": [
+            "Shenshen won a prize in a storytelling contest.",
+            "Well done, Shenshen!",
+            "Thank you, Minmin.",
+            "Shenshen, I still remember the first time I met you.",
+            "You were shy and quiet.",
+            "But you are so confident today.",
+            "Yeah, I used to be very nervous to speak in front of my schoolmates.",
+            "You are now a good storyteller.",
+            "How did you make it?",
+            "To me, telling stories to lots of people is really cool.",
+            "I learned from videos and did a lot of practice.",
+            "What else?",
+            "I told stories to my family.",
+            "They made videos for me and gave me advice.",
+            "I see.",
+            "Love and practice make a better you."
+          ],
+          "needsReview": [],
+          "notes": [
+            "对话后续页（PDF [58]）没有 14pt Regular 正文，确认无遗漏。"
+          ]
+        },
+        {
+          "moduleKind": "Story time",
+          "title": "My left foot",
+          "sourcePages": "p54-55",
+          "sentences": [
+            "When I was four months old, I was sick.",
+            "The only body part I could control was my left foot.",
+            "My mum didn't give up.",
+            "She taught me how to read and write.",
+            "Do you like this story? she asked, Nod your head for yes.",
+            "I couldn't make any signs, but Mum told me more stories.",
+            "When I was five, I was still unable to speak.",
+            "One day, I was watching my sister using a piece of yellow chalk to write.",
+            "Then I took the chalk from my sister with my left foot.",
+            "Very slowly, I held the chalk tightly between my toes and wrote the letter A!",
+            "I couldn't speak, but that one letter was my road to a new world."
+          ],
+          "needsReview": [
+            4
+          ],
+          "notes": [
+            "句子 4 疑似引语边界拼接，请人工核对：Do you like this story? she asked, Nod your head for yes."
+          ]
+        }
+      ]
+    },
+    {
+      "unitId": "五上-U7",
+      "index": 7,
+      "title": "Great scientists",
+      "modules": [
+        {
+          "moduleKind": "Rhyme time",
+          "title": "Science",
+          "sourcePages": "p59",
+          "sentences": [
+            "Science opens a window for humans.",
+            "With science, we can go farther.",
+            "With science, we can fly higher.",
+            "With science, we find out why apples fall to the ground.",
+            "With science, we now know why the earth goes around the sun.",
+            "Science helps us understand the world around us.",
+            "Science helps us explore outer space.",
+            "Science is cool.",
+            "It's really cool to be a scientist!"
+          ],
+          "needsReview": [],
+          "notes": []
+        },
+        {
+          "moduleKind": "Talking time",
+          "title": "Do you know them?",
+          "sourcePages": "p60",
+          "sentences": [
+            "Look at these photos of famous scientists.",
+            "Oh, this is Tu Youyou, a Nobel Prize winner.",
+            "Yes.",
+            "What do you know about her?",
+            "She discovered qinghaosu and has saved many lives.",
+            "Wow.",
+            "She is great!",
+            "Look here!",
+            "It's Newton.",
+            "Do you know the story of Newton's apple?",
+            "Yes, I do.",
+            "The story is like this.",
+            "Young Newton was thinking about the universe under an apple tree.",
+            "Suddenly an apple fell on his head.",
+            "He thought hard about the reasons for the fall of apples.",
+            "And later he discovered the Law of Gravity.",
+            "Look, Qian Xuesen, a rocket scientist.",
+            "I'm a big fan of him.",
+            "I'm also interested in outer space.",
+            "I want to be a scientist like him in the future.",
+            "Your dream will come true."
+          ],
+          "needsReview": [],
+          "notes": [
+            "对话后续页（PDF [66]）没有 14pt Regular 正文，确认无遗漏。"
+          ]
+        },
+        {
+          "moduleKind": "Reading time",
+          "title": "Great scientists",
+          "sourcePages": "p62-63",
+          "sentences": [
+            "Yuan Longping was born in Beijing in 1930.",
+            "In the 1960s, as the nation was short of food, Mr Yuan began to do research on hybrid rice.",
+            "He was creative and hard-working.",
+            "His hybrid rice has fed many people.",
+            "Mr Yuan is known as the Father of Hybrid Rice.",
+            "Alexander Graham Bell was born in Scotland in 1847.",
+            "He was always curious about new things.",
+            "He and his assistant Thomas Watson invented the world's first practical telephone.",
+            "Bell was interested in many research areas.",
+            "He invented a lot of techniques to help the deaf."
+          ],
+          "needsReview": [],
+          "notes": []
+        }
+      ]
+    },
+    {
+      "unitId": "五上-U8",
+      "index": 8,
+      "title": "Useful inventions",
+      "modules": [
+        {
+          "moduleKind": "Talking time",
+          "title": "New inventions",
+          "sourcePages": "p68",
+          "sentences": [
+            "Welcome, boys and girls!",
+            "It's our Science Day.",
+            "We have Mr Qian with us to talk about some new inventions.",
+            "Hi, I've got some interesting things to tell you today.",
+            "Look, this invention is very useful.",
+            "You pour in sea water and let the sun do the work for a few hours.",
+            "Then you have clean fresh water!",
+            "How nice!",
+            "Look, these are also great inventions from Chinese scientists.",
+            "In 2019, they explored the dark side of the moon.",
+            "Oh, Chang'e-4 and Yutu-2.",
+            "They took amazing photos and sent them back.",
+            "Yes.",
+            "We know so little about that part of the moon and it's important to find out more."
+          ],
+          "needsReview": [],
+          "notes": [
+            "对话后续页（PDF [74]）没有 14pt Regular 正文，确认无遗漏。"
+          ]
+        },
+        {
+          "moduleKind": "Reading time",
+          "title": "The wheel moves on",
+          "sourcePages": "p70-71",
+          "sentences": [
+            "The wheel is an old invention.",
+            "It dates back to over 5,000 years ago.",
+            "Now we can find wheels almost everywhere around us.",
+            "For example, there are wheels at home, in the street and in the classroom.",
+            "We can find wheels in a clock, an electric fan, a juicer and a washing machine.",
+            "We can find wheels on a bus, a bike, a train and an airplane.",
+            "Sometimes we can also find wheels on chairs or desks.",
+            "The wheel is one of the most important inventions.",
+            "Wheels make housework much easier.",
+            "Wheels help people travel around easily and comfortably.",
+            "And wheels help people carry heavy things.",
+            "Thanks to the wheel, we are able to save time and work to make more inventions."
+          ],
+          "needsReview": [],
+          "notes": []
+        }
+      ]
+    },
+    {
+      "unitId": "五上-U9",
+      "index": 9,
+      "title": "Using computers",
+      "modules": [
+        {
+          "moduleKind": "Talking time",
+          "title": "Interesting facts about computers",
+          "sourcePages": "p76",
+          "sentences": [
+            "Xiaopu and his father are reading a book about computers.",
+            "Dad, what is it?",
+            "It is ENIAC, the best-known early computer.",
+            "A computer?!",
+            "But it has no mouse or keyboard?",
+            "The first computer did not have a mouse or keyboard.",
+            "It was as big as a room.",
+            "Besides, it was 30 tons.",
+            "It was as heavy as four elephants.",
+            "People used it to do difficult maths tasks.",
+            "Cool!",
+            "But today computers are much smaller.",
+            "What makes this happen?",
+            "The microchip.",
+            "Microchips are very important to computers.",
+            "With microchips, scientists can make very small computers.",
+            "How small can a computer be now?",
+            "In 2018, scientists made super small computers.",
+            "They were as small as a grain of salt.",
+            "How amazing!",
+            "I love computers.",
+            "We can do a lot of things with a computer now.",
+            "My classmates and I can send emails, search for information and do our homework better."
+          ],
+          "needsReview": [],
+          "notes": [
+            "对话后续页（PDF [82]）没有 14pt Regular 正文，确认无遗漏。"
+          ]
+        },
+        {
+          "moduleKind": "Reading time",
+          "title": "Got a problem? Ask Simon!",
+          "sourcePages": "p78-79",
+          "sentences": [
+            "I've got a new computer as a gift from my grandpa.",
+            "My little brother often turns on my computer and messes up my files.",
+            "It's really bad.",
+            "What should I do?",
+            "You need to set a power-on password.",
+            "You can set a password by using eight different letters, numbers and symbols.",
+            "Keep it to yourself and don't tell others.",
+            "Good luck.",
+            "I carelessly dropped some milk on the desktop keyboard.",
+            "Now my keyboard does not work.",
+            "I am worried.",
+            "Is my computer broken?",
+            "I don't know what to do.",
+            "Please help me!",
+            "A little milk on the keyboard does not matter too much.",
+            "Clean the keyboard first.",
+            "And leave it to dry.",
+            "If you are worried, you can ask parents to help you check the computer.",
+            "Remember, do not drink milk or other drinks while using the computer in the future."
+          ],
+          "needsReview": [],
+          "notes": []
+        }
+      ]
+    },
+    {
+      "unitId": "五上-U10",
+      "index": 10,
+      "title": "A greener life",
+      "modules": [
+        {
+          "moduleKind": "Song time",
+          "title": "Reduce, reuse, recycle",
+          "sourcePages": "p83",
+          "sentences": [
+            "Do not go to school by car every day.",
+            "Take a bus, take the subway, or walk if you may.",
+            "It's a great way to reduce.",
+            "Do not throw the old toys away.",
+            "Give them to little kids to play with.",
+            "It's a great way to reuse.",
+            "Do not use a plastic bag day after day.",
+            "A cloth bag or a paper one is also okay.",
+            "It's a great way to recycle.",
+            "Reduce, reuse and recycle to make our life greener every day."
+          ],
+          "needsReview": [],
+          "notes": []
+        },
+        {
+          "moduleKind": "Talking time",
+          "title": "Habits for a greener life",
+          "sourcePages": "p84",
+          "sentences": [
+            "Boys and girls, what can we do to live a greener life?",
+            "I turn off the tap when I brush my teeth.",
+            "Good boy!",
+            "Every time we do this, we save water.",
+            "I use both sides of the paper.",
+            "Good.",
+            "You see, paper is made from wood.",
+            "Use less paper and we can save a lot of trees.",
+            "I remind my mum to unplug the TV from the wall.",
+            "Right.",
+            "Always unplug your TV after watching.",
+            "It is a good way to save energy.",
+            "I like walking to school every day.",
+            "It is a good way to reduce air pollution.",
+            "Yes, and it's a healthy habit too.",
+            "I plant seeds and watch them grow.",
+            "Good idea.",
+            "Plants help keep the air clean and fresh."
+          ],
+          "needsReview": [],
+          "notes": [
+            "对话后续页（PDF [90]）没有 14pt Regular 正文，确认无遗漏。"
+          ]
+        },
+        {
+          "moduleKind": "Story time",
+          "title": "Baggie's new life",
+          "sourcePages": "p86-87",
+          "sentences": [
+            "Baggie is a plastic bag.",
+            "Someone drops it into the sea.",
+            "Baggie is very sad.",
+            "Suddenly, a big whale swims by and eats it up.",
+            "Oh, no, it's not a jellyfish and it can make me ill.",
+            "The whale sneezes and opens his mouth wide.",
+            "Baggie comes out quickly.",
+            "A moment later, a sea turtle spots Baggie and swallows it.",
+            "Oh, no, it's not a jellyfish and it can make me very ill.",
+            "The turtle coughs hard and Baggie comes out all at once.",
+            "A big wave carries Baggie to the beach.",
+            "Before long, a boy comes by.",
+            "Plastic bags should not lie around, the boy says.",
+            "He picks Baggie up and makes it into a kite.",
+            "Now Baggie is happy, Wow, I'm flying and I'm useful again!"
+          ],
+          "needsReview": [
+            14
+          ],
+          "notes": [
+            "句子 14 疑似引语边界拼接，请人工核对：Now Baggie is happy, Wow, I'm flying and I'm useful again!"
+          ]
+        }
+      ]
+    }
+  ]
+}
