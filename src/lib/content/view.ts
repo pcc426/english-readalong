@@ -1,9 +1,9 @@
 import { openDb, dbPath } from "@/lib/db";
-import { listContent } from "@/lib/content/loader";
+import { getContent, listContent, type ContentQuery } from "@/lib/content/loader";
 import { bestAttemptsBySentence, completionDistribution } from "@/lib/domain/stats";
 import { encouragementFor } from "@/lib/domain/encouragement";
 
-export interface UnitOverview {
+export interface ContentOverview {
   id: string;
   title: string;
   source: string;
@@ -28,7 +28,7 @@ export interface SentenceDetail {
   bestAt: string | null;
 }
 
-export interface UnitDetail {
+export interface ContentDetail {
   id: string;
   title: string;
   source: string;
@@ -36,9 +36,12 @@ export interface UnitDetail {
   sentences: SentenceDetail[];
 }
 
-/** 单元详情：句子列表 + 每句最好成绩及达成时间（评分类逻辑见票 05）。 */
-export function getUnitDetail(unitId: string): UnitDetail | null {
-  const pack = listContent().find((u) => u.id === unitId);
+/** 内容详情：句子列表 + 每句最好成绩及达成时间（评分类逻辑见票 05）。 */
+export function getContentDetail(
+  contentId: string,
+  query: ContentQuery = {}
+): ContentDetail | null {
+  const pack = getContent(contentId, query);
   if (!pack) return null;
 
   const db = openDb(dbPath());
@@ -67,17 +70,17 @@ export function getUnitDetail(unitId: string): UnitDetail | null {
   }
 }
 
-/** 首页/单元列表的聚合视图：内容包 + 完成度 + 鼓励语。API 与页面共用。 */
-export function getUnitsOverview(): UnitOverview[] {
+/** 首页/内容列表的聚合视图：内容包 + 完成度 + 鼓励语。API 与页面共用。 */
+export function getContentOverview(query: ContentQuery = {}): ContentOverview[] {
   const db = openDb(dbPath());
   try {
-    return listContent().map((unit) => {
-      const dist = completionDistribution(db, unit);
+    return listContent(query).map((pack) => {
+      const dist = completionDistribution(db, pack);
       return {
-        id: unit.id,
-        title: unit.title,
-        source: unit.source,
-        sentenceCount: unit.sentences.length,
+        id: pack.id,
+        title: pack.title,
+        source: pack.source,
+        sentenceCount: pack.sentences.length,
         percentages: dist.percentages,
         encouragement: encouragementFor(dist),
       };

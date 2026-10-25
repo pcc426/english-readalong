@@ -13,7 +13,7 @@ const sentenceSchema = z
     message: "时间倒置：start 必须小于 end",
   });
 
-export const unitPackSchema = z
+export const contentPackSchema = z
   .object({
     id: z.string().min(1),
     title: z.string().min(1),
@@ -44,4 +44,7 @@ export const unitPackSchema = z
   });
 
 export type Sentence = z.infer<typeof sentenceSchema>;
-export type UnitPack = z.infer<typeof unitPackSchema>;
+export type ContentPack = z.infer<typeof contentPackSchema>;
+
+/** @deprecated 旧「units」命名迁移别名：src/lib/domain 仍引用（非本模块所有权），迁移后删除 */
+export type UnitPack = ContentPack;

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getUnitDetail } from "@/lib/units";
+import { getContentDetail } from "@/lib/content/view";
 import { requireAccount } from "@/lib/auth/guard";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +11,7 @@ export async function GET(
   const auth = requireAccount(req);
   if (!auth.ok) return auth.response;
   const { id } = await ctx.params;
-  const unit = getUnitDetail(id);
+  const unit = getContentDetail(id);
   if (!unit) {
     return NextResponse.json(
       { error: { code: "UNIT_NOT_FOUND", message: "单元不存在" } },

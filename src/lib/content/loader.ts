@@ -1,8 +1,8 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { unitPackSchema, type UnitPack } from "./schema";
+import { contentPackSchema, type ContentPack } from "./schema";
 
-export type { Sentence, UnitPack } from "./schema";
+export type { Sentence, ContentPack } from "./schema";
 
 export interface ContentQuery {
   /** 账号 id：传入时结果为标准内容 + 该账号的自定义内容；不传仅标准内容 */
@@ -28,7 +28,7 @@ export function customContentRoot(): string {
  * 不静默跳过——素材数据错了必须立刻暴露。
  * requireOwner 用于账号目录：包的 owner 必须与所在目录的账号一致。
  */
-function loadContentPacks(dir: string, requireOwner?: string): UnitPack[] {
+function loadContentPacks(dir: string, requireOwner?: string): ContentPack[] {
   return readdirSync(dir)
     .filter((f) => f.endsWith(".json"))
     .sort()
@@ -40,7 +40,7 @@ function loadContentPacks(dir: string, requireOwner?: string): UnitPack[] {
       } catch (e) {
         throw new Error(`内容包 ${f} 不是合法 JSON: ${(e as Error).message}`);
       }
-      const result = unitPackSchema.safeParse(parsed);
+      const result = contentPackSchema.safeParse(parsed);
       if (!result.success) {
         throw new Error(`内容包 ${f} 校验失败: ${result.error.message}`);
       }
@@ -58,7 +58,7 @@ function loadContentPacks(dir: string, requireOwner?: string): UnitPack[] {
  * 不传账号参数 → 仅标准内容（既有行为）；传 accountId → 标准 + 该账号自定义，
  * 其他账号的自定义内容不可见。自定义目录缺失视为空（运行时还没有上传是常态）。
  */
-export function listContent(query: ContentQuery = {}): UnitPack[] {
+export function listContent(query: ContentQuery = {}): ContentPack[] {
   const standard = loadContentPacks(standardContentDir());
   if (query.accountId == null) return standard;
   const accountDir = path.join(customContentRoot(), query.accountId);
@@ -69,6 +69,6 @@ export function listContent(query: ContentQuery = {}): UnitPack[] {
 }
 
 /** 按 id 取单条内容包。自定义内容仅归属账号传 accountId 时可取；找不到返回 null。 */
-export function getContent(id: string, query: ContentQuery = {}): UnitPack | null {
+export function getContent(id: string, query: ContentQuery = {}): ContentPack | null {
   return listContent(query).find((pack) => pack.id === id) ?? null;
 }
