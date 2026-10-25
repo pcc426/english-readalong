@@ -25,6 +25,21 @@ export async function POST(
   if (!auth.ok) return auth.response;
   const { id } = await ctx.params;
 
+  // 未发布门禁（票 09）：本人存在同 id 且未发布的草稿 → 拒绝练习。
+  // 只查本人的草稿：他人的未发布草稿 id 不在此拦截，走下方 404 不暴露存在性；
+  // 已发布草稿与标准内容（无同 id 草稿）照常放行。
+  const gateDb = openDb(dbPath());
+  try {
+    const draftRow = gateDb
+      .prepare("SELECT status FROM content_drafts WHERE id = ? AND account_id = ?")
+      .get(id, auth.account.id) as { status: string } | undefined;
+    if (draftRow && draftRow.status !== "published") {
+      return errorResponse(409, "CONTENT_NOT_PUBLISHED", "内容还没定稿，暂时不能跟读");
+    }
+  } finally {
+    gateDb.close();
+  }
+
   let form: FormData;
   try {
     form = await req.formData();

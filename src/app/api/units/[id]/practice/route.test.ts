@@ -1,18 +1,26 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { POST } from "./route";
+import { openDb } from "@/lib/db";
 import { setScoringService } from "@/lib/scoring/current";
 import { FakeScoringService } from "@/lib/scoring/fake";
 import { getContentDetail, getContentOverview } from "@/lib/content/view";
 import { sessionCookieFor } from "@/lib/testing/auth-test-utils";
+import {
+  createDraft,
+  completeTranscription,
+  getDraft,
+} from "@/lib/drafts/repo";
+import { markDraftPublished } from "@/lib/drafts/finalize";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
   for (const fn of cleanups) fn();
   cleanups.length = 0;
   delete process.env.CONTENT_DIR;
+  delete process.env.CONTENT_DATA_DIR;
   delete process.env.DB_PATH;
   setScoringService(null);
 });
@@ -47,16 +55,21 @@ function fakeWav(): Blob {
   return new Blob([buf], { type: "audio/wav" });
 }
 
-async function post(sentenceIndex: number, audio: Blob | null, cookie?: string) {
+async function post(
+  sentenceIndex: number,
+  audio: Blob | null,
+  cookie?: string,
+  contentId = "u2-dragon-dance"
+) {
   const form = new FormData();
   if (audio) form.append("audio", audio, "rec.wav");
   form.append("sentenceIndex", String(sentenceIndex));
-  const req = new Request("http://x/api/units/u2-dragon-dance/practice", {
+  const req = new Request(`http://x/api/units/${contentId}/practice`, {
     method: "POST",
     headers: { cookie: cookie ?? sessionCookieFor("parent@test.com") },
     body: form,
   });
-  return POST(req, { params: Promise.resolve({ id: "u2-dragon-dance" }) });
+  return POST(req, { params: Promise.resolve({ id: contentId }) });
 }
 
 describe("POST /api/units/[id]/practice", () => {
@@ -139,5 +152,101 @@ describe("POST /api/units/[id]/practice", () => {
     setScoringService(new FakeScoringService(88));
     const res = await post(5, fakeWav());
     expect(res.status).toBe(404);
+  });
+
+  describe("未发布门禁（票 09）", () => {
+    function seedLocalDraft(status: "proofreading" | "published") {
+      const db = openDb(process.env.DB_PATH!);
+      try {
+        const accountId = accountIdOf("parent@test.com");
+        const draft = createDraft(db, { accountId, title: "家里的英语" });
+        completeTranscription(db, draft.id, [
+          { text: "hello", startMs: 0, endMs: 900 },
+        ]);
+        if (status === "published") markDraftPublished(db, draft.id);
+        return getDraft(db, draft.id)!;
+      } finally {
+        db.close();
+      }
+    }
+
+    function accountIdOf(email: string): string {
+      sessionCookieFor(email);
+      const db = openDb(process.env.DB_PATH!);
+      try {
+        const row = db.prepare("SELECT id FROM accounts WHERE email = ?").get(email) as {
+          id: string;
+        };
+        return row.id;
+      } finally {
+        db.close();
+      }
+    }
+
+    function attemptCount(): number {
+      const db = openDb(process.env.DB_PATH!);
+      try {
+        const row = db.prepare("SELECT COUNT(*) AS n FROM practice_attempts").get() as {
+          n: number;
+        };
+        return row.n;
+      } finally {
+        db.close();
+      }
+    }
+
+    it("本人存在同 id 且未发布的草稿：409 CONTENT_NOT_PUBLISHED，不触发评分不落库", async () => {
+      setupEnv();
+      setScoringService(new FakeScoringService(88));
+      const draft = seedLocalDraft("proofreading");
+      const res = await post(0, fakeWav(), undefined, draft.id);
+      expect(res.status).toBe(409);
+      expect((await res.json()).error.code).toBe("CONTENT_NOT_PUBLISHED");
+      expect(attemptCount()).toBe(0);
+    });
+
+    it("发布后同 id 不再被门禁拦截，内容包可见时照常练习", async () => {
+      setupEnv();
+      setScoringService(new FakeScoringService(91));
+      const draft = seedLocalDraft("published");
+      // 定稿包写在账号自定义目录；练习 seam 看到的位置由 10 号票接线，
+      // 这里在 CONTENT_DIR 放同 id 的包模拟"发布后可见"
+      const contentDir = process.env.CONTENT_DIR!;
+      mkdirSync(contentDir, { recursive: true });
+      writeFileSync(
+        path.join(contentDir, `${draft.id}.json`),
+        JSON.stringify({
+          id: draft.id,
+          title: "家里的英语",
+          source: "test",
+          video: "v.mp4",
+          sentences: [{ text: "hello", start: 0, end: 0.9 }],
+        })
+      );
+      const res = await post(0, fakeWav(), undefined, draft.id);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ score: 91, stars: 3 });
+      expect(getContentDetail(draft.id)?.sentences[0].bestScore).toBe(91);
+    });
+
+    it("他人未发布的草稿 id：404（不暴露存在性，与归属隔离语义一致）", async () => {
+      setupEnv();
+      setScoringService(new FakeScoringService(88));
+      const otherId = accountIdOf("other@test.com");
+      let otherDraftId = "";
+      const db = openDb(process.env.DB_PATH!);
+      try {
+        const draft = createDraft(db, { accountId: otherId, title: "别人家的" });
+        completeTranscription(db, draft.id, [
+          { text: "hello", startMs: 0, endMs: 900 },
+        ]);
+        otherDraftId = draft.id;
+      } finally {
+        db.close();
+      }
+      const res = await post(0, fakeWav(), undefined, otherDraftId);
+      expect(res.status).toBe(404);
+      expect((await res.json()).error.code).toBe("UNIT_NOT_FOUND");
+    });
   });
 });
