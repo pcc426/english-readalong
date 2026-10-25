@@ -31,10 +31,17 @@ function makeUnit(sentenceCount: number): ContentPack {
   };
 }
 
-function attempt(db: Db, unitId: string, sentenceIndex: number, score: number, stars: number) {
+function attempt(
+  db: Db,
+  unitId: string,
+  sentenceIndex: number,
+  score: number,
+  stars: number,
+  owner: string | null = null
+) {
   db.prepare(
-    "INSERT INTO practice_attempts (unit_id, sentence_index, score, stars) VALUES (?, ?, ?, ?)"
-  ).run(unitId, sentenceIndex, score, stars);
+    "INSERT INTO practice_attempts (unit_id, sentence_index, score, stars, owner) VALUES (?, ?, ?, ?, ?)"
+  ).run(unitId, sentenceIndex, score, stars, owner);
 }
 type Db = ReturnType<typeof openDb>;
 
@@ -89,5 +96,57 @@ describe("单元完成度分布", () => {
     const best = bestAttemptsBySentence(db, unit.id).get(0);
     expect(best?.score).toBe(90);
     expect(best?.createdAt).not.toBe("2000-01-01 00:00:00");
+  });
+});
+
+describe("按账号统计（票 10 归属隔离）", () => {
+  it("传 owner 时只统计该账号的练习记录，NULL 归属记录不计入", () => {
+    const db = makeDb();
+    const unit = makeUnit(2);
+    attempt(db, unit.id, 0, 92, 3, "acct-a");
+    attempt(db, unit.id, 1, 75, 1, "acct-a");
+    attempt(db, unit.id, 0, 60, 1, "acct-b");
+    attempt(db, unit.id, 1, 88, 2, null); // 迁移前的历史遗留行
+
+    const a = bestAttemptsBySentence(db, unit.id, { owner: "acct-a" });
+    expect(a.get(0)?.score).toBe(92);
+    expect(a.get(1)?.score).toBe(75);
+    expect(a.size).toBe(2);
+
+    const b = bestAttemptsBySentence(db, unit.id, { owner: "acct-b" });
+    expect(b.get(0)?.score).toBe(60);
+    expect(b.size).toBe(1);
+  });
+
+  it("同一句各账号最好成绩互不干扰", () => {
+    const db = makeDb();
+    const unit = makeUnit(1);
+    attempt(db, unit.id, 0, 95, 3, "acct-a");
+    attempt(db, unit.id, 0, 70, 1, "acct-b");
+    expect(bestAttemptsBySentence(db, unit.id, { owner: "acct-a" }).get(0)?.score).toBe(95);
+    expect(bestAttemptsBySentence(db, unit.id, { owner: "acct-b" }).get(0)?.score).toBe(70);
+  });
+
+  it("完成度分布按账号隔离：各自百分比独立计算", () => {
+    const db = makeDb();
+    const unit = makeUnit(2);
+    attempt(db, unit.id, 0, 95, 3, "acct-a");
+    attempt(db, unit.id, 1, 92, 3, "acct-a");
+    attempt(db, unit.id, 0, 65, 1, "acct-b");
+
+    const distA = completionDistribution(db, unit, { owner: "acct-a" });
+    expect(distA.percentages).toEqual({
+      threeStar: 100,
+      twoStar: 0,
+      oneStar: 0,
+      unpracticed: 0,
+    });
+    const distB = completionDistribution(db, unit, { owner: "acct-b" });
+    expect(distB.percentages).toEqual({
+      threeStar: 0,
+      twoStar: 0,
+      oneStar: 50,
+      unpracticed: 50,
+    });
   });
 });
