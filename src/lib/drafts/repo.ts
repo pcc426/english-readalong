@@ -137,12 +137,25 @@ export function completeTranscription(
 }
 
 export function listDraftSentences(db: Db, draftId: string): DraftSentence[] {
-  return db
+  const rows = db
     .prepare(
       `SELECT seq, text, start_ms, end_ms, proofread FROM draft_sentences
        WHERE draft_id = ? ORDER BY seq`
     )
-    .all(draftId) as unknown as DraftSentence[];
+    .all(draftId) as Array<{
+    seq: number;
+    text: string;
+    start_ms: number;
+    end_ms: number;
+    proofread: string;
+  }>;
+  return rows.map((r) => ({
+    index: r.seq,
+    text: r.text,
+    startMs: r.start_ms,
+    endMs: r.end_ms,
+    proofread: r.proofread as SentenceProofread,
+  }));
 }
 
 /** 删草稿（连同句子，显式事务；better-sqlite3 默认不开外键级联） */
