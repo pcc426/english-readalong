@@ -37,14 +37,9 @@ export default async function UnitPage({
 
   return (
     <main className="mx-auto flex h-[100dvh] max-w-xl flex-col overflow-hidden px-5 py-2">
-      <div className="flex items-center justify-between">
-        <a href="/" className="text-base text-slate-500">
-          ‹ 单元列表
-        </a>
-        <a href={`/units/${id}/calibrate`} className="text-sm text-slate-400">
-          🔧 校对模式
-        </a>
-      </div>
+      <a href="/" className="text-base text-slate-500">
+        ‹ 单元列表
+      </a>
       <h1 className="mt-1 text-2xl font-bold">{unit.title}</h1>
       <p className="text-base text-slate-500">
         {unit.source} · {unit.sentences.length} 句
