@@ -54,7 +54,7 @@ export async function POST(
   if (!Number.isInteger(sentenceIndex) || sentenceIndex < 0) {
     return errorResponse(400, "BAD_INDEX", "句子序号不对");
   }
-  const pack = getContent(id);
+  const pack = getContent(id, { accountId: auth.account.id });
   const sentence = pack?.sentences[sentenceIndex];
   if (!pack || !sentence) {
     return errorResponse(404, "UNIT_NOT_FOUND", "单元或句子不存在");
@@ -101,11 +101,14 @@ export async function POST(
   const stars = mapScoreToStars(score);
   const db = openDb(dbPath());
   try {
-    const prev = bestAttemptsBySentence(db, id).get(sentenceIndex)?.score ?? null;
+    // 最好成绩按账号隔离：新纪录判定只和本人历史比（票 10）
+    const prev = bestAttemptsBySentence(db, id, { owner: auth.account.id }).get(
+      sentenceIndex
+    )?.score ?? null;
     const isNewBest = prev === null || score > prev;
     db.prepare(
-      "INSERT INTO practice_attempts (unit_id, sentence_index, score, stars) VALUES (?, ?, ?, ?)"
-    ).run(id, sentenceIndex, score, stars);
+      "INSERT INTO practice_attempts (unit_id, sentence_index, score, stars, owner) VALUES (?, ?, ?, ?, ?)"
+    ).run(id, sentenceIndex, score, stars, auth.account.id);
     return NextResponse.json({
       score,
       stars,
