@@ -2,8 +2,8 @@
 
 import { useRef, useState } from "react";
 import { adjustBounds, CALIBRATE_STEP, type ClipBounds } from "@/lib/domain/calibrate";
-import { unitPackSchema } from "@/lib/content/schema";
-import type { UnitDetail } from "@/lib/units";
+import { contentPackSchema } from "@/lib/content/schema";
+import type { ContentDetail } from "@/lib/content/view";
 
 type EditableSentence = {
   index: number;
@@ -11,7 +11,7 @@ type EditableSentence = {
   bounds: ClipBounds;
 };
 
-export default function Calibrator({ unit }: { unit: UnitDetail }) {
+export default function Calibrator({ unit }: { unit: ContentDetail }) {
   const [sentences, setSentences] = useState<EditableSentence[]>(() =>
     unit.sentences.map((s) => ({
       index: s.index,
@@ -61,7 +61,7 @@ export default function Calibrator({ unit }: { unit: UnitDetail }) {
       })),
     };
     // 导出前用内容包 schema 自检，防止 UI 层形状与 schema 漂移
-    const check = unitPackSchema.safeParse(pack);
+    const check = contentPackSchema.safeParse(pack);
     if (!check.success) {
       window.alert(`导出的 JSON 未通过内容包校验：${check.error.issues[0]?.message}`);
       return;

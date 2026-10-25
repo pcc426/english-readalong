@@ -10,7 +10,7 @@ import {
   type FlowState,
 } from "@/lib/domain/practice-flow";
 import { mapScoreToStars } from "@/lib/domain/stars";
-import type { UnitDetail } from "@/lib/units";
+import type { ContentDetail } from "@/lib/content/view";
 
 // 录音最长秒数：超时自动提交，防止孩子忘按"读好了"一直录
 const MAX_RECORD_SECONDS = 15;
@@ -35,7 +35,7 @@ const PRAISE: Record<number, Array<{ text: string; src: string }>> = {
 /** 停止录音的意图：提交评分 / 弃旧重录 / 纯丢弃（不重录不提交） */
 type StopIntent = "submit" | "rerecord" | "discard";
 
-export default function PracticeFlow({ unit }: { unit: UnitDetail }) {
+export default function PracticeFlow({ unit }: { unit: ContentDetail }) {
   const total = unit.sentences.length;
   const [state, dispatch] = useReducer(
     (s: FlowState, e: FlowEvent) => reduceFlow(s, e, total),

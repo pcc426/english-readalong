@@ -5,7 +5,7 @@ import path from "node:path";
 import { POST } from "./route";
 import { setScoringService } from "@/lib/scoring/current";
 import { FakeScoringService } from "@/lib/scoring/fake";
-import { getUnitDetail, getUnitsOverview } from "@/lib/units";
+import { getContentDetail, getContentOverview } from "@/lib/content/view";
 import { sessionCookieFor } from "@/lib/testing/auth-test-utils";
 
 const cleanups: Array<() => void> = [];
@@ -66,7 +66,7 @@ describe("POST /api/units/[id]/practice", () => {
     const res = await post(0, fakeWav(), "session=forged-id");
     expect(res.status).toBe(401);
     expect((await res.json()).error.code).toBe("UNAUTHORIZED");
-    expect(getUnitDetail("u2-dragon-dance")?.sentences[0].bestScore).toBeNull();
+    expect(getContentDetail("u2-dragon-dance")?.sentences[0].bestScore).toBeNull();
   });
 
   it("正常提交：分数取整、返回星级与新纪录，数据落库并反映到详情与完成度", async () => {
@@ -78,12 +78,12 @@ describe("POST /api/units/[id]/practice", () => {
     expect(body).toMatchObject({ score: 93, stars: 3, isNewBest: true, bestScore: 93 });
 
     // 句卡最好成绩反映新数据
-    const detail = getUnitDetail("u2-dragon-dance");
+    const detail = getContentDetail("u2-dragon-dance");
     expect(detail?.sentences[0].bestScore).toBe(93);
     expect(detail?.sentences[0].bestAt).not.toBeNull();
 
     // 单元完成度分布反映新数据（2 句中 1 句三星 → 50%）
-    const overview = getUnitsOverview().find((u) => u.id === "u2-dragon-dance");
+    const overview = getContentOverview().find((u) => u.id === "u2-dragon-dance");
     expect(overview?.percentages.threeStar).toBe(50);
   });
 
@@ -97,7 +97,7 @@ describe("POST /api/units/[id]/practice", () => {
     }
     expect(stars).toEqual([2, 3, 1, 2]);
     // 低分重练也落库，最好成绩取最高的 90
-    expect(getUnitDetail("u2-dragon-dance")?.sentences[0].bestScore).toBe(90);
+    expect(getContentDetail("u2-dragon-dance")?.sentences[0].bestScore).toBe(90);
     // 区分性断言：4 次提交 = 4 行记录（若只在新纪录时落库会是 2 行）
     const { openDb } = await import("@/lib/db");
     const db = openDb(process.env.DB_PATH!);
@@ -113,7 +113,7 @@ describe("POST /api/units/[id]/practice", () => {
     expect(first).toMatchObject({ score: 92, stars: 3, isNewBest: true });
     const second = await (await post(0, fakeWav())).json();
     expect(second).toMatchObject({ score: 85, stars: 2, isNewBest: false, bestScore: 92 });
-    expect(getUnitDetail("u2-dragon-dance")?.sentences[0].bestScore).toBe(92);
+    expect(getContentDetail("u2-dragon-dance")?.sentences[0].bestScore).toBe(92);
   });
 
   it("空录音返回 EMPTY_AUDIO 且不落库", async () => {
@@ -122,7 +122,7 @@ describe("POST /api/units/[id]/practice", () => {
     const res = await post(0, new Blob([Buffer.alloc(10)]));
     expect(res.status).toBe(400);
     expect((await res.json()).error.code).toBe("EMPTY_AUDIO");
-    expect(getUnitDetail("u2-dragon-dance")?.sentences[0].bestScore).toBeNull();
+    expect(getContentDetail("u2-dragon-dance")?.sentences[0].bestScore).toBeNull();
   });
 
   it("评分失败返回 502 可重试且不落库", async () => {
@@ -131,7 +131,7 @@ describe("POST /api/units/[id]/practice", () => {
     const res = await post(0, fakeWav());
     expect(res.status).toBe(502);
     expect((await res.json()).error.code).toBe("SCORING_FAILED");
-    expect(getUnitDetail("u2-dragon-dance")?.sentences[0].bestScore).toBeNull();
+    expect(getContentDetail("u2-dragon-dance")?.sentences[0].bestScore).toBeNull();
   });
 
   it("句子序号越界返回 404", async () => {

@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
 import { openDb, dbPath } from "@/lib/db";
-import { listUnitPacks } from "@/lib/content/loader";
+import { getContent } from "@/lib/content/loader";
 import { mapScoreToStars } from "@/lib/domain/stars";
 import { bestAttemptsBySentence } from "@/lib/domain/stats";
 import { transcodeTo16kWav } from "@/lib/scoring/transcode";
 import { getScoringService } from "@/lib/scoring/current";
-import { contentDir } from "@/lib/units";
 import { requireAccount } from "@/lib/auth/guard";
 import { errorResponse } from "@/lib/http";
 
@@ -40,7 +39,7 @@ export async function POST(
   if (!Number.isInteger(sentenceIndex) || sentenceIndex < 0) {
     return errorResponse(400, "BAD_INDEX", "句子序号不对");
   }
-  const pack = listUnitPacks(contentDir()).find((u) => u.id === id);
+  const pack = getContent(id);
   const sentence = pack?.sentences[sentenceIndex];
   if (!pack || !sentence) {
     return errorResponse(404, "UNIT_NOT_FOUND", "单元或句子不存在");

@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getUnitDetail } from "@/lib/units";
+import { getContentDetail } from "@/lib/content/view";
 import PracticeFlow from "./PracticeFlow";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +10,7 @@ export default async function UnitPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const unit = getUnitDetail(id);
+  const unit = getContentDetail(id);
   if (!unit) notFound();
 
   return (
