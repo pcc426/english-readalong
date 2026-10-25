@@ -1,9 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { listUnitPacks } from "./loader";
+import { listContent } from "./loader";
 
 describe("仓库内容包", () => {
   it("content/units 下的真实内容包全部可加载且时间已定稿", () => {
-    const units = listUnitPacks("content/units");
+    // 显式清掉环境覆盖：本测试固定测仓库自带的标准内容目录
+    delete process.env.CONTENT_DIR;
+    delete process.env.CONTENT_DATA_DIR;
+    const units = listContent();
     expect(units.map((u) => u.id)).toEqual([
       "u2-dragon-dance",
       "u3-amazing-plants",

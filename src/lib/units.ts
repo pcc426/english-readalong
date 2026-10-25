@@ -1,6 +1,5 @@
-import path from "node:path";
 import { openDb, dbPath } from "@/lib/db";
-import { listUnitPacks } from "@/lib/content/loader";
+import { listContent } from "@/lib/content/loader";
 import { bestAttemptsBySentence, completionDistribution } from "@/lib/domain/stats";
 import { encouragementFor } from "@/lib/domain/encouragement";
 
@@ -16,11 +15,6 @@ export interface UnitOverview {
     unpracticed: number;
   };
   encouragement: string;
-}
-
-export function contentDir(): string {
-  // 用 || 而非 ??：.env 里的空值行（CONTENT_DIR=）应视为未设置
-  return process.env.CONTENT_DIR || path.join(process.cwd(), "content", "units");
 }
 
 export interface SentenceDetail {
@@ -44,7 +38,7 @@ export interface UnitDetail {
 
 /** 单元详情：句子列表 + 每句最好成绩及达成时间（评分类逻辑见票 05）。 */
 export function getUnitDetail(unitId: string): UnitDetail | null {
-  const pack = listUnitPacks(contentDir()).find((u) => u.id === unitId);
+  const pack = listContent().find((u) => u.id === unitId);
   if (!pack) return null;
 
   const db = openDb(dbPath());
@@ -77,7 +71,7 @@ export function getUnitDetail(unitId: string): UnitDetail | null {
 export function getUnitsOverview(): UnitOverview[] {
   const db = openDb(dbPath());
   try {
-    return listUnitPacks(contentDir()).map((unit) => {
+    return listContent().map((unit) => {
       const dist = completionDistribution(db, unit);
       return {
         id: unit.id,
