@@ -1,5 +1,5 @@
 import type { Db } from "../db";
-import type { UnitPack } from "../content/schema";
+import type { ContentPack } from "../content/schema";
 import { mapScoreToStars, type BestStars } from "./stars";
 
 export interface CompletionDistribution {
@@ -51,7 +51,7 @@ export function bestAttemptsBySentence(
  * 单元完成度：每句取练习记录中的最好成绩映射为星级，
  * 百分比按全部句子数四舍五入（四类各自独立取整，合计可能 ±1%）。
  */
-export function completionDistribution(db: Db, unit: UnitPack): CompletionDistribution {
+export function completionDistribution(db: Db, unit: ContentPack): CompletionDistribution {
   const bestByIndex = bestAttemptsBySentence(db, unit.id);
 
   const bestStars: BestStars[] = unit.sentences.map((_, index) => {

@@ -45,6 +45,3 @@ export const contentPackSchema = z
 
 export type Sentence = z.infer<typeof sentenceSchema>;
 export type ContentPack = z.infer<typeof contentPackSchema>;
-
-/** @deprecated 旧「units」命名迁移别名：src/lib/domain 仍引用（非本模块所有权），迁移后删除 */
-export type UnitPack = ContentPack;

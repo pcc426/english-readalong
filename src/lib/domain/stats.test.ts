@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { openDb } from "../db";
 import { bestAttemptsBySentence, completionDistribution } from "./stats";
-import type { UnitPack } from "../content/schema";
+import type { ContentPack } from "../content/schema";
 
 const tmpDirs: string[] = [];
 function makeDb() {
@@ -17,7 +17,7 @@ afterEach(() => {
   tmpDirs.length = 0;
 });
 
-function makeUnit(sentenceCount: number): UnitPack {
+function makeUnit(sentenceCount: number): ContentPack {
   return {
     id: "u-test",
     title: "Test unit",

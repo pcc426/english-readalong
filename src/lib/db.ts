@@ -44,6 +44,40 @@ export function openDb(dbPath: string): Database.Database {
       account_id TEXT NOT NULL REFERENCES accounts(id),
       expires_at TEXT NOT NULL
     );
+
+    -- 内容草稿（校对中间态只存 SQLite，不进内容包文件；spec Implementation Decisions）
+    -- type 预留 standard：管理员将来用同一条上传/校对管线制作教材内容
+    CREATE TABLE IF NOT EXISTS content_drafts (
+      id TEXT PRIMARY KEY,
+      account_id TEXT NOT NULL REFERENCES accounts(id),
+      title TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'custom',
+      status TEXT NOT NULL DEFAULT 'transcribing'
+        CHECK (status IN ('transcribing', 'proofreading', 'published')),
+      -- 视频相对 uploads 根目录的路径（<accountId>/<uuid>.<ext>），删草稿时一并清理
+      video_path TEXT NOT NULL,
+      -- 转写任务引用：按它向 TranscriptionService 轮询；失败信息可存、草稿保持
+      -- transcribing 可重试（转写缝 ADR-0004）
+      transcribe_task_id TEXT,
+      transcribe_error TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_drafts_account ON content_drafts (account_id);
+
+    -- 草稿句子：内部按毫秒存起止时间，定稿时转换为内容包约定的秒
+    -- seq 从 0 起与 practice_attempts.sentence_index 同口径
+    CREATE TABLE IF NOT EXISTS draft_sentences (
+      draft_id TEXT NOT NULL REFERENCES content_drafts(id),
+      seq INTEGER NOT NULL,
+      text TEXT NOT NULL,
+      start_ms INTEGER NOT NULL,
+      end_ms INTEGER NOT NULL,
+      -- 校对状态：auto=转写自动产出 / edited=人工改过 / confirmed=已确认（07/08 号票）
+      proofread TEXT NOT NULL DEFAULT 'auto'
+        CHECK (proofread IN ('auto', 'edited', 'confirmed')),
+      PRIMARY KEY (draft_id, seq)
+    );
   `);
   return db;
 }
