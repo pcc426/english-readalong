@@ -16,5 +16,5 @@
 - 实现：新增 /drafts/[id]/cutpoint（src/app/(shell)/drafts/[id]/cutpoint/page.tsx + src/components/cutpoint/ClipCard.tsx）。逐句播放、±0.25s 微调，0.8s 防抖自动 PUT /api/drafts/[id]/sentences/[index] 保存起止（复用票 07 端点，未加新端点），切句前立即补存；custom/[id] 详情页与文本校对页互加切换入口。
 - 领域：domain/calibrate 新增整数毫秒版 adjustBoundsMs（+4 测试），钳制语义与 adjustBounds 一致（起点 ≥ 0、最短片段 200ms）；前端另把终点钳在视频时长内，服务端整数/endMs>startMs 校验兜底。
 - 退役：删除 (shell)/units/[id]/calibrate 路由与组件，grep 全仓无「导出 JSON / 发给 Claude」入口残留。
-- 遗留（不属本票领地）：units/[id]/page.tsx 第 22–24 行仍有「🔧 校对模式」链接指向已删除的 /units/[id]/calibrate（该文件是 10 号票领地，本票不动），需在 10 号票合并或集成时顺手删掉这三行，否则点进去 404。
+- 遗留（已解决）：units/[id]/page.tsx 曾有「🔧 校对模式」死链接指向已删除的 /units/[id]/calibrate（该文件是 10 号票领地，本票不动）。10 号票已处理：v02/t10-practice commit 1887f89 删掉该入口并收敛布局，练习页不再指向旧路由。
 - 前三条验收的真机点播（iPad 竖屏）留人工验收。
