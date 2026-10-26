@@ -239,7 +239,7 @@ export default function CutpointPage() {
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <h1 className="text-3xl font-bold tracking-tight">{draft.title}</h1>
         <span className="rounded-full bg-amber-100 px-4 py-1 text-lg font-bold text-amber-700">
-          待校对
+          未校对
         </span>
       </div>
 

@@ -150,7 +150,7 @@ describe("GET /api/units", () => {
       expect(body.units[0].encouragement).not.toContain("三星");
     });
 
-    it("列表返回本账号的已发布自定义内容，完成度按本人计算", async () => {
+    it("教材内容页只显示标准内容：本账号已发布的自定义内容不在列表里（V0.2 整改）", async () => {
       setupEnv();
       const owner = accountIdOf("parent@test.com");
       const draft = seedPublishedCustom(owner);
@@ -158,17 +158,9 @@ describe("GET /api/units", () => {
 
       const res = await GET(authedGet("http://x/api/units"));
       const body = await res.json();
-      const custom = body.units.find((u: { id: string }) => u.id === draft.id);
-      expect(custom).toBeDefined();
-      expect(custom.source).toBe("custom-upload");
-      expect(custom.sentenceCount).toBe(1);
-      expect(custom.percentages).toEqual({
-        threeStar: 100,
-        twoStar: 0,
-        oneStar: 0,
-        unpracticed: 0,
-      });
-      expect(custom.encouragement).toContain("满星");
+      // 自定义内容走「自定义内容」页（/api/drafts），教材内容页仅标准内容
+      expect(body.units.map((u: { id: string }) => u.id)).not.toContain(draft.id);
+      expect(body.units.map((u: { id: string }) => u.id)).toContain("u2-dragon-dance");
     });
 
     it("他人的自定义内容不出现在列表里", async () => {

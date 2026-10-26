@@ -34,7 +34,7 @@ const STATUS_BADGES: Record<
   { label: string; className: string }
 > = {
   transcribing: { label: "转写中", className: "bg-sky-100 text-sky-700" },
-  proofreading: { label: "待校对", className: "bg-amber-100 text-amber-700" },
+  proofreading: { label: "未校对", className: "bg-amber-100 text-amber-700" },
   published: { label: "已定稿", className: "bg-emerald-100 text-emerald-700" },
 };
 
@@ -84,13 +84,15 @@ export default function StandardAdminClient({
 
   const loadDrafts = useCallback(async () => {
     try {
-      const res = await fetch("/api/drafts");
+      // 本页只管标准内容；type=standard 服务端过滤（V0.2 整改），
+      // 管理员自己的自定义草稿归「自定义内容」页
+      const res = await fetch("/api/drafts?type=standard");
       if (!res.ok) {
         setFailed(true);
         return;
       }
       const body = (await res.json()) as { drafts?: StandardDraftOverview[] };
-      setDrafts((body.drafts ?? []).filter((d) => d.type === "standard"));
+      setDrafts(body.drafts ?? []);
     } catch {
       setFailed(true);
     }

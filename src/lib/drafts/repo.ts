@@ -80,14 +80,27 @@ export function getDraft(db: Db, id: string): Draft | null {
   return row ? toDraft(row) : null;
 }
 
-/** 本账号的草稿列表，新草稿在前（同秒内按插入序倒排） */
-export function listDraftsByAccount(db: Db, accountId: string): Draft[] {
-  const rows = db
-    .prepare(
-      `SELECT * FROM content_drafts WHERE account_id = ?
-       ORDER BY created_at DESC, rowid DESC`
-    )
-    .all(accountId) as DraftRow[];
+/** 本账号的草稿列表，新草稿在前（同秒内按插入序倒排）；
+ * 传 type（V0.2 整改）时只返回该类型的草稿——「自定义内容」页不混入
+ * 管理员的标准草稿，反之亦然。 */
+export function listDraftsByAccount(
+  db: Db,
+  accountId: string,
+  type?: Draft["type"]
+): Draft[] {
+  const rows = type
+    ? (db
+        .prepare(
+          `SELECT * FROM content_drafts WHERE account_id = ? AND type = ?
+           ORDER BY created_at DESC, rowid DESC`
+        )
+        .all(accountId, type) as DraftRow[])
+    : (db
+        .prepare(
+          `SELECT * FROM content_drafts WHERE account_id = ?
+           ORDER BY created_at DESC, rowid DESC`
+        )
+        .all(accountId) as DraftRow[]);
   return rows.map(toDraft);
 }
 

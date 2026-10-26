@@ -49,10 +49,17 @@ export function ownedContentDetail(
 /**
  * 内容列表（按账号）：可见性走内容缝（标准全部 + 本账号自定义，
  * spec「内容列表接口」），完成度分布与鼓励语只按本人练习记录计算。
+ * onlyStandard（V0.2 整改）：「教材内容」页只显示平台公开的标准内容
+ * （spec 界面布局「教材内容=平台公开的沪教版标准内容」），
+ * 本账号自定义内容改由「自定义内容」页经 /api/drafts 展示。
  */
-export function ownedContentOverview(accountId: string): ContentOverview[] {
-  const units = getContentOverview({ accountId });
-  const packs = new Map(listContent({ accountId }).map((p) => [p.id, p] as const));
+export function ownedContentOverview(
+  accountId: string,
+  options: { onlyStandard?: boolean } = {}
+): ContentOverview[] {
+  const query = options.onlyStandard ? {} : { accountId };
+  const units = getContentOverview(query);
+  const packs = new Map(listContent(query).map((p) => [p.id, p] as const));
   const db = openDb(dbPath());
   try {
     for (const u of units) {

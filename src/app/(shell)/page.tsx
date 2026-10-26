@@ -1,6 +1,8 @@
 "use client";
 
 // 「教材内容」页（票 03）：原首页的单元列表迁入壳内，数据改走 HTTP。
+// V0.2 整改：本页只显示平台公开的沪教版标准内容（spec 界面布局），
+// GET /api/units 已按 onlyStandard 过滤；本账号自定义内容在「自定义内容」页。
 // 未登录时 GET /api/units 返回 401，由壳层统一重定向兜底，这里只标加载失败。
 import { useEffect, useState } from "react";
 
@@ -81,7 +83,13 @@ export default function StandardContentPage() {
               href={`/units/${unit.id}`}
               className="block rounded-3xl bg-white p-7 shadow-md ring-1 ring-slate-100 active:bg-slate-50"
             >
-              <h2 className="text-2xl font-bold">{unit.title}</h2>
+              <div className="flex items-start justify-between gap-3">
+                <h2 className="text-2xl font-bold">{unit.title}</h2>
+                {/* spec 界面布局：内容列表卡片带「标准 / 自定义」标签；本页全是标准内容 */}
+                <span className="shrink-0 rounded-full bg-sky-100 px-4 py-1 text-lg font-bold text-sky-700">
+                  标准
+                </span>
+              </div>
               <p className="mt-1 text-lg text-slate-500">
                 {unit.source} · {unit.sentenceCount} 句
               </p>

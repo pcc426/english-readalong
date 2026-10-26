@@ -24,7 +24,7 @@ interface DraftDetail {
 
 const STATUS_BADGES: Record<DraftDetail["status"], { label: string; className: string }> = {
   transcribing: { label: "转写中", className: "bg-sky-100 text-sky-700" },
-  proofreading: { label: "待校对", className: "bg-amber-100 text-amber-700" },
+  proofreading: { label: "未校对", className: "bg-amber-100 text-amber-700" },
   published: { label: "已定稿", className: "bg-emerald-100 text-emerald-700" },
 };
 

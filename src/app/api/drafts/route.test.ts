@@ -76,7 +76,7 @@ describe("GET /api/drafts", () => {
     const db = setupEnv();
     const mine = accountIdOf("parent@test.com");
     const other = accountIdOf("other@test.com");
-    // seedDraft 经 completeTranscription 落句 → 状态为待校对
+    // seedDraft 经 completeTranscription 落句 → 状态为未校对
     seedDraft(db, mine, "我的草稿", 4);
     seedDraft(db, other, "别人家的草稿", 9);
 
@@ -163,5 +163,81 @@ describe("GET /api/drafts", () => {
     const res = await get(sessionCookieFor("parent@test.com"));
     const body = await res.json();
     expect(body.drafts).toHaveLength(0);
+  });
+
+  describe("?type= 过滤（V0.2 整改）", () => {
+    /** 同一账号既有标准草稿又有自定义草稿（管理员两页共用的情形） */
+    function seedBoth(db: Db, accountId: string) {
+      const std = createStandardDraft(db, {
+        accountId,
+        title: "标准草稿",
+        unitId: "五上-U2",
+        moduleKind: "Story time",
+      });
+      const customId = seedDraft(db, accountId, "自定义草稿", 2);
+      return { stdId: std.id, customId };
+    }
+
+    function getWith(cookie: string, query: string): Promise<Response> {
+      return GET(new Request(`http://x/api/drafts${query}`, { headers: { cookie } }));
+    }
+
+    it("type=custom 只返回自定义草稿：管理员的标准草稿不混进自定义页", async () => {
+      const db = setupEnv();
+      const mine = accountIdOf("admin@test.com", true);
+      const { customId } = seedBoth(db, mine);
+
+      const res = await getWith(
+        sessionCookieFor("admin@test.com", true),
+        "?type=custom"
+      );
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.drafts).toHaveLength(1);
+      expect(body.drafts[0]).toMatchObject({ id: customId, type: "custom" });
+    });
+
+    it("type=standard 只返回标准草稿", async () => {
+      const db = setupEnv();
+      const mine = accountIdOf("admin@test.com", true);
+      const { stdId } = seedBoth(db, mine);
+
+      const res = await getWith(
+        sessionCookieFor("admin@test.com", true),
+        "?type=standard"
+      );
+      const body = await res.json();
+      expect(body.drafts).toHaveLength(1);
+      expect(body.drafts[0]).toMatchObject({ id: stdId, type: "standard" });
+    });
+
+    it("不带 type 或值不认识时不过滤（返回全部）", async () => {
+      const db = setupEnv();
+      const mine = accountIdOf("admin@test.com", true);
+      seedBoth(db, mine);
+      const cookie = sessionCookieFor("admin@test.com", true);
+
+      const all = await getWith(cookie, "");
+      expect((await all.json()).drafts).toHaveLength(2);
+
+      const bogus = await getWith(cookie, "?type=bogus");
+      expect((await bogus.json()).drafts).toHaveLength(2);
+    });
+
+    it("过滤仍按账号隔离：type=custom 只看本人的", async () => {
+      const db = setupEnv();
+      const otherId = accountIdOf("other@test.com");
+      seedDraft(db, otherId, "别人的", 1);
+      const mine = accountIdOf("admin@test.com", true);
+      const { customId } = seedBoth(db, mine);
+
+      const res = await getWith(
+        sessionCookieFor("admin@test.com", true),
+        "?type=custom"
+      );
+      const body = await res.json();
+      expect(body.drafts).toHaveLength(1);
+      expect(body.drafts[0].id).toBe(customId);
+    });
   });
 });

@@ -81,7 +81,7 @@ describe("POST /api/uploads", () => {
     expect((await res.json()).error.code).toBe("UNAUTHORIZED");
   });
 
-  it("合法上传：201 { draft }，状态已是待校对，假转写句子与毫秒时间落库，视频落账号目录", async () => {
+  it("合法上传：201 { draft }，状态已是未校对，假转写句子与毫秒时间落库，视频落账号目录", async () => {
     const db = setupEnv();
     const accountId = accountIdOf(db);
     setDurationProbe(async () => 30_000);

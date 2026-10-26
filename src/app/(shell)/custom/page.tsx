@@ -1,6 +1,9 @@
 "use client";
 
 // 「自定义内容」页（票 05）：上传表单 + 本账号草稿列表。
+// V0.2 整改：按 type=custom 取数（管理员的标准草稿归「标准内容制作」页），
+// 与现有草稿列表同页分区（校对中 / 已发布）——已发布的自定义内容带
+// 「自定义」标签与进入练习的链接（走 /units/[id] 既有链路，spec 界面布局）。
 // 前置提示只是体验层校验，真实大小/时长/格式校验以服务端为准（spec 用户故事 30）；
 // UI 不做自动化测试，走 iPad 真机手工验收清单（spec · Testing Decisions）。
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
@@ -9,6 +12,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 interface DraftOverview {
   id: string;
   title: string;
+  type: "custom" | "standard";
   status: "transcribing" | "proofreading" | "published";
   sentenceCount: number;
   createdAt: string;
@@ -16,7 +20,7 @@ interface DraftOverview {
 
 const STATUS_BADGES: Record<DraftOverview["status"], { label: string; className: string }> = {
   transcribing: { label: "转写中", className: "bg-sky-100 text-sky-700" },
-  proofreading: { label: "待校对", className: "bg-amber-100 text-amber-700" },
+  proofreading: { label: "未校对", className: "bg-amber-100 text-amber-700" },
   published: { label: "已定稿", className: "bg-emerald-100 text-emerald-700" },
 };
 
@@ -35,7 +39,8 @@ export default function CustomContentPage() {
 
   const loadDrafts = useCallback(async () => {
     try {
-      const res = await fetch("/api/drafts");
+      // 本页只管自定义内容；管理员的标准草稿走「标准内容制作」页
+      const res = await fetch("/api/drafts?type=custom");
       if (!res.ok) {
         setFailed(true);
         return;
@@ -139,6 +144,9 @@ export default function CustomContentPage() {
     );
   }
 
+  const proofreading = (drafts ?? []).filter((d) => d.status !== "published");
+  const published = (drafts ?? []).filter((d) => d.status === "published");
+
   return (
     <div className="mx-auto max-w-xl px-5 py-8">
       <h1 className="text-3xl font-bold tracking-tight">自定义内容</h1>
@@ -195,72 +203,125 @@ export default function CustomContentPage() {
           加载中…
         </p>
       ) : (
-        <div className="mt-8 space-y-6">
-          {drafts.length === 0 ? (
-            <p className="rounded-3xl bg-white p-10 text-center text-xl text-slate-500 shadow-md ring-1 ring-slate-100">
-              还没有上传过内容，从上面开始吧
-            </p>
-          ) : (
-            drafts.map((draft) => {
-              const badge = STATUS_BADGES[draft.status];
-              // 待校对直达文本校对工具（票 07）；已定稿仍看详情
-              const href =
-                draft.status === "proofreading"
-                  ? `/drafts/${draft.id}/proofread`
-                  : `/custom/${draft.id}`;
-              const clickable = draft.status === "proofreading" || draft.status === "published";
-              const card = (
-                <>
-                  <div className="flex items-start justify-between gap-3">
-                    <h2 className="text-2xl font-bold">{draft.title}</h2>
-                    <span className={`shrink-0 rounded-full px-4 py-1 text-lg font-bold ${badge.className}`}>
-                      {badge.label}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-lg text-slate-500">{draft.sentenceCount} 句</p>
-                  <div className="mt-4 flex items-center justify-between">
-                    <span className="text-lg font-semibold text-emerald-700">
-                      {draft.status === "proofreading"
-                        ? "去校对 →"
-                        : draft.status === "published"
-                          ? "查看 →"
-                          : "转写完成后可校对"}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        void handleDelete(draft);
-                      }}
-                      disabled={deletingId === draft.id}
-                      className="rounded-2xl bg-slate-50 px-4 py-2 text-lg font-semibold text-slate-500 ring-1 ring-slate-200 active:bg-slate-100 disabled:opacity-40"
-                    >
-                      {deletingId === draft.id ? "删除中…" : "删除"}
-                    </button>
-                  </div>
-                </>
-              );
-              return clickable ? (
-                <a
-                  key={draft.id}
-                  href={href}
-                  className="block rounded-3xl bg-white p-7 shadow-md ring-1 ring-slate-100 active:bg-slate-50"
-                >
-                  {card}
-                </a>
+        <>
+          <section className="mt-8">
+            <h2 className="text-2xl font-bold tracking-tight">校对中</h2>
+            <div className="mt-4 space-y-6">
+              {proofreading.length === 0 ? (
+                <p className="rounded-3xl bg-white p-10 text-center text-xl text-slate-500 shadow-md ring-1 ring-slate-100">
+                  还没有上传过内容，从上面开始吧
+                </p>
               ) : (
-                <div
-                  key={draft.id}
-                  className="rounded-3xl bg-white p-7 shadow-md ring-1 ring-slate-100"
-                >
-                  {card}
-                </div>
-              );
-            })
-          )}
-        </div>
+                proofreading.map((draft) => {
+                  const badge = STATUS_BADGES[draft.status];
+                  // 未校对直达文本校对工具（票 07）；转写中不可点
+                  const href = `/drafts/${draft.id}/proofread`;
+                  const card = (
+                    <>
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <h3 className="text-2xl font-bold">{draft.title}</h3>
+                          {typeBadge()}
+                        </div>
+                        <span className={`shrink-0 rounded-full px-4 py-1 text-lg font-bold ${badge.className}`}>
+                          {badge.label}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-lg text-slate-500">{draft.sentenceCount} 句</p>
+                      <div className="mt-4 flex items-center justify-between">
+                        <span className="text-lg font-semibold text-emerald-700">
+                          {draft.status === "proofreading" ? "去校对 →" : "转写完成后可校对"}
+                        </span>
+                        {deleteButton(draft)}
+                      </div>
+                    </>
+                  );
+                  return draft.status === "proofreading" ? (
+                    <a
+                      key={draft.id}
+                      href={href}
+                      className="block rounded-3xl bg-white p-7 shadow-md ring-1 ring-slate-100 active:bg-slate-50"
+                    >
+                      {card}
+                    </a>
+                  ) : (
+                    <div
+                      key={draft.id}
+                      className="rounded-3xl bg-white p-7 shadow-md ring-1 ring-slate-100"
+                    >
+                      {card}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </section>
+
+          <section className="mt-10">
+            <h2 className="text-2xl font-bold tracking-tight">已发布</h2>
+            <div className="mt-4 space-y-6">
+              {published.length === 0 ? (
+                <p className="rounded-3xl bg-white p-10 text-center text-xl text-slate-500 shadow-md ring-1 ring-slate-100">
+                  还没有已发布的内容，校对定稿后会出现在这里
+                </p>
+              ) : (
+                published.map((draft) => {
+                  const badge = STATUS_BADGES[draft.status];
+                  return (
+                    <a
+                      key={draft.id}
+                      href={`/units/${draft.id}`}
+                      className="block rounded-3xl bg-white p-7 shadow-md ring-1 ring-slate-100 active:bg-slate-50"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <h3 className="text-2xl font-bold">{draft.title}</h3>
+                          {typeBadge()}
+                        </div>
+                        <span className={`shrink-0 rounded-full px-4 py-1 text-lg font-bold ${badge.className}`}>
+                          {badge.label}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-lg text-slate-500">{draft.sentenceCount} 句</p>
+                      <div className="mt-4 flex items-center justify-between">
+                        <span className="text-lg font-semibold text-emerald-700">去练习 →</span>
+                        {deleteButton(draft)}
+                      </div>
+                    </a>
+                  );
+                })
+              )}
+            </div>
+          </section>
+        </>
       )}
     </div>
   );
+
+  /** spec 界面布局：内容列表卡片带「标准 / 自定义」标签；本页全是自定义内容。
+   * 以普通函数渲染（非组件），避免每次渲染重建组件类型导致子树重挂。 */
+  function typeBadge() {
+    return (
+      <span className="shrink-0 rounded-full bg-violet-100 px-3 py-0.5 text-base font-bold text-violet-700">
+        自定义
+      </span>
+    );
+  }
+
+  function deleteButton(draft: DraftOverview) {
+    return (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          void handleDelete(draft);
+        }}
+        disabled={deletingId === draft.id}
+        className="rounded-2xl bg-slate-50 px-4 py-2 text-lg font-semibold text-slate-500 ring-1 ring-slate-200 active:bg-slate-100 disabled:opacity-40"
+      >
+        {deletingId === draft.id ? "删除中…" : "删除"}
+      </button>
+    );
+  }
 }
