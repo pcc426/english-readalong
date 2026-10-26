@@ -76,6 +76,7 @@ ssh <user@VPS> "sed -i 's/{\$DOMAIN}/<你的域名>/' /etc/caddy/Caddyfile && sy
 | `CONTENT_DIR` | 可选 | 随代码部署的标准内容目录，默认 `content/units` |
 | `CONTENT_DATA_DIR` | 可选 | 运行时内容目录（自定义包与运行时标准包），默认 `data/content` |
 | `UPLOADS_DIR` | 可选 | 上传视频运行时目录，默认 `data/uploads` |
+| `SHIPPED_MEDIA_DIR` | 可选 | 随代码标准内容视频目录，默认 `content/media`；视频不做静态公开，统一经 `/api/media/shipped/<文件名>` 鉴权提供 |
 
 获取方式：[xfyun.cn 控制台](https://www.xfyun.cn/) → 对应服务页 → 服务管理里取 APPID / APIKey / APISecret。
 

@@ -16,6 +16,8 @@ afterEach(() => {
   delete process.env.DB_PATH;
   delete process.env.UPLOADS_DIR;
   delete process.env.CONTENT_DATA_DIR;
+  delete process.env.CONTENT_DIR;
+  delete process.env.SHIPPED_MEDIA_DIR;
 });
 
 function setupEnv(): void {
@@ -186,5 +188,98 @@ describe("GET /api/media/* · 标准内容视频（12 号票）", () => {
 
     const res = await get([adminId, "clip.mp4"]);
     expect(res.status).toBe(401);
+  });
+});
+
+describe("GET /api/media/shipped/* · 随代码标准内容视频（统一鉴权）", () => {
+  /** 落一个随代码风格的标准包（video 是文件名）+ 对应的 content/media 文件 */
+  function seedShipped(name = "五上_U2.mp4"): void {
+    const contentDir = mkdtempSync(path.join(tmpdir(), "ra-shipped-pack-"));
+    const mediaDir = mkdtempSync(path.join(tmpdir(), "ra-shipped-media-"));
+    process.env.CONTENT_DIR = contentDir;
+    process.env.SHIPPED_MEDIA_DIR = mediaDir;
+    cleanups.push(() => rmSync(contentDir, { recursive: true, force: true }));
+    cleanups.push(() => rmSync(mediaDir, { recursive: true, force: true }));
+    writeFileSync(
+      path.join(contentDir, "u2.json"),
+      JSON.stringify({
+        id: "u2-shipped",
+        title: "The dragon dance",
+        source: "沪教版五上 Unit 2 · Story time",
+        video: name,
+        sentences: [{ text: "hello", start: 0, end: 0.9 }],
+      }),
+      "utf8"
+    );
+    writeFileSync(
+      path.join(mediaDir, name),
+      Buffer.from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    );
+  }
+
+  it("登录账号可播随代码标准视频：200、mp4、字节完整", async () => {
+    setupEnv();
+    accountIdOf("parent@test.com");
+    const name = "五上_U2.mp4";
+    seedShipped(name);
+
+    const res = await get(["shipped", name], "parent@test.com");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("video/mp4");
+    expect(Buffer.from(await res.arrayBuffer())).toEqual(
+      Buffer.from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    );
+  });
+
+  it("未登录 401（不再有静态公开路径）", async () => {
+    setupEnv();
+    accountIdOf("parent@test.com");
+    const name = "五上_U2.mp4";
+    seedShipped(name);
+
+    const res = await get(["shipped", name]);
+    expect(res.status).toBe(401);
+  });
+
+  it("Range 请求回 206 切片（iPad Safari）", async () => {
+    setupEnv();
+    accountIdOf("parent@test.com");
+    const name = "五上_U2.mp4";
+    seedShipped(name);
+
+    const res = await get(["shipped", name], "parent@test.com", "bytes=0-3");
+    expect(res.status).toBe(206);
+    expect(res.headers.get("content-range")).toBe("bytes 0-3/10");
+    expect(Buffer.from(await res.arrayBuffer())).toEqual(
+      Buffer.from([1, 2, 3, 4])
+    );
+  });
+
+  it("目录里有但未被标准包引用的文件：404", async () => {
+    setupEnv();
+    accountIdOf("parent@test.com");
+    seedShipped("五上_U2.mp4");
+    writeFileSync(
+      path.join(process.env.SHIPPED_MEDIA_DIR!, "secret.mp4"),
+      Buffer.from([9, 9])
+    );
+
+    const res = await get(["shipped", "secret.mp4"], "parent@test.com");
+    expect(res.status).toBe(404);
+  });
+
+  it("路径穿越或段数不对一律 404", async () => {
+    setupEnv();
+    accountIdOf("parent@test.com");
+    seedShipped();
+
+    for (const segments of [
+      ["shipped", "..", "五上_U2.mp4"],
+      ["shipped", "../五上_U2.mp4"],
+      ["shipped"],
+    ]) {
+      const res = await get(segments, "parent@test.com");
+      expect(res.status).toBe(404);
+    }
   });
 });

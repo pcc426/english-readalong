@@ -394,7 +394,7 @@ export default function PracticeFlow({ unit }: { unit: ContentDetail }) {
       <div className="relative flex min-h-0 flex-1 justify-center">
         <video
           ref={videoRef}
-          src={encodeURI(unit.video)}
+          src={unit.video}
           playsInline
           preload="metadata"
           className="max-h-full w-auto max-w-full rounded-2xl bg-black shadow-md"

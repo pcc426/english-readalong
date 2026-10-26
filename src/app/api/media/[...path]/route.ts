@@ -1,9 +1,11 @@
 // 媒体鉴权接口（票 05，spec：所有视频统一经鉴权接口提供，不静态公开）。
 // /api/media/<accountId>/<file>：登录后仅放行自己账号目录下的视频；
 // 未登录 401，他人/路径非法/文件缺失一律 404（不暴露存在性）。
-// 例外（票 12）：已被公开标准内容引用的视频（管理员制作，data/content/standard/
+// /api/media/shipped/<file>：随代码部署的标准内容视频（content/media），
+// 仅放行被公开标准内容包 video 字段引用的文件，任何登录账号可播。
+// 例外（票 12）：已被公开标准内容引用的上传视频（data/content/standard/
 // 里包的 video 字段）对任何登录账号放行——标准内容全账号可见可练，
-// 视频必须能跟着播；引用关系来自内容缝，未被引用的文件（含他人的自定义视频）照旧 404。
+// 视频必须能跟着播；未被引用的文件（含他人的自定义视频）照旧 404。
 import { createReadStream, statSync } from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
@@ -12,12 +14,21 @@ import { requireAccount } from "@/lib/auth/guard";
 import { errorResponse } from "@/lib/http";
 import { parseMediaRelPath, videoAbsPath, VIDEO_CONTENT_TYPES } from "@/lib/drafts/storage";
 import { listContent } from "@/lib/content/loader";
+import {
+  isShippedVideoName,
+  shippedMediaAbsPath,
+} from "@/lib/content/shipped-media";
 
 export const dynamic = "force-dynamic";
 
 /** 该相对路径是否被某个公开标准内容包引用（仅标准视图，不含任何自定义包） */
 function isStandardPackVideo(relPath: string): boolean {
   return listContent().some((pack) => pack.video === relPath);
+}
+
+/** 随代码标准内容包是否引用了该视频文件名（上传类包引用的是账号目录路径，不会命中） */
+function isShippedPackVideo(name: string): boolean {
+  return listContent().some((pack) => pack.video === name);
 }
 
 export async function GET(
@@ -27,15 +38,24 @@ export async function GET(
   const auth = requireAccount(req);
   if (!auth.ok) return auth.response;
   const { path: segments } = await ctx.params;
-  const relPath = parseMediaRelPath(segments ?? []);
-  if (
-    !relPath ||
-    (!relPath.startsWith(`${auth.account.id}/`) && !isStandardPackVideo(relPath))
-  ) {
-    return notFound();
-  }
 
-  const abs = videoAbsPath(relPath);
+  let abs: string;
+  if (segments?.[0] === "shipped") {
+    const name = segments[1];
+    if (segments.length !== 2 || !isShippedVideoName(name) || !isShippedPackVideo(name)) {
+      return notFound();
+    }
+    abs = shippedMediaAbsPath(name);
+  } else {
+    const relPath = parseMediaRelPath(segments ?? []);
+    if (
+      !relPath ||
+      (!relPath.startsWith(`${auth.account.id}/`) && !isStandardPackVideo(relPath))
+    ) {
+      return notFound();
+    }
+    abs = videoAbsPath(relPath);
+  }
   let size: number;
   try {
     size = statSync(abs).size;

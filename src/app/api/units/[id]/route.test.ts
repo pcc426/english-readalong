@@ -117,7 +117,9 @@ describe("GET /api/units/[id]", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.unit.id).toBe("u2-dragon-dance");
-    expect(body.unit.video).toBe("/media/五上_U2.mp4");
+    expect(body.unit.video).toBe(
+      `/api/media/shipped/${encodeURIComponent("五上_U2.mp4")}`
+    );
     expect(body.unit.sentences).toHaveLength(3);
     expect(body.unit.sentences[0]).toMatchObject({
       index: 0,

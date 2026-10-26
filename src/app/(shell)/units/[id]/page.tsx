@@ -31,8 +31,8 @@ export default async function UnitPage({
 }) {
   const { id } = await params;
   const accountId = await currentAccountId();
-  // 按当前账号取内容与本人最好成绩；自定义内容的示范视频
-  // 在这里已解析为 /api/media 鉴权地址，标准内容仍是公开静态路径
+  // 按当前账号取内容与本人最好成绩；示范视频（标准与自定义）
+  // 在这里已解析为 /api/media 鉴权地址，页面不再做静态路径处理
   const unit = ownedContentDetail(id, accountId);
   if (!unit) notFound();
 

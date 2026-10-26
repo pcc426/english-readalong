@@ -62,6 +62,8 @@ export function getContentDetail(
       id: pack.id,
       title: pack.title,
       source: pack.source,
+      // 内部的 /media/ 地址不是最终 URL：owned-content 会改写为鉴权媒体路由
+      // （随代码内容 → /api/media/shipped/…；上传类 → /api/media/<accountId>/…）
       video: `/media/${pack.video}`,
       sentences,
     };
