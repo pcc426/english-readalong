@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Db } from "../db";
+import { xunfeiTranscriptionConfigured } from "./transcription/env";
+import { getTranscriptionPoller } from "./transcription/poller";
 import { getTranscriptionService } from "./transcription/current";
 import {
   completeTranscription,
@@ -49,7 +51,8 @@ export async function createDraftWithTranscription(
  * 转写首轮：submit 拿任务引用落库 → poll 一次。
  * - done：句子整体落 draft_sentences，状态置 proofreading
  * - failed：草稿保持 transcribing，错误信息落库（可重试）
- * - pending：保持 transcribing + 任务引用，等 06 号票接真实引擎后的退避轮询续查
+ * - pending：保持 transcribing + 任务引用；真实引擎（env 配了 LFASR 凭据）
+ *   时交给后台退避轮询循环（06 号票），fake 模式维持 05 现状不起循环
  * - 提交/轮询本身抛错：同样只记错误，草稿保留——上传已成功，不该 500 掉
  */
 export async function runTranscription(db: Db, draftId: string): Promise<void> {
@@ -65,6 +68,8 @@ export async function runTranscription(db: Db, draftId: string): Promise<void> {
       completeTranscription(db, draftId, result.sentences);
     } else if (result.state === "failed") {
       setTranscribeError(db, draftId, result.error);
+    } else if (result.state === "pending" && xunfeiTranscriptionConfigured()) {
+      getTranscriptionPoller(db).start(draftId);
     }
   } catch (err) {
     setTranscribeError(db, draftId, (err as Error).message);
