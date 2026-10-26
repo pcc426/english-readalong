@@ -242,6 +242,19 @@ export default function AdminPage() {
             <CreateAccountForm />
             <ResetPasswordForm />
           </div>
+          {/* 票 12：标准内容制作入口（仅管理员渲染，接口层另有 403 双保险） */}
+          <div className="mt-10 w-full max-w-md rounded-3xl bg-white p-7 text-center shadow-md ring-1 ring-slate-100">
+            <h2 className="text-2xl font-bold tracking-tight">标准内容制作</h2>
+            <p className="mt-2 text-lg text-slate-500">
+              用同一条上传→校对→定稿管线制作沪教版教材内容，定稿后全账号可见。
+            </p>
+            <a
+              href="/admin/standard"
+              className="mt-4 inline-block rounded-2xl bg-emerald-500 px-8 py-3 text-xl font-bold text-white shadow-md active:bg-emerald-600"
+            >
+              进入标准内容制作 →
+            </a>
+          </div>
         </>
       )}
     </main>

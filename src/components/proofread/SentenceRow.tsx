@@ -30,6 +30,11 @@ interface SentenceRowProps {
   playing: boolean;
   /** 删除/合并/整页确认进行中时锁住行内按钮 */
   disabled: boolean;
+  /** 票 12（仅 standard 草稿）：本句的教材原文参照与一键采用 */
+  textbook?: {
+    text: string;
+    onAdopt: () => void;
+  };
   onTextChange: (text: string) => void;
   /** 失焦立即保存（清掉防抖定时器后提交） */
   onCommit: () => void;
@@ -45,6 +50,7 @@ export default function SentenceRow({
   saveState,
   playing,
   disabled,
+  textbook,
   onTextChange,
   onCommit,
   onPlay,
@@ -116,6 +122,27 @@ export default function SentenceRow({
           </button>
         </span>
       </div>
+      {/* 票 12（仅 standard 草稿）：教材原文参照；ASR 文本与起止时间保留作对照 */}
+      {textbook && (
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl bg-sky-50 px-4 py-3">
+          <span className="shrink-0 text-base font-semibold text-sky-700">
+            教材原文
+          </span>
+          <span className="min-w-0 flex-1 basis-48 text-base text-slate-600">
+            {textbook.text}
+          </span>
+          {sentence.text !== textbook.text && (
+            <button
+              type="button"
+              onClick={textbook.onAdopt}
+              disabled={disabled}
+              className="shrink-0 rounded-2xl bg-sky-100 px-4 py-2 text-base font-semibold text-sky-700 active:bg-sky-200 disabled:opacity-40"
+            >
+              采用教材原文
+            </button>
+          )}
+        </div>
+      )}
     </li>
   );
 }

@@ -11,6 +11,7 @@ import {
   type DraftDetailView,
   type SentenceUpdateResponse,
   type SentencesResponse,
+  type TextbookModuleView,
 } from "@/components/proofread/types";
 
 const PAGE_SIZE = 10;
@@ -25,6 +26,9 @@ export default function ProofreadPage() {
   const [sentences, setSentences] = useState<DraftSentenceView[]>([]);
   const [failed, setFailed] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  // 票 12（仅 standard 草稿）：教材原文句子清单；null=加载中/加载失败或 custom 草稿
+  const [textbookSentences, setTextbookSentences] = useState<string[] | null>(null);
+  const [textbookFailed, setTextbookFailed] = useState(false);
 
   const [page, setPage] = useState(0);
   const [saveStates, setSaveStates] = useState<Record<number, RowSaveState>>({});
@@ -65,6 +69,25 @@ export default function ProofreadPage() {
           serverTexts.current = Object.fromEntries(
             body.draft.sentences.map((s) => [s.index, s.text])
           );
+          // 票 12：standard 草稿拉取教材原文做参照（加载失败不阻断校对，只提示）
+          if (body.draft.type === "standard" && body.draft.unitId && body.draft.moduleKind) {
+            const query = new URLSearchParams({
+              unitId: body.draft.unitId,
+              moduleKind: body.draft.moduleKind,
+            });
+            try {
+              const tbRes = await fetch(`/api/textbook/module?${query}`);
+              if (cancelled) return;
+              if (!tbRes.ok) {
+                setTextbookFailed(true);
+                return;
+              }
+              const tb = (await tbRes.json()) as TextbookModuleView;
+              if (!cancelled) setTextbookSentences(tb.sentences);
+            } catch {
+              if (!cancelled) setTextbookFailed(true);
+            }
+          }
         } else {
           setFailed(true);
         }
@@ -100,12 +123,14 @@ export default function ProofreadPage() {
     );
   }
 
-  /** 保存一句：overrides 供「确认本页」用（confirm:true），缺省按手工改动保存 */
+  /** 保存一句：overrides 供「确认本页」（confirm:true）与「采用教材原文」（text，票 12）
+   * 用；缺省按手工改动保存当前文本。带 overrides 时跳过「没改就不发」。 */
   const commitSave = useCallback(
-    async (index: number, overrides?: { confirm: boolean }) => {
+    async (index: number, overrides?: { confirm?: boolean; text?: string }) => {
       const target = sentencesRef.current.find((s) => s.index === index);
       if (!target) return;
       const confirm = overrides?.confirm ?? false;
+      const text = overrides?.text ?? target.text;
       if (!overrides && target.text === serverTexts.current[index]) {
         setSaveStates((prev) => {
           if (!(index in prev)) return prev;
@@ -121,7 +146,7 @@ export default function ProofreadPage() {
           method: "PUT",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(
-            confirm ? { text: target.text, confirm: true } : { text: target.text }
+            confirm ? { text, confirm: true } : { text }
           ),
         });
         if (!res.ok) throw new Error(String(res.status));
@@ -236,6 +261,14 @@ export default function ProofreadPage() {
     }
   }
 
+  /** 票 12：一键采用本句的教材原文（走既有 PUT 端点）；
+   * ASR 文本与起止时间不被删除，只是文本被替换，仍可继续手工修改 */
+  function handleAdopt(sentence: DraftSentenceView) {
+    if (!textbookSentences || sentence.index >= textbookSentences.length) return;
+    clearTimeout(timers.current[sentence.index]);
+    void commitSave(sentence.index, { text: textbookSentences[sentence.index] });
+  }
+
   function playSentence(sentence: DraftSentenceView) {
     const v = videoRef.current;
     if (!v) return;
@@ -266,11 +299,16 @@ export default function ProofreadPage() {
     setPlayingIndex(null);
   }, [current]);
 
+  // 票 12：标准草稿从管理端「标准内容制作」进入，返回链接随之不同
+  const backHref = draft?.type === "standard" ? "/admin/standard" : "/custom";
+  const backLabel =
+    draft?.type === "standard" ? "← 返回标准内容制作" : "← 返回自定义内容";
+
   if (notFound || failed || draft === null) {
     return (
       <div className="mx-auto max-w-xl px-5 py-8">
-        <a href="/custom" className="text-lg text-emerald-700">
-          ← 返回自定义内容
+        <a href={backHref} className="text-lg text-emerald-700">
+          {backLabel}
         </a>
         <p className="mt-8 text-lg text-slate-400" role="alert">
           {notFound
@@ -286,8 +324,8 @@ export default function ProofreadPage() {
   if (draft.status === "transcribing") {
     return (
       <div className="mx-auto max-w-xl px-5 py-8">
-        <a href="/custom" className="text-lg text-emerald-700">
-          ← 返回自定义内容
+        <a href={backHref} className="text-lg text-emerald-700">
+          {backLabel}
         </a>
         <h1 className="mt-4 text-3xl font-bold tracking-tight">{draft.title}</h1>
         <p
@@ -303,8 +341,8 @@ export default function ProofreadPage() {
   if (draft.status === "published") {
     return (
       <div className="mx-auto max-w-xl px-5 py-8">
-        <a href="/custom" className="text-lg text-emerald-700">
-          ← 返回自定义内容
+        <a href={backHref} className="text-lg text-emerald-700">
+          {backLabel}
         </a>
         <h1 className="mt-4 text-3xl font-bold tracking-tight">{draft.title}</h1>
         <p className="mt-6 rounded-3xl bg-emerald-50 px-6 py-8 text-center text-xl text-emerald-700">
@@ -349,8 +387,16 @@ export default function ProofreadPage() {
       </div>
 
       <p className="mt-4 text-base text-slate-400">
-        逐句对照视频画面字幕检查文字；改动自动保存，中途退出可回来接着做。
+        {draft.type === "standard"
+          ? "逐句对照教材原文与视频画面字幕检查文字；与教材不一致的句子可一键采用原文，改动自动保存。"
+          : "逐句对照视频画面字幕检查文字；改动自动保存，中途退出可回来接着做。"}
       </p>
+
+      {draft.type === "standard" && textbookFailed && (
+        <p role="alert" className="mt-2 rounded-2xl bg-amber-50 px-5 py-3 text-base text-amber-700">
+          教材原文加载失败，可直接手工校对。
+        </p>
+      )}
 
       {/* 两个校对工具作用于同一草稿，可互相切换（spec · 校对工具） */}
       <a
@@ -414,6 +460,14 @@ export default function ProofreadPage() {
                 saveState={saveStates[s.index]}
                 playing={playingIndex === s.index}
                 disabled={mutating || confirming}
+                textbook={
+                  textbookSentences && s.index < textbookSentences.length
+                    ? {
+                        text: textbookSentences[s.index],
+                        onAdopt: () => handleAdopt(s),
+                      }
+                    : undefined
+                }
                 onTextChange={(text) => handleTextChange(s.index, text)}
                 onCommit={() => handleCommit(s.index)}
                 onPlay={() => playSentence(s)}
