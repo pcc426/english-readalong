@@ -13,6 +13,7 @@ import {
   setDraftVideo,
   completeTranscription,
 } from "@/lib/drafts/repo";
+import { createStandardDraft } from "@/lib/drafts/standard-drafts";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
@@ -30,8 +31,8 @@ function setupEnv(): Db {
   return db;
 }
 
-function accountIdOf(email: string): string {
-  sessionCookieFor(email);
+function accountIdOf(email: string, isAdmin = false): string {
+  sessionCookieFor(email, isAdmin);
   const db = openDb(process.env.DB_PATH!);
   const row = db.prepare("SELECT id FROM accounts WHERE email = ?").get(email) as {
     id: string;
@@ -117,6 +118,47 @@ describe("GET /api/drafts/[id]", () => {
       params: Promise.resolve({ id: "no-such-id" }),
     });
     expect(missing.status).toBe(404);
+  });
+
+  it("标准草稿详情带 type/unitId/moduleKind（校对页预填的依据）", async () => {
+    const db = setupEnv();
+    const adminId = accountIdOf("admin@test.com", true);
+    const draft = createStandardDraft(db, {
+      accountId: adminId,
+      title: "五上 U2 Story time",
+      unitId: "五上-U2",
+      moduleKind: "Story time",
+    });
+    completeTranscription(db, draft.id, [
+      { text: "Hello!", startMs: 0, endMs: 3200 },
+    ]);
+
+    const res = await GET(reqWith("GET", "admin@test.com", draft.id), {
+      params: Promise.resolve({ id: draft.id }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.draft).toMatchObject({
+      id: draft.id,
+      type: "standard",
+      unitId: "五上-U2",
+      moduleKind: "Story time",
+      status: "proofreading",
+    });
+  });
+
+  it("custom 草稿详情同样带 type，unit/module 字段为 null（12 号票字段形状统一）", async () => {
+    const db = setupEnv();
+    const mine = accountIdOf("parent@test.com");
+    const id = seedDraft(db, mine, "自定义");
+
+    const res = await GET(reqWith("GET", "parent@test.com", id), {
+      params: Promise.resolve({ id }),
+    });
+    const body = await res.json();
+    expect(body.draft.type).toBe("custom");
+    expect(body.draft.unitId).toBeNull();
+    expect(body.draft.moduleKind).toBeNull();
   });
 });
 

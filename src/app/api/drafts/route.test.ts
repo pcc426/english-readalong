@@ -9,6 +9,7 @@ import {
   sessionCookieFor,
 } from "@/lib/testing/auth-test-utils";
 import { createDraft, setDraftVideo, completeTranscription } from "@/lib/drafts/repo";
+import { createStandardDraft } from "@/lib/drafts/standard-drafts";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
@@ -27,8 +28,8 @@ function setupEnv(): Db {
 }
 
 /** sessionCookieFor 惰性建号；这里显式拿账号 id 供落草稿用 */
-function accountIdOf(email: string): string {
-  sessionCookieFor(email);
+function accountIdOf(email: string, isAdmin = false): string {
+  sessionCookieFor(email, isAdmin);
   const db = openDb(process.env.DB_PATH!);
   const row = db.prepare("SELECT id FROM accounts WHERE email = ?").get(email) as {
     id: string;
@@ -117,5 +118,50 @@ describe("GET /api/drafts", () => {
     ]);
     expect(body.drafts[1].status).toBe("proofreading");
     expect(body.drafts[1].sentenceCount).toBe(2);
+  });
+
+  it("列表带 type 与教材引用字段：standard 草稿带 unit/module，custom 草稿为 null（12 号票）", async () => {
+    const db = setupEnv();
+    const mine = accountIdOf("parent@test.com");
+    const std = createStandardDraft(db, {
+      accountId: mine,
+      title: "五上 U2 Story time",
+      unitId: "五上-U2",
+      moduleKind: "Story time",
+    });
+    seedDraft(db, mine, "自定义草稿", 0);
+
+    const res = await get(sessionCookieFor("parent@test.com"));
+    const body = await res.json();
+    const stdItem = body.drafts.find((d: { id: string }) => d.id === std.id);
+    const customItem = body.drafts.find(
+      (d: { title: string }) => d.title === "自定义草稿"
+    );
+    expect(stdItem).toMatchObject({
+      type: "standard",
+      unitId: "五上-U2",
+      moduleKind: "Story time",
+    });
+    expect(customItem).toMatchObject({
+      type: "custom",
+      unitId: null,
+      moduleKind: null,
+    });
+  });
+
+  it("普通账号的列表仍只含本人草稿：管理员的标准草稿不出现在家长列表里（12 号票）", async () => {
+    const db = setupEnv();
+    const adminId = accountIdOf("admin@test.com", true);
+    createStandardDraft(db, {
+      accountId: adminId,
+      title: "管理员的标准草稿",
+      unitId: "五上-U1",
+      moduleKind: "Talking time",
+    });
+    accountIdOf("parent@test.com");
+
+    const res = await get(sessionCookieFor("parent@test.com"));
+    const body = await res.json();
+    expect(body.drafts).toHaveLength(0);
   });
 });

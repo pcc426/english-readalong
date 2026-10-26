@@ -6,6 +6,7 @@ import { requireAccount } from "@/lib/auth/guard";
 import { openDb, dbPath } from "@/lib/db";
 import { errorResponse } from "@/lib/http";
 import { deleteDraft, getDraft, listDraftSentences } from "@/lib/drafts/repo";
+import { getDraftModule } from "@/lib/drafts/standard-drafts";
 import { deleteUploadVideo } from "@/lib/drafts/storage";
 
 export const dynamic = "force-dynamic";
@@ -22,10 +23,15 @@ export async function GET(req: Request, ctx: Ctx) {
     if (!draft || draft.accountId !== auth.account.id) {
       return errorResponse(404, "DRAFT_NOT_FOUND", "草稿不存在");
     }
+    // 票 12：type 与教材引用字段供校对页做教材原文预填（custom 草稿为 null）
+    const module = getDraftModule(db, id);
     return NextResponse.json({
       draft: {
         id: draft.id,
         title: draft.title,
+        type: draft.type,
+        unitId: module?.unitId ?? null,
+        moduleKind: module?.moduleKind ?? null,
         status: draft.status,
         videoPath: draft.videoPath,
         videoUrl: `/api/media/${draft.videoPath}`,
