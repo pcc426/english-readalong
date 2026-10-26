@@ -23,6 +23,8 @@ export {
 } from "./env";
 
 let override: TranscriptionService | null = null;
+/** 环境构造的服务须跨调用复用：假实现的任务表在实例内，每次新建会让 submit/poll 分家 */
+let fromEnv: TranscriptionService | null = null;
 
 /**
  * 测试注入点：置入假转写器后，getTranscriptionService 返回它；
@@ -30,10 +32,13 @@ let override: TranscriptionService | null = null;
  */
 export function setTranscriptionService(service: TranscriptionService | null) {
   override = service;
+  fromEnv = null;
 }
 
 export function getTranscriptionService(): TranscriptionService {
-  return override ?? createTranscriptionServiceFromEnv();
+  if (override) return override;
+  fromEnv ??= createTranscriptionServiceFromEnv();
+  return fromEnv;
 }
 
 /**

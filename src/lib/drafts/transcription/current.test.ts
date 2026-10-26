@@ -3,7 +3,9 @@ import { FakeTranscriptionService } from "./fake";
 import {
   createTranscriptionServiceFromEnv,
   extractAudioFromEnv,
+  getTranscriptionService,
   productionStartupCredentialError,
+  setTranscriptionService,
   xunfeiTranscriptionConfigured,
 } from "./current";
 import { XunfeiTranscriptionService } from "./xunfei/service";
@@ -92,6 +94,16 @@ describe("转写服务工厂（env 开关 fake / 讯飞 LFASR）", () => {
       createTranscriptionServiceFromEnv({ NODE_ENV: "test" }) instanceof
         FakeTranscriptionService
     ).toBe(true);
+  });
+
+  it("getTranscriptionService 跨调用复用同一实例（否则 submit/poll 分家）", async () => {
+    setTranscriptionService(null);
+    const first = getTranscriptionService();
+    const second = getTranscriptionService();
+    expect(second).toBe(first);
+    const { taskId } = await first.submit({ videoPath: "acct/clip.mp4" });
+    expect(await first.poll(taskId)).toMatchObject({ state: "done" });
+    setTranscriptionService(null);
   });
 });
 
