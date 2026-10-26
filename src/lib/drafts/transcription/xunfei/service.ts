@@ -200,6 +200,12 @@ function failMessage(failType: unknown): string {
 function decodeOrderResult(raw: unknown): unknown {
   if (typeof raw !== "string") return raw ?? null;
   if (!raw) return null;
+  // 实测标准版返回明文 JSON 字符串；历史文档/SDK 也有 base64 形态，两种都收
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    // 继续尝试 base64
+  }
   try {
     return JSON.parse(Buffer.from(raw, "base64").toString("utf8")) as unknown;
   } catch {

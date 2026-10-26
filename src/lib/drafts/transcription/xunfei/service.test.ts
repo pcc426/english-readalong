@@ -179,6 +179,35 @@ describe("XunfeiTranscriptionService.poll", () => {
     });
   });
 
+  it("status 4 + orderResult（明文 JSON lattice，实测标准版形态）→ done", async () => {
+    const frame = (bg: string, ed: string, words: string[]) =>
+      JSON.stringify({
+        st: { bg, ed, rt: [{ ws: words.map((w) => ({ cw: [{ w }] })) }] },
+      });
+    const { fn } = fakeFetch(() =>
+      okJson({
+        code: "000000",
+        content: {
+          orderInfo: { status: 4 },
+          orderResult: JSON.stringify({
+            lattice: [
+              { json_1best: frame("880", "1680", ["Hello", " there"]) },
+              { json_1best: frame("2390", "3640", ["How are you?"]) },
+            ],
+          }),
+        },
+      })
+    );
+    const service = serviceWith(fn);
+    expect(await service.poll("order-1")).toEqual({
+      state: "done",
+      sentences: [
+        { text: "Hello there", startMs: 880, endMs: 1680 },
+        { text: "How are you?", startMs: 2390, endMs: 3640 },
+      ],
+    });
+  });
+
   it("orderResult 里 type=1（引擎侧失败）→ failed", async () => {
     const { fn } = fakeFetch(() =>
       okJson({
