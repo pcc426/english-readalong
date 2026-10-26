@@ -173,16 +173,17 @@ export class XunfeiTranscriptionService implements TranscriptionService {
     return record;
   }
 
-  /** appid + 十进制秒 ts + signa（官方签名公式，见 signa.ts） */
+  /** appid + 十进制秒 ts + signa（官方签名公式，HMAC key 是 APISecret，见 signa.ts） */
   private authParams(): URLSearchParams {
     const ts = Math.floor(this.now() / 1000).toString();
     const signa = lfasrSigna(
       this.config.appId,
-      this.config.apiKey,
+      this.config.apiSecret,
       ts
     );
     const params = new URLSearchParams();
-    params.set("appid", this.config.appId);
+    // 官方示例的参数名是驼峰 appId；写成小写 appid 会被判 26610 appId illegal
+    params.set("appId", this.config.appId);
     params.set("ts", ts);
     params.set("signa", signa);
     return params;

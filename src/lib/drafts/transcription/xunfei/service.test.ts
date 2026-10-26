@@ -3,7 +3,6 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { XunfeiTranscriptionService } from "./service";
-import { lfasrSigna } from "./signa";
 import type { UploadPayloadBuilder } from "./payload";
 
 const CONFIG = {
@@ -16,7 +15,8 @@ const CONFIG = {
 
 /** 固定 ts 让 signa 可断言（service 的 now 可注入） */
 const NOW = 1_700_000_000_000;
-const EXPECTED_SIGNA = lfasrSigna("app123", "key456", "1700000000");
+// 独立向量（openssl 手算，不调被测函数）：HMAC-SHA1(key=apiSecret, data=MD5hex(appid+ts))
+const EXPECTED_SIGNA = "6WNUcxjozoUMxGbcfq6rrxA19fU=";
 
 function okJson(body: unknown): Response {
   return new Response(JSON.stringify(body), { status: 200 });
@@ -67,7 +67,7 @@ describe("XunfeiTranscriptionService.submit", () => {
     const { url, init } = calls[0];
     expect(url.pathname).toBe("/v2/api/upload");
     expect(init.method).toBe("POST");
-    expect(url.searchParams.get("appid")).toBe("app123");
+    expect(url.searchParams.get("appId")).toBe("app123");
     expect(url.searchParams.get("ts")).toBe("1700000000");
     expect(url.searchParams.get("signa")).toBe(EXPECTED_SIGNA);
     expect(url.searchParams.get("fileName")).toBe("clip.mp4");
