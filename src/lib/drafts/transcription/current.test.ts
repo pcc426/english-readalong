@@ -3,6 +3,7 @@ import { FakeTranscriptionService } from "./fake";
 import {
   createTranscriptionServiceFromEnv,
   extractAudioFromEnv,
+  productionStartupCredentialError,
   xunfeiTranscriptionConfigured,
 } from "./current";
 import { XunfeiTranscriptionService } from "./xunfei/service";
@@ -91,5 +92,34 @@ describe("转写服务工厂（env 开关 fake / 讯飞 LFASR）", () => {
       createTranscriptionServiceFromEnv({ NODE_ENV: "test" }) instanceof
         FakeTranscriptionService
     ).toBe(true);
+  });
+});
+
+describe("productionStartupCredentialError（V0.2 整改：生产启动即报）", () => {
+  it("生产缺凭据：列出缺失键名并指向 .env 与 docs/deploy.md", () => {
+    const msg = productionStartupCredentialError({ NODE_ENV: "production" });
+    expect(msg).toContain("LFASR_APP_ID / LFASR_API_KEY / LFASR_API_SECRET");
+    expect(msg).toContain(".env");
+    expect(msg).toContain("docs/deploy.md");
+  });
+
+  it("只差一件：只列缺的那件", () => {
+    const msg = productionStartupCredentialError({
+      ...FULL,
+      LFASR_API_SECRET: "",
+      NODE_ENV: "production",
+    });
+    expect(msg).toMatch(/缺少讯飞转写凭据：LFASR_API_SECRET 未配置/);
+  });
+
+  it("非生产或凭据齐全：null（静默）", () => {
+    expect(productionStartupCredentialError({ NODE_ENV: "development" })).toBeNull();
+    expect(productionStartupCredentialError({ NODE_ENV: "test" })).toBeNull();
+    expect(
+      productionStartupCredentialError({ ...FULL, NODE_ENV: "production" })
+    ).toBeNull();
+    expect(
+      productionStartupCredentialError({ ...FULL, NODE_ENV: "test" })
+    ).toBeNull();
   });
 });

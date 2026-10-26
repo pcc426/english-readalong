@@ -32,6 +32,26 @@ export function missingCredentialsError(): Error {
 }
 
 /**
+ * 生产启动守卫的报错文案（V0.2 整改，instrumentation 启动即报）：
+ * NODE_ENV=production 且 LFASR 凭据缺失时返回明确错误——列出缺失键名、
+ * 指向服务器 .env 与 docs/deploy.md；非生产或凭据齐全返回 null（静默）。
+ * 纯函数，注入 env 供测试。
+ */
+export function productionStartupCredentialError(
+  env: Record<string, string | undefined> = process.env
+): string | null {
+  if (env.NODE_ENV !== "production") return null;
+  const missing = LFASR_CREDENTIAL_KEYS.filter((key) => !env[key]);
+  if (missing.length === 0) return null;
+  return (
+    `生产环境缺少讯飞转写凭据：${missing.join(" / ")} 未配置。` +
+    `请在服务器 .env 填写 ${LFASR_CREDENTIAL_KEYS.join(" / ")}` +
+    "（讯飞开放平台「录音文件转写」服务），部署说明见 docs/deploy.md，" +
+    "改完 pm2 restart english-readalong 生效。"
+  );
+}
+
+/**
  * 抽音轨开关：LFASR_EXTRACT_AUDIO=1（或 true）时先 ffmpeg 抽音轨再提交。
  * 默认关——LFASR 标准版格式表列有 mp4，但 FAQ 未列，是否真收视频文件
  * 由 scripts/smoke-lfasr.ts 实机确认后再决定要不要开。

@@ -1,4 +1,7 @@
-import { xunfeiTranscriptionConfigured } from "./lib/drafts/transcription/env";
+import {
+  productionStartupCredentialError,
+  xunfeiTranscriptionConfigured,
+} from "./lib/drafts/transcription/env";
 
 /**
  * Next.js 服务端启动钩子（Next 15 稳定特性，src 布局下放 src/）。
@@ -11,12 +14,20 @@ import { xunfeiTranscriptionConfigured } from "./lib/drafts/transcription/env";
  * - 仅 nodejs runtime：轮询依赖 better-sqlite3 与 node fetch，edge 不适用；
  * - 非 next build 阶段：构建期的静态预收集不许碰运行库；
  * - 仅配了真实讯飞 LFASR 凭据：fake 模式没有远端任务可查。
+ *   V0.2 整改：生产（NODE_ENV=production）缺凭据时不再静默跳过，
+ *   启动即 console.error 明确报错（缺失键名 + 指路 .env 与 docs/deploy.md）；
+ *   凭据齐全时恢复逻辑不变，非生产维持静默。
  * 重模块（better-sqlite3 经 db 模块）动态导入，避免被 edge 打包器拉进去。
  */
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
   if (process.env.NEXT_PHASE === "phase-production-build") return;
-  if (!xunfeiTranscriptionConfigured(process.env)) return;
+  if (!xunfeiTranscriptionConfigured(process.env)) {
+    // 生产缺凭据：启动即报（文案列出缺失键名并指路 .env / docs/deploy.md）
+    const credentialError = productionStartupCredentialError(process.env);
+    if (credentialError) console.error(credentialError);
+    return;
+  }
   const [{ dbPath, openDb }, { resumeTranscriptionPolling }] = await Promise.all([
     import("./lib/db"),
     import("./lib/drafts/transcription/poller"),

@@ -18,6 +18,7 @@ export type {
 export {
   extractAudioFromEnv,
   missingCredentialsError,
+  productionStartupCredentialError,
   xunfeiTranscriptionConfigured,
 } from "./env";
 
