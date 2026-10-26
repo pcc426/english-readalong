@@ -7,6 +7,10 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import SentenceRow, { type RowSaveState } from "@/components/proofread/SentenceRow";
 import {
+  TEXTBOOK_MISALIGNED_HINT,
+  textbookAligns,
+} from "@/components/proofread/textbook";
+import {
   type DraftSentenceView,
   type DraftDetailView,
   type SentenceUpdateResponse,
@@ -304,6 +308,10 @@ export default function ProofreadPage() {
   const backLabel =
     draft?.type === "standard" ? "← 返回标准内容制作" : "← 返回自定义内容";
 
+  // V0.2 整改：句子被增删后与教材模块不再 1:1 对齐，采用按钮整体隐藏
+  //（教材原文参照保留，由人手动对照复制），防一键采用整段错位
+  const textbookAligned = textbookAligns(textbookSentences, sentences.length);
+
   if (notFound || failed || draft === null) {
     return (
       <div className="mx-auto max-w-xl px-5 py-8">
@@ -358,8 +366,8 @@ export default function ProofreadPage() {
 
   return (
     <div className="mx-auto max-w-xl px-5 py-8">
-      <a href="/custom" className="text-lg text-emerald-700">
-        ← 返回自定义内容
+      <a href={backHref} className="text-lg text-emerald-700">
+        {backLabel}
       </a>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -395,6 +403,11 @@ export default function ProofreadPage() {
       {draft.type === "standard" && textbookFailed && (
         <p role="alert" className="mt-2 rounded-2xl bg-amber-50 px-5 py-3 text-base text-amber-700">
           教材原文加载失败，可直接手工校对。
+        </p>
+      )}
+      {draft.type === "standard" && textbookSentences !== null && !textbookAligned && (
+        <p role="status" className="mt-2 rounded-2xl bg-amber-50 px-5 py-3 text-base text-amber-700">
+          {TEXTBOOK_MISALIGNED_HINT}
         </p>
       )}
 
@@ -464,7 +477,9 @@ export default function ProofreadPage() {
                   textbookSentences && s.index < textbookSentences.length
                     ? {
                         text: textbookSentences[s.index],
-                        onAdopt: () => handleAdopt(s),
+                        onAdopt: textbookAligned
+                          ? () => handleAdopt(s)
+                          : undefined,
                       }
                     : undefined
                 }

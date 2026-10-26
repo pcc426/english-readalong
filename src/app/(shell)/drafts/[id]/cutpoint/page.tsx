@@ -182,11 +182,26 @@ export default function CutpointPage() {
     }
   }
 
+  // 票 12 + V0.2 整改：standard 草稿从管理端进入，回「标准内容制作」；
+  // custom 草稿回详情页；draft 未加载时退回自定义内容列表兜底
+  const backHref =
+    draft?.type === "standard"
+      ? "/admin/standard"
+      : draft
+        ? `/custom/${draft.id}`
+        : "/custom";
+  const backLabel =
+    draft?.type === "standard"
+      ? "← 返回标准内容制作"
+      : draft
+        ? "← 返回内容详情"
+        : "← 返回自定义内容";
+
   if (notFound || failed || draft === null) {
     return (
       <div className="mx-auto max-w-2xl px-5 py-8">
-        <a href="/custom" className="text-lg text-emerald-700">
-          ← 返回自定义内容
+        <a href={backHref} className="text-lg text-emerald-700">
+          {backLabel}
         </a>
         <p className="mt-8 text-lg text-slate-400" role="alert">
           {notFound
@@ -202,8 +217,8 @@ export default function CutpointPage() {
   if (draft.status === "transcribing") {
     return (
       <div className="mx-auto max-w-2xl px-5 py-8">
-        <a href={`/custom/${draft.id}`} className="text-lg text-emerald-700">
-          ← 返回内容详情
+        <a href={backHref} className="text-lg text-emerald-700">
+          {backLabel}
         </a>
         <h1 className="mt-4 text-3xl font-bold tracking-tight">{draft.title}</h1>
         <p
@@ -219,8 +234,8 @@ export default function CutpointPage() {
   if (draft.status === "published") {
     return (
       <div className="mx-auto max-w-2xl px-5 py-8">
-        <a href={`/custom/${draft.id}`} className="text-lg text-emerald-700">
-          ← 返回内容详情
+        <a href={backHref} className="text-lg text-emerald-700">
+          {backLabel}
         </a>
         <h1 className="mt-4 text-3xl font-bold tracking-tight">{draft.title}</h1>
         <p className="mt-6 rounded-3xl bg-emerald-50 px-6 py-8 text-center text-xl text-emerald-700">
@@ -232,8 +247,8 @@ export default function CutpointPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-5 py-8">
-      <a href={`/custom/${draft.id}`} className="text-lg text-emerald-700">
-        ← 返回内容详情
+      <a href={backHref} className="text-lg text-emerald-700">
+        {backLabel}
       </a>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">

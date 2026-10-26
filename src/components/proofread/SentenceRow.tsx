@@ -30,10 +30,11 @@ interface SentenceRowProps {
   playing: boolean;
   /** 删除/合并/整页确认进行中时锁住行内按钮 */
   disabled: boolean;
-  /** 票 12（仅 standard 草稿）：本句的教材原文参照与一键采用 */
+  /** 票 12（仅 standard 草稿）：本句的教材原文参照；onAdopt 缺省表示
+   * 句数与教材不对齐（V0.2 整改），只展示参照、不给采用按钮 */
   textbook?: {
     text: string;
-    onAdopt: () => void;
+    onAdopt?: () => void;
   };
   onTextChange: (text: string) => void;
   /** 失焦立即保存（清掉防抖定时器后提交） */
@@ -131,7 +132,8 @@ export default function SentenceRow({
           <span className="min-w-0 flex-1 basis-48 text-base text-slate-600">
             {textbook.text}
           </span>
-          {sentence.text !== textbook.text && (
+          {/* V0.2 整改：仅在 1:1 对齐（传入 onAdopt）时给采用按钮，防整段错位 */}
+          {textbook.onAdopt && sentence.text !== textbook.text && (
             <button
               type="button"
               onClick={textbook.onAdopt}
