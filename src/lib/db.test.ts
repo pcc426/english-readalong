@@ -109,3 +109,45 @@ describe("openDb 的 content_drafts 迁移（12 号票）", () => {
     again.close();
   });
 });
+
+describe("openDb 的 practice_attempts 迁移（V0.2 owner）", () => {
+  /** V0.1 早期库：practice_attempts 没有 owner 列 */
+  function createLegacyAttemptsTable(dbPath: string): void {
+    const db = new Database(dbPath);
+    db.exec(`
+      CREATE TABLE practice_attempts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        unit_id TEXT NOT NULL,
+        sentence_index INTEGER NOT NULL,
+        score INTEGER NOT NULL,
+        stars INTEGER NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+    db.prepare(
+      `INSERT INTO practice_attempts (unit_id, sentence_index, score, stars)
+       VALUES ('u2-dragon-dance', 0, 92, 3)`
+    ).run();
+    db.close();
+  }
+
+  it("旧库补 owner 列，旧记录保留且 owner 为 NULL", () => {
+    const p = path.join(makeDbDir("ra-migrate-owner-"), "readalong.db");
+    createLegacyAttemptsTable(p);
+
+    const db = openDb(p);
+    try {
+      expect(columnNames(db, "practice_attempts")).toContain("owner");
+      const row = db
+        .prepare("SELECT unit_id, score, owner FROM practice_attempts")
+        .get() as { unit_id: string; score: number; owner: string | null };
+      expect(row).toEqual({
+        unit_id: "u2-dragon-dance",
+        score: 92,
+        owner: null,
+      });
+    } finally {
+      db.close();
+    }
+  });
+});

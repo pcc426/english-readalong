@@ -87,6 +87,8 @@ export function openDb(dbPath: string): Database.Database {
   // SQLite 的 ALTER TABLE 无 IF NOT EXISTS，按 table_info 逐列判断；新库建表已含列则空操作。
   addColumnIfMissing(db, "content_drafts", "unit_id", "unit_id TEXT");
   addColumnIfMissing(db, "content_drafts", "module_kind", "module_kind TEXT");
+  // V0.1 早期建出的库可能没有 owner 列（多家庭归属，票 10）
+  addColumnIfMissing(db, "practice_attempts", "owner", "owner TEXT");
   return db;
 }
 
