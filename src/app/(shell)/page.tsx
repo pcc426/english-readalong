@@ -5,6 +5,7 @@
 // GET /api/units 已按 onlyStandard 过滤；本账号自定义内容在「自定义内容」页。
 // 未登录时 GET /api/units 返回 401，由壳层统一重定向兜底，这里只标加载失败。
 import { useEffect, useState } from "react";
+import { sourceLabel } from "@/lib/content/source-label";
 
 // 与 GET /api/units 响应对应（壳只走 HTTP，不从 src/lib 引类型）
 interface UnitOverview {
@@ -91,7 +92,7 @@ export default function StandardContentPage() {
                 </span>
               </div>
               <p className="mt-1 text-lg text-slate-500">
-                {unit.source} · {unit.sentenceCount} 句
+                {sourceLabel(unit.source)} · {unit.sentenceCount} 句
               </p>
 
               <div className="mt-4 flex flex-wrap gap-2 text-lg font-semibold">

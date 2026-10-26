@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { openDb, dbPath } from "@/lib/db";
 import { getAccountBySession, SESSION_COOKIE } from "@/lib/auth/sessions";
 import { ownedContentDetail } from "@/lib/owned-content";
+import { sourceLabel } from "@/lib/content/source-label";
 import PracticeFlow from "./PracticeFlow";
 
 export const dynamic = "force-dynamic";
@@ -42,7 +43,7 @@ export default async function UnitPage({
       </a>
       <h1 className="mt-1 text-2xl font-bold">{unit.title}</h1>
       <p className="text-base text-slate-500">
-        {unit.source} · {unit.sentences.length} 句
+        {sourceLabel(unit.source)} · {unit.sentences.length} 句
       </p>
       <PracticeFlow unit={unit} />
     </main>
