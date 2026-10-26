@@ -1,4 +1,4 @@
-import type { Db } from "../../db";
+import { dbPath, openDb, type Db } from "../../db";
 import { getTranscriptionService } from "./current";
 import { xunfeiTranscriptionConfigured } from "./env";
 import {
@@ -93,6 +93,8 @@ export interface PollerOptions {
   maxAttempts?: number;
   /** 定时器缝：单测注入队列调度器，生产用全局 setTimeout */
   setTimeoutFn?: (fn: () => void, ms: number) => unknown;
+  /** 连接已关闭时的重开方式（默认 openDb(dbPath())；测试注入临时库） */
+  openDbFn?: () => Db;
 }
 
 interface LoopState {
@@ -107,6 +109,7 @@ export class TranscriptionPoller {
   private readonly maxDelayMs: number;
   private readonly maxAttempts: number;
   private readonly setTimeoutFn: (fn: () => void, ms: number) => unknown;
+  private readonly openDbFn: () => Db;
 
   constructor(
     private readonly db: Db,
@@ -117,6 +120,18 @@ export class TranscriptionPoller {
     this.maxDelayMs = options.maxDelayMs ?? 60000;
     this.maxAttempts = options.maxAttempts ?? 240;
     this.setTimeoutFn = options.setTimeoutFn ?? ((fn, ms) => setTimeout(fn, ms));
+    this.openDbFn = options.openDbFn ?? (() => openDb(dbPath()));
+  }
+
+  /**
+   * 轮询是异步后台任务，而上传请求作用域的连接会在响应结束时关闭。
+   * 原连接已关闭时新开一个（每次操作后释放），避免 "database connection
+   * is not open" 让轮询永久卡住。
+   */
+  private acquire(): { db: Db; release: () => void } {
+    if (this.db.open) return { db: this.db, release: () => {} };
+    const db = this.openDbFn();
+    return { db, release: () => db.close() };
   }
 
   /** 为一个草稿起后台轮询循环；同进程重复 start 直接忽略（防双循环） */
@@ -129,9 +144,14 @@ export class TranscriptionPoller {
 
   /** 重启恢复：把所有该恢复的草稿拉回循环，返回被恢复的草稿 */
   resumeAll(): Draft[] {
-    const drafts = selectResumableDrafts(this.db);
-    for (const draft of drafts) this.start(draft.id);
-    return drafts;
+    const { db, release } = this.acquire();
+    try {
+      const drafts = selectResumableDrafts(db);
+      for (const draft of drafts) this.start(draft.id);
+      return drafts;
+    } finally {
+      release();
+    }
   }
 
   stopAll(): void {
@@ -158,22 +178,27 @@ export class TranscriptionPoller {
         nextPollDelayMs(attempt, this.baseDelayMs, this.maxDelayMs)
       );
       if (state.stop) break;
-      if (attempt > this.maxAttempts) {
-        setTranscribeError(
-          this.db,
-          draftId,
-          `转写轮询 ${this.maxAttempts} 次仍未完成，已暂停自动轮询（可重新触发转写）`
-        );
-        break;
-      }
-      let verdict: PollVerdict;
+      const { db, release } = this.acquire();
       try {
-        verdict = await pollDraftOnce(this.db, this.service, draftId);
-      } catch (err) {
-        setTranscribeError(this.db, draftId, (err as Error).message);
-        verdict = "continue";
+        if (attempt > this.maxAttempts) {
+          setTranscribeError(
+            db,
+            draftId,
+            `转写轮询 ${this.maxAttempts} 次仍未完成，已暂停自动轮询（可重新触发转写）`
+          );
+          break;
+        }
+        let verdict: PollVerdict;
+        try {
+          verdict = await pollDraftOnce(db, this.service, draftId);
+        } catch (err) {
+          setTranscribeError(db, draftId, (err as Error).message);
+          verdict = "continue";
+        }
+        if (state.stop || verdict === "stop") break;
+      } finally {
+        release();
       }
-      if (state.stop || verdict === "stop") break;
     }
     this.loops.delete(draftId);
   }

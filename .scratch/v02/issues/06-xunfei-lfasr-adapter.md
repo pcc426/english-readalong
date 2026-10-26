@@ -21,3 +21,4 @@
 
 - 2026-10-26 真实凭据冒烟通过：标准版（LFASR_MODE=standard）直接接受 mp4，无需抽轨；30 秒教材视频得到 2 句带毫秒起止的文本，`u2-s04.m4a` 亦通过。
 - 实测修正三处实现假设：参数名必须驼峰 `appId`；`signa` 的 HMAC key 是 APISecret；标准版 `orderResult` 是明文 JSON（不是 base64，已兼容两形态）。大模型版适配器亦已实现（LFASR_MODE=llm，默认），供另一套凭据使用。
+- 站内链路实测又修一处并发缺陷：后台轮询器持有上传请求作用域的数据库连接，请求结束连接关闭后轮询报 "database connection is not open" 永久卡住；改为连接已关闭时自动新开（每次轮询后释放），并加回归测试。

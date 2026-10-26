@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { setupDb } from "@/lib/testing/auth-test-utils";
 import type { Db } from "@/lib/db";
+import { openDb } from "@/lib/db";
 import { createAccount, findAccountByEmail } from "@/lib/auth/accounts";
 import {
   completeTranscription,
@@ -195,6 +196,34 @@ describe("TranscriptionPoller（后台循环）", () => {
     expect(getDraft(db, id)!.status).toBe("proofreading");
     expect(service.calls).toHaveLength(3); // 每轮一次，没有重复循环
     expect(poller.polling).toEqual([]);
+  });
+
+  it("请求作用域连接已关闭：轮询自动新开连接继续，不永久卡住", async () => {
+    const db = setup();
+    const id = seedDraft(db, "order-1");
+    const dbFile = process.env.DB_PATH!;
+    db.close(); // 模拟上传请求结束后连接被关掉
+    const service = new ScriptedService([
+      { state: "pending" },
+      {
+        state: "done",
+        sentences: [{ text: "A", startMs: 0, endMs: 500 }],
+      },
+    ]);
+    const scheduler = pumpScheduler();
+    const poller = new TranscriptionPoller(db, service, {
+      setTimeoutFn: scheduler.setTimeoutFn,
+      openDbFn: () => openDb(dbFile),
+    });
+    poller.start(id);
+    await scheduler.pump(10);
+
+    const check = openDb(dbFile);
+    try {
+      expect(getDraft(check, id)!.status).toBe("proofreading");
+    } finally {
+      check.close();
+    }
   });
 
   it("确定失败：错误落库后停止轮询（重试由人触发，不空转）", async () => {
