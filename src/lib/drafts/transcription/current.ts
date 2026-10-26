@@ -2,6 +2,7 @@ import { FakeTranscriptionService } from "./fake";
 import { XunfeiTranscriptionService } from "./xunfei/service";
 import {
   extractAudioFromEnv,
+  missingCredentialsError,
   xunfeiTranscriptionConfigured,
 } from "./env";
 import type { TranscriptionService } from "./types";
@@ -16,6 +17,7 @@ export type {
 
 export {
   extractAudioFromEnv,
+  missingCredentialsError,
   xunfeiTranscriptionConfigured,
 } from "./env";
 
@@ -38,7 +40,10 @@ export function getTranscriptionService(): TranscriptionService {
  * - LFASR_APP_ID / LFASR_API_KEY / LFASR_API_SECRET 三件套齐全 →
  *   讯飞 LFASR 适配器（LFASR_EXTRACT_AUDIO=1 时先 ffmpeg 抽音轨再提交，
  *   mp4 直收与否待真机冒烟确认）；
- * - 否则维持假实现，让链路在开发环境照常走通。
+ * - 生产（NODE_ENV=production）缺三件套 → 抛中文启动错误（票 13），
+ *   不静默回退假转写。经 runTranscription 落到草稿 transcribe_error，
+ *   详情页会显示完整指路文案；
+ * - 开发/测试维持假实现，让链路照常走通。
  */
 export function createTranscriptionServiceFromEnv(
   env: Record<string, string | undefined> = process.env
@@ -50,6 +55,9 @@ export function createTranscriptionServiceFromEnv(
       apiSecret: env.LFASR_API_SECRET!,
       extractAudio: extractAudioFromEnv(env),
     });
+  }
+  if (env.NODE_ENV === "production") {
+    throw missingCredentialsError();
   }
   return new FakeTranscriptionService();
 }

@@ -19,6 +19,19 @@ export function xunfeiTranscriptionConfigured(
 }
 
 /**
+ * 生产环境缺凭据的报错（转写服务工厂的生产守卫，票 13 验收）：
+ * 生产里静默回退假实现会产出假句子并落库，必须当场失败并指路 .env。
+ * 报错文案从 LFASR_CREDENTIAL_KEYS 生成，键名改动时文案自动跟上。
+ */
+export function missingCredentialsError(): Error {
+  return new Error(
+    `生产环境未配置讯飞转写凭据：请在服务器 .env 填写 ${LFASR_CREDENTIAL_KEYS.join(
+      " / "
+    )}（讯飞开放平台「录音文件转写」服务，获取方式见 docs/deploy.md），改完 pm2 restart english-readalong 生效。`
+  );
+}
+
+/**
  * 抽音轨开关：LFASR_EXTRACT_AUDIO=1（或 true）时先 ffmpeg 抽音轨再提交。
  * 默认关——LFASR 标准版格式表列有 mp4，但 FAQ 未列，是否真收视频文件
  * 由 scripts/smoke-lfasr.ts 实机确认后再决定要不要开。

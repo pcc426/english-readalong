@@ -62,4 +62,34 @@ describe("转写服务工厂（env 开关 fake / 讯飞 LFASR）", () => {
         (service as XunfeiTranscriptionService).extractAudio
     ).toBe(true);
   });
+
+  it("生产缺凭据 → 抛中文启动错误，不静默假转写（票 13）", () => {
+    expect(() =>
+      createTranscriptionServiceFromEnv({ NODE_ENV: "production" })
+    ).toThrow(/LFASR_APP_ID \/ LFASR_API_KEY \/ LFASR_API_SECRET/);
+    // 只差一件也拦：留空键视同未配置
+    expect(() =>
+      createTranscriptionServiceFromEnv({
+        ...FULL,
+        LFASR_API_SECRET: "",
+        NODE_ENV: "production",
+      })
+    ).toThrow(/生产环境未配置讯飞转写凭据/);
+  });
+
+  it("生产凭据齐全 → 讯飞适配器，不受守卫影响", () => {
+    expect(
+      createTranscriptionServiceFromEnv({
+        ...FULL,
+        NODE_ENV: "production",
+      }) instanceof XunfeiTranscriptionService
+    ).toBe(true);
+  });
+
+  it("非生产缺凭据 → 假实现（开发链路照常走通）", () => {
+    expect(
+      createTranscriptionServiceFromEnv({ NODE_ENV: "test" }) instanceof
+        FakeTranscriptionService
+    ).toBe(true);
+  });
 });
