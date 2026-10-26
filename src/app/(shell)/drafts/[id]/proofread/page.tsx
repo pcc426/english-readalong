@@ -3,13 +3,19 @@
 // 文本校对页（票 07）：每页 10 句，逐句对照视频画面字幕。
 // 可改文本（失焦或停顿 0.8s 自动保存）、播放本句片段、删除、与下句合并、确认本页；
 // 所有改动即时落草稿，中断后回来接着做。UI 不做自动化，走 iPad 手工验收清单。
+// V0.2 整改：单句保存骨架（saving/saved/error + 防抖 + 没变不发请求）
+// 与切点页共用 useSentenceSave（比对键=文本）。
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
-import SentenceRow, { type RowSaveState } from "@/components/proofread/SentenceRow";
+import { useEffect, useRef, useState } from "react";
+import SentenceRow from "@/components/proofread/SentenceRow";
 import {
   TEXTBOOK_MISALIGNED_HINT,
   textbookAligns,
 } from "@/components/proofread/textbook";
+import {
+  SAVED_HINT_MS,
+  useSentenceSave,
+} from "@/components/shared/use-draft-save";
 import {
   type DraftSentenceView,
   type DraftDetailView,
@@ -19,8 +25,6 @@ import {
 } from "@/components/proofread/types";
 
 const PAGE_SIZE = 10;
-const DEBOUNCE_MS = 800;
-const SAVED_HINT_MS = 1500;
 
 export default function ProofreadPage() {
   const params = useParams<{ id: string }>();
@@ -35,7 +39,6 @@ export default function ProofreadPage() {
   const [textbookFailed, setTextbookFailed] = useState(false);
 
   const [page, setPage] = useState(0);
-  const [saveStates, setSaveStates] = useState<Record<number, RowSaveState>>({});
   const [mutating, setMutating] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
@@ -44,11 +47,28 @@ export default function ProofreadPage() {
 
   const sentencesRef = useRef(sentences);
   sentencesRef.current = sentences;
-  /** 每句最近一次服务端文本：判断「没改就不发请求」 */
-  const serverTexts = useRef<Record<number, string>>({});
-  /** 每句的防抖保存定时器 */
-  const timers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  const {
+    saveStates,
+    commitSave,
+    scheduleSave,
+    seedServerState,
+    clearTimers,
+    cancelTimer,
+    clearSaveStates,
+    noteServerSentence,
+  } = useSentenceSave({
+    draftId: id,
+    keyOf: (s) => s.text,
+    bodyFor: (s) => ({ text: s.text }),
+    applySentence: (sentence) =>
+      setSentences((prev) =>
+        prev.map((s) => (s.index === sentence.index ? sentence : s))
+      ),
+    getSentence: (index) =>
+      sentencesRef.current.find((s) => s.index === index),
+  });
 
   useEffect(() => {
     if (!id) return;
@@ -70,9 +90,7 @@ export default function ProofreadPage() {
         if (body.draft) {
           setDraft(body.draft);
           setSentences(body.draft.sentences);
-          serverTexts.current = Object.fromEntries(
-            body.draft.sentences.map((s) => [s.index, s.text])
-          );
+          seedServerState(body.draft.sentences);
           // 票 12：standard 草稿拉取教材原文做参照（加载失败不阻断校对，只提示）
           if (body.draft.type === "standard" && body.draft.unitId && body.draft.moduleKind) {
             const query = new URLSearchParams({
@@ -102,7 +120,7 @@ export default function ProofreadPage() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, seedServerState]);
 
   const pageCount = Math.max(1, Math.ceil(sentences.length / PAGE_SIZE));
   const current = Math.min(page, pageCount - 1);
@@ -116,75 +134,23 @@ export default function ProofreadPage() {
 
   /** 服务端返回整个数组时整体换血（删除/合并后序号变了），顺带清编辑现场 */
   function applySentences(next: DraftSentenceView[]) {
-    for (const t of Object.values(timers.current)) clearTimeout(t);
-    timers.current = {};
+    clearTimers();
     videoRef.current?.pause();
     setPlayingIndex(null);
-    setSaveStates({});
+    clearSaveStates();
     setSentences(next);
-    serverTexts.current = Object.fromEntries(
-      next.map((s) => [s.index, s.text])
-    );
+    seedServerState(next);
   }
-
-  /** 保存一句：overrides 供「确认本页」（confirm:true）与「采用教材原文」（text，票 12）
-   * 用；缺省按手工改动保存当前文本。带 overrides 时跳过「没改就不发」。 */
-  const commitSave = useCallback(
-    async (index: number, overrides?: { confirm?: boolean; text?: string }) => {
-      const target = sentencesRef.current.find((s) => s.index === index);
-      if (!target) return;
-      const confirm = overrides?.confirm ?? false;
-      const text = overrides?.text ?? target.text;
-      if (!overrides && target.text === serverTexts.current[index]) {
-        setSaveStates((prev) => {
-          if (!(index in prev)) return prev;
-          const next = { ...prev };
-          delete next[index];
-          return next;
-        });
-        return;
-      }
-      setSaveStates((prev) => ({ ...prev, [index]: "saving" }));
-      try {
-        const res = await fetch(`/api/drafts/${id}/sentences/${index}`, {
-          method: "PUT",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(
-            confirm ? { text, confirm: true } : { text }
-          ),
-        });
-        if (!res.ok) throw new Error(String(res.status));
-        const body = (await res.json()) as SentenceUpdateResponse;
-        serverTexts.current[index] = body.sentence.text;
-        setSentences((prev) =>
-          prev.map((s) => (s.index === index ? body.sentence : s))
-        );
-        setSaveStates((prev) => ({ ...prev, [index]: "saved" }));
-        setTimeout(() => {
-          setSaveStates((prev) => {
-            if (prev[index] !== "saved") return prev;
-            const next = { ...prev };
-            delete next[index];
-            return next;
-          });
-        }, SAVED_HINT_MS);
-      } catch {
-        setSaveStates((prev) => ({ ...prev, [index]: "error" }));
-      }
-    },
-    [id]
-  );
 
   function handleTextChange(index: number, text: string) {
     setSentences((prev) =>
       prev.map((s) => (s.index === index ? { ...s, text } : s))
     );
-    clearTimeout(timers.current[index]);
-    timers.current[index] = setTimeout(() => void commitSave(index), DEBOUNCE_MS);
+    scheduleSave(index);
   }
 
   function handleCommit(index: number) {
-    clearTimeout(timers.current[index]);
+    cancelTimer(index);
     void commitSave(index);
   }
 
@@ -195,8 +161,7 @@ export default function ProofreadPage() {
     setConfirming(true);
     setConfirmDone(false);
     setActionError(null);
-    for (const t of Object.values(timers.current)) clearTimeout(t);
-    timers.current = {};
+    clearTimers();
     let ok = true;
     for (const s of pageSentences) {
       try {
@@ -207,10 +172,7 @@ export default function ProofreadPage() {
         });
         if (!res.ok) throw new Error(String(res.status));
         const body = (await res.json()) as SentenceUpdateResponse;
-        serverTexts.current[s.index] = body.sentence.text;
-        setSentences((prev) =>
-          prev.map((x) => (x.index === s.index ? body.sentence : x))
-        );
+        noteServerSentence(body.sentence);
       } catch {
         ok = false;
         break;
@@ -266,11 +228,15 @@ export default function ProofreadPage() {
   }
 
   /** 票 12：一键采用本句的教材原文（走既有 PUT 端点）；
-   * ASR 文本与起止时间不被删除，只是文本被替换，仍可继续手工修改 */
+   * ASR 文本与起止时间不被删除，只是文本被替换，仍可继续手工修改。
+   * 仅在 1:1 对齐时可达（textbookAligned 门禁在渲染层）。 */
   function handleAdopt(sentence: DraftSentenceView) {
     if (!textbookSentences || sentence.index >= textbookSentences.length) return;
-    clearTimeout(timers.current[sentence.index]);
-    void commitSave(sentence.index, { text: textbookSentences[sentence.index] });
+    cancelTimer(sentence.index);
+    void commitSave(sentence.index, {
+      force: true,
+      body: { text: textbookSentences[sentence.index] },
+    });
   }
 
   function playSentence(sentence: DraftSentenceView) {

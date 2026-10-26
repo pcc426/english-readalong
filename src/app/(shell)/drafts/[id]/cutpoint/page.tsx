@@ -4,18 +4,19 @@
 // 「导出 JSON 发给 Claude」流程退役，起止时间经 PUT /api/drafts/[id]/sentences/[index]
 // 直接保存回草稿（微调后 0.8s 防抖自动保存，切句前立即补存），重进接着调。
 // 任意草稿可用，自定义视频走 /api/media 鉴权流。UI 不做自动化，走 iPad 手工验收清单。
+// V0.2 整改：单句保存骨架（saving/saved/error + 防抖 + 没变不发请求）
+// 与文本校对页共用 useSentenceSave（比对键=起止毫秒对）。
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
-import ClipCard, { type ClipSaveState } from "@/components/cutpoint/ClipCard";
+import { useEffect, useRef, useState } from "react";
+import ClipCard from "@/components/cutpoint/ClipCard";
 import { adjustBoundsMs, MIN_CLIP_MS } from "@/lib/domain/calibrate";
+import {
+  useSentenceSave,
+} from "@/components/shared/use-draft-save";
 import type {
   DraftDetailView,
   DraftSentenceView,
-  SentenceUpdateResponse,
 } from "@/components/proofread/types";
-
-const DEBOUNCE_MS = 800;
-const SAVED_HINT_MS = 1500;
 
 export default function CutpointPage() {
   const params = useParams<{ id: string }>();
@@ -28,15 +29,28 @@ export default function CutpointPage() {
 
   const [current, setCurrent] = useState(0);
   const [playingIndex, setPlayingIndex] = useState<number | null>(null);
-  const [saveStates, setSaveStates] = useState<Record<number, ClipSaveState>>({});
 
   const sentencesRef = useRef(sentences);
   sentencesRef.current = sentences;
-  /** 每句最近一次保存到服务端的起止：判断「没变就不发请求」 */
-  const serverBounds = useRef<Record<number, string>>({});
-  /** 每句的防抖保存定时器 */
-  const timers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  const {
+    saveStates,
+    commitSave,
+    scheduleSave,
+    seedServerState,
+    cancelTimer,
+  } = useSentenceSave({
+    draftId: id,
+    keyOf: (s) => `${s.startMs}-${s.endMs}`,
+    bodyFor: (s) => ({ startMs: s.startMs, endMs: s.endMs }),
+    applySentence: (sentence) =>
+      setSentences((prev) =>
+        prev.map((s) => (s.index === sentence.index ? sentence : s))
+      ),
+    getSentence: (index) =>
+      sentencesRef.current.find((s) => s.index === index),
+  });
 
   useEffect(() => {
     if (!id) return;
@@ -59,9 +73,7 @@ export default function CutpointPage() {
           setDraft(body.draft);
           setSentences(body.draft.sentences);
           setCurrent(body.draft.sentences[0]?.index ?? 0);
-          serverBounds.current = Object.fromEntries(
-            body.draft.sentences.map((s) => [s.index, `${s.startMs}-${s.endMs}`])
-          );
+          seedServerState(body.draft.sentences);
         } else {
           setFailed(true);
         }
@@ -72,54 +84,10 @@ export default function CutpointPage() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, seedServerState]);
 
   const currentSentence =
     sentences.find((s) => s.index === current) ?? sentences[0] ?? null;
-
-  /** 保存一句的起止时间：没变不发请求 */
-  const commitSave = useCallback(
-    async (index: number) => {
-      const target = sentencesRef.current.find((s) => s.index === index);
-      if (!target || !id) return;
-      const key = `${target.startMs}-${target.endMs}`;
-      if (serverBounds.current[index] === key) {
-        setSaveStates((prev) => {
-          if (!(index in prev)) return prev;
-          const next = { ...prev };
-          delete next[index];
-          return next;
-        });
-        return;
-      }
-      setSaveStates((prev) => ({ ...prev, [index]: "saving" }));
-      try {
-        const res = await fetch(`/api/drafts/${id}/sentences/${index}`, {
-          method: "PUT",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ startMs: target.startMs, endMs: target.endMs }),
-        });
-        if (!res.ok) throw new Error(String(res.status));
-        const body = (await res.json()) as SentenceUpdateResponse;
-        serverBounds.current[index] = `${body.sentence.startMs}-${body.sentence.endMs}`;
-        setSentences((prev) =>
-          prev.map((s) => (s.index === index ? body.sentence : s))
-        );
-        setSaveStates((prev) => ({ ...prev, [index]: "saved" }));
-        setTimeout(() => {
-          setSaveStates((prev) => {
-            if (prev[index] !== "saved") return prev;
-            const next = { ...prev };
-            delete next[index];
-            return next;
-          });
-        }, SAVED_HINT_MS);
-      } catch {
-        setSaveStates((prev) => ({ ...prev, [index]: "error" }));
-      }
-    },
-    [id]
-  );
 
   /** 微调当前句的某一边：领域层钳制（起点 ≥ 0、最短片段 200ms），
    * 终点另外不越过视频末尾（时长未知时不设上限，服务端校验兜底），
@@ -144,14 +112,13 @@ export default function CutpointPage() {
         return { ...s, startMs: start, endMs };
       })
     );
-    clearTimeout(timers.current[index]);
-    timers.current[index] = setTimeout(() => void commitSave(index), DEBOUNCE_MS);
+    scheduleSave(index);
   }
 
   /** 切句：先把当前句未触发的防抖立即提交，再换句并停掉片段播放 */
   function selectSentence(index: number) {
     if (index === current) return;
-    clearTimeout(timers.current[current]);
+    cancelTimer(current);
     void commitSave(current);
     videoRef.current?.pause();
     setPlayingIndex(null);

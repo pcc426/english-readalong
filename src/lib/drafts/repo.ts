@@ -171,6 +171,25 @@ export function listDraftSentences(db: Db, draftId: string): DraftSentence[] {
   }));
 }
 
+/** 一批草稿的句子计数（V0.2 整改：草稿列表用，一次 GROUP BY 取代逐草稿查询）。
+ * 没有句子的草稿不在结果里（按 0 处理是调用方的事）。 */
+export function sentenceCountsByDraft(
+  db: Db,
+  draftIds: readonly string[]
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  if (draftIds.length === 0) return counts;
+  const placeholders = draftIds.map(() => "?").join(", ");
+  const rows = db
+    .prepare(
+      `SELECT draft_id, COUNT(*) AS n FROM draft_sentences
+       WHERE draft_id IN (${placeholders}) GROUP BY draft_id`
+    )
+    .all(...draftIds) as Array<{ draft_id: string; n: number }>;
+  for (const row of rows) counts.set(row.draft_id, row.n);
+  return counts;
+}
+
 /** 删草稿（连同句子，显式事务；better-sqlite3 默认不开外键级联） */
 export function deleteDraft(db: Db, id: string): void {
   const tx = db.transaction(() => {

@@ -2,7 +2,7 @@
 // 草稿归属与 proofreading 状态门禁属 API 路由守卫，在这里不测。
 import { describe, expect, it } from "vitest";
 import { setupDb, sessionCookieFor } from "@/lib/testing/auth-test-utils";
-import { createDraft, listDraftSentences, completeTranscription } from "./repo";
+import { createDraft, listDraftSentences, completeTranscription, sentenceCountsByDraft } from "./repo";
 import {
   SentenceEditError,
   deleteSentence,
@@ -293,5 +293,33 @@ describe("mergeText", () => {
   it("一侧已带边界空格时不产生双空格", () => {
     expect(mergeText("Hello ", "there")).toBe("Hello there");
     expect(mergeText("Hello", " there")).toBe("Hello there");
+  });
+});
+
+describe("sentenceCountsByDraft（V0.2 整改：草稿列表批量计数）", () => {
+  it("一次查询返回各草稿句数，无句草稿按 0 兜底由调用方处理", () => {
+    const db = setupDb("ra-counts");
+    sessionCookieFor("parent@test.com");
+    const accountId = (
+      db.prepare("SELECT id FROM accounts LIMIT 1").get() as { id: string }
+    ).id;
+    const withThree = createDraft(db, { accountId, title: "三句" });
+    completeTranscription(db, withThree.id, SEED);
+    const withOne = createDraft(db, { accountId, title: "一句" });
+    completeTranscription(db, withOne.id, [SEED[0]]);
+    const empty = createDraft(db, { accountId, title: "无句" });
+
+    const counts = sentenceCountsByDraft(db, [withThree.id, withOne.id, empty.id]);
+
+    expect(counts.get(withThree.id)).toBe(3);
+    expect(counts.get(withOne.id)).toBe(1);
+    expect(counts.has(empty.id)).toBe(false);
+    // 与逐草稿 listDraftSentences 的口径一致
+    expect(counts.get(withThree.id)).toBe(listDraftSentences(db, withThree.id).length);
+  });
+
+  it("空批次直接返回空映射，不发查询", () => {
+    const db = setupDb("ra-counts-empty");
+    expect(sentenceCountsByDraft(db, []).size).toBe(0);
   });
 });

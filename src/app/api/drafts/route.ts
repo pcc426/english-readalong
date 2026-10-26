@@ -5,7 +5,7 @@
 import { NextResponse } from "next/server";
 import { requireAccount } from "@/lib/auth/guard";
 import { openDb, dbPath } from "@/lib/db";
-import { listDraftsByAccount, listDraftSentences } from "@/lib/drafts/repo";
+import { listDraftsByAccount, sentenceCountsByDraft } from "@/lib/drafts/repo";
 import { draftModuleMapByAccount } from "@/lib/drafts/standard-drafts";
 
 export const dynamic = "force-dynamic";
@@ -22,20 +22,27 @@ export async function GET(req: Request) {
   const db = openDb(dbPath());
   try {
     const modules = draftModuleMapByAccount(db, auth.account.id);
-    const drafts = listDraftsByAccount(db, auth.account.id, type ?? undefined).map((d) => {
-      const module = modules.get(d.id);
-      return {
-        id: d.id,
-        title: d.title,
-        type: d.type,
-        unitId: module?.unitId ?? null,
-        moduleKind: module?.moduleKind ?? null,
-        status: d.status,
-        sentenceCount: listDraftSentences(db, d.id).length,
-        createdAt: d.createdAt,
-      };
+    const drafts = listDraftsByAccount(db, auth.account.id, type ?? undefined);
+    // V0.2 整改：句子计数一次批量查询，取代逐草稿 N+1
+    const counts = sentenceCountsByDraft(
+      db,
+      drafts.map((d) => d.id)
+    );
+    return NextResponse.json({
+      drafts: drafts.map((d) => {
+        const module = modules.get(d.id);
+        return {
+          id: d.id,
+          title: d.title,
+          type: d.type,
+          unitId: module?.unitId ?? null,
+          moduleKind: module?.moduleKind ?? null,
+          status: d.status,
+          sentenceCount: counts.get(d.id) ?? 0,
+          createdAt: d.createdAt,
+        };
+      }),
     });
-    return NextResponse.json({ drafts });
   } finally {
     db.close();
   }
