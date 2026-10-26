@@ -16,6 +16,9 @@ next-env.d.ts
 # 本地素材暂存区（原始视频/教材 PDF，不部署不上线；正式内容走 public/media 与 content/units）
 materials/
 
+# 运行时数据（上传视频、自定义/运行时标准内容包、数据库），部署不覆盖
+data/
+
 # SQLite 数据库文件（运行时数据）
 *.db
 *.db-journal
