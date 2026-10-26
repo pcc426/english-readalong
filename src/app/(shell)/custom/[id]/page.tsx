@@ -2,8 +2,10 @@
 
 // 草稿详情（票 05）：只读展示转写句子与起止时间 + 鉴权视频播放。
 // 校对入口：文本校对（票 07）+ 切点校对（票 08）。
+// V0.2 整改：家长定稿入口——proofreading 状态可在此「定稿发布」
+// （POST /api/drafts/[id]/publish，票 09 端点），422 的逐句问题就地展示。
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 interface DraftSentenceView {
   index: number;
@@ -20,6 +22,12 @@ interface DraftDetail {
   videoUrl: string;
   transcribeError: string | null;
   sentences: DraftSentenceView[];
+}
+
+/** 定稿 422 响应里的逐句问题（与 POST /api/drafts/[id]/publish 响应对应） */
+interface PublishIssue {
+  index: number | null;
+  problem: string;
 }
 
 const STATUS_BADGES: Record<DraftDetail["status"], { label: string; className: string }> = {
@@ -41,27 +49,87 @@ export default function DraftDetailPage() {
   const id = params?.id;
   const [draft, setDraft] = useState<DraftDetail | null>(null);
   const [failed, setFailed] = useState(false);
+  // V0.2 整改：定稿发布的进行中/结果反馈
+  const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [publishIssues, setPublishIssues] = useState<PublishIssue[] | null>(null);
+  const [justPublished, setJustPublished] = useState(false);
+  // V0.2 整改：转写失败重试的进行中/结果反馈
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
+
+  const loadDraft = useCallback(async () => {
+    if (!id) return;
+    try {
+      const res = await fetch(`/api/drafts/${id}`);
+      if (!res.ok) {
+        setFailed(true);
+        return;
+      }
+      const body = (await res.json()) as { draft?: DraftDetail };
+      setDraft(body.draft ?? null);
+    } catch {
+      setFailed(true);
+    }
+  }, [id]);
 
   useEffect(() => {
-    if (!id) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch(`/api/drafts/${id}`);
-        if (!res.ok) {
-          if (!cancelled) setFailed(true);
-          return;
-        }
-        const body = (await res.json()) as { draft?: DraftDetail };
-        if (!cancelled) setDraft(body.draft ?? null);
-      } catch {
-        if (!cancelled) setFailed(true);
+    void loadDraft();
+  }, [loadDraft]);
+
+  /** V0.2 整改：转写失败重试（POST /api/drafts/[id]/retry-transcription）。
+   * 成功后整份详情重拉（fake 模式立即完成、真实 provider 清错误继续转写）。 */
+  async function handleRetryTranscription() {
+    if (!id || retrying) return;
+    setRetrying(true);
+    setRetryError(null);
+    try {
+      const res = await fetch(`/api/drafts/${id}/retry-transcription`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        await loadDraft();
+        return;
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
+      const body = (await res.json().catch(() => null)) as {
+        error?: { message?: string };
+      } | null;
+      setRetryError(body?.error?.message ?? "重试失败，请稍后再试");
+    } catch {
+      setRetryError("网络开小差了，请重试");
+    } finally {
+      setRetrying(false);
+    }
+  }
+
+  /** V0.2 整改：定稿发布（票 09 端点）。422 时逐句问题就地展示，
+   * 成功后状态就地置 published 并提示可去练习。 */
+  async function handlePublish() {
+    if (!id || publishing) return;
+    if (!window.confirm(`确定把「${draft?.title ?? ""}」定稿发布吗？定稿后就可以开始跟读了。`)) {
+      return;
+    }
+    setPublishing(true);
+    setPublishError(null);
+    setPublishIssues(null);
+    try {
+      const res = await fetch(`/api/drafts/${id}/publish`, { method: "POST" });
+      if (res.ok) {
+        setDraft((prev) => (prev ? { ...prev, status: "published" } : prev));
+        setJustPublished(true);
+        return;
+      }
+      const body = (await res.json().catch(() => null)) as {
+        error?: { message?: string; issues?: PublishIssue[] };
+      } | null;
+      setPublishError(body?.error?.message ?? "定稿失败，请重试");
+      setPublishIssues(body?.error?.issues ?? null);
+    } catch {
+      setPublishError("网络开小差了，请重试");
+    } finally {
+      setPublishing(false);
+    }
+  }
 
   if (failed || draft === null) {
     return (
@@ -89,15 +157,34 @@ export default function DraftDetailPage() {
         </span>
       </div>
 
-      {draft.status === "transcribing" && (
+      {draft.status === "transcribing" && !draft.transcribeError && (
         <p className="mt-4 rounded-2xl bg-sky-50 px-5 py-4 text-lg text-sky-700">
           正在转写，完成后回来校对句子。
         </p>
       )}
       {draft.transcribeError && (
-        <p className="mt-4 rounded-2xl bg-red-50 px-5 py-4 text-lg text-red-600" role="alert">
-          转写失败：{draft.transcribeError}
-        </p>
+        <div
+          className="mt-4 rounded-2xl bg-red-50 px-5 py-4 text-lg text-red-600"
+          role="alert"
+        >
+          <p>转写失败：{draft.transcribeError}</p>
+          {/* V0.2 整改：转写失败的草稿可就地重试（真实引擎重新提交，fake 立即完成） */}
+          {draft.status === "transcribing" && (
+            <>
+              {retryError && (
+                <p className="mt-2 text-base text-red-700">{retryError}</p>
+              )}
+              <button
+                type="button"
+                onClick={() => void handleRetryTranscription()}
+                disabled={retrying}
+                className="mt-3 rounded-2xl bg-white px-5 py-2 text-lg font-semibold text-red-600 ring-1 ring-red-200 active:bg-red-100 disabled:opacity-40"
+              >
+                {retrying ? "重试中…" : "重试转写"}
+              </button>
+            </>
+          )}
+        </div>
       )}
 
       {draft.videoUrl && (
@@ -142,6 +229,53 @@ export default function DraftDetailPage() {
         >
           切点校对（微调起止时间）→
         </a>
+      )}
+
+      {/* V0.2 整改：家长定稿入口（票 09 端点；422 逐句问题就地展示） */}
+      {draft.status === "proofreading" && (
+        <>
+          {publishError && (
+            <div
+              role="alert"
+              className="mt-4 rounded-2xl bg-red-50 px-5 py-4 text-lg text-red-600"
+            >
+              <p>{publishError}</p>
+              {publishIssues && publishIssues.length > 0 && (
+                <ul className="mt-2 list-disc space-y-1 pl-6">
+                  {publishIssues.map((issue, i) => (
+                    <li key={i}>
+                      {issue.index === null ? issue.problem : `第 ${issue.index + 1} 句：${issue.problem}`}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => void handlePublish()}
+            disabled={publishing}
+            className="mt-3 w-full rounded-2xl bg-white py-4 text-center text-xl font-bold text-emerald-700 shadow-md ring-1 ring-emerald-200 active:bg-emerald-50 disabled:opacity-40"
+          >
+            {publishing ? "定稿中…" : "定稿发布"}
+          </button>
+        </>
+      )}
+      {draft.status === "published" && justPublished && (
+        <>
+          <p
+            role="status"
+            className="mt-6 rounded-2xl bg-emerald-50 px-5 py-4 text-lg text-emerald-700"
+          >
+            已定稿发布！现在可以开始跟读了。
+          </p>
+          <a
+            href={`/units/${draft.id}`}
+            className="mt-3 block rounded-2xl bg-emerald-500 py-4 text-center text-xl font-bold text-white shadow-md active:bg-emerald-600"
+          >
+            去练习 →
+          </a>
+        </>
       )}
     </div>
   );
