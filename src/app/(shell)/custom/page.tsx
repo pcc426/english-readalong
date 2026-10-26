@@ -7,6 +7,11 @@
 // 前置提示只是体验层校验，真实大小/时长/格式校验以服务端为准（spec 用户故事 30）；
 // UI 不做自动化测试，走 iPad 真机手工验收清单（spec · Testing Decisions）。
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { STATUS_BADGES } from "@/components/shared/draft-ui";
+import {
+  MAX_MB,
+  precheckVideoFile,
+} from "@/components/shared/upload-precheck";
 
 // 与 GET /api/drafts 响应对应（壳只走 HTTP，不从 src/lib 引类型）
 interface DraftOverview {
@@ -17,15 +22,6 @@ interface DraftOverview {
   sentenceCount: number;
   createdAt: string;
 }
-
-const STATUS_BADGES: Record<DraftOverview["status"], { label: string; className: string }> = {
-  transcribing: { label: "转写中", className: "bg-sky-100 text-sky-700" },
-  proofreading: { label: "未校对", className: "bg-amber-100 text-amber-700" },
-  published: { label: "已定稿", className: "bg-emerald-100 text-emerald-700" },
-};
-
-const MAX_MB = 200;
-const OK_EXTENSIONS = ["mp4", "m4v", "mov"];
 
 export default function CustomContentPage() {
   const [drafts, setDrafts] = useState<DraftOverview[] | null>(null);
@@ -56,21 +52,10 @@ export default function CustomContentPage() {
     void loadDrafts();
   }, [loadDrafts]);
 
-  function precheck(f: File): string | null {
-    const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
-    if (!OK_EXTENSIONS.includes(ext)) {
-      return "仅支持 mp4 / m4v / mov 视频";
-    }
-    if (f.size > MAX_MB * 1024 * 1024) {
-      return `视频超过 ${MAX_MB}MB，请压缩后再上传`;
-    }
-    return null;
-  }
-
   function handleFileChange(f: File | null) {
     setError(null);
     if (f) {
-      const problem = precheck(f);
+      const problem = precheckVideoFile(f);
       if (problem) {
         setError(problem);
         setFile(null);

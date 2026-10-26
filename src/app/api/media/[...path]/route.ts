@@ -10,16 +10,10 @@ import { Readable } from "node:stream";
 import { NextResponse } from "next/server";
 import { requireAccount } from "@/lib/auth/guard";
 import { errorResponse } from "@/lib/http";
-import { parseMediaRelPath, videoAbsPath } from "@/lib/drafts/storage";
+import { parseMediaRelPath, videoAbsPath, VIDEO_CONTENT_TYPES } from "@/lib/drafts/storage";
 import { listContent } from "@/lib/content/loader";
 
 export const dynamic = "force-dynamic";
-
-const CONTENT_TYPES: Record<string, string> = {
-  mp4: "video/mp4",
-  m4v: "video/x-m4v",
-  mov: "video/quicktime",
-};
 
 /** 该相对路径是否被某个公开标准内容包引用（仅标准视图，不含任何自定义包） */
 function isStandardPackVideo(relPath: string): boolean {
@@ -51,7 +45,8 @@ export async function GET(
 
   const ext = path.extname(abs).slice(1).toLowerCase();
   const headers = new Headers({
-    "content-type": CONTENT_TYPES[ext] ?? "application/octet-stream",
+    // ext→mime 单一来源在 storage.ts（与上传格式校验同一处维护）
+    "content-type": VIDEO_CONTENT_TYPES[ext] ?? "application/octet-stream",
     "accept-ranges": "bytes",
   });
 

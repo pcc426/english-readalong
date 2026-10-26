@@ -9,7 +9,7 @@ import {
   type FfmpegRunner,
   type UploadPayloadBuilder,
 } from "./payload";
-import { parseLfasrSentences } from "./parse";
+import { isRecord, parseLfasrSentences } from "./parse";
 import { lfasrSigna } from "./signa";
 import type { DurationProbe } from "../../probe";
 
@@ -204,8 +204,4 @@ function decodeOrderResult(raw: unknown): unknown {
   } catch {
     return null;
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

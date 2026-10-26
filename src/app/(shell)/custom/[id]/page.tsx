@@ -4,25 +4,14 @@
 // 校对入口：文本校对（票 07）+ 切点校对（票 08）。
 // V0.2 整改：家长定稿入口——proofreading 状态可在此「定稿发布」
 // （POST /api/drafts/[id]/publish，票 09 端点），422 的逐句问题就地展示。
+// 视图类型复用 components/proofread/types（与 GET /api/drafts/[id] 响应一致）。
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-
-interface DraftSentenceView {
-  index: number;
-  text: string;
-  startMs: number;
-  endMs: number;
-  proofread: string;
-}
-
-interface DraftDetail {
-  id: string;
-  title: string;
-  status: "transcribing" | "proofreading" | "published";
-  videoUrl: string;
-  transcribeError: string | null;
-  sentences: DraftSentenceView[];
-}
+import {
+  STATUS_BADGES,
+  formatMs,
+} from "@/components/shared/draft-ui";
+import type { DraftDetailView } from "@/components/proofread/types";
 
 /** 定稿 422 响应里的逐句问题（与 POST /api/drafts/[id]/publish 响应对应） */
 interface PublishIssue {
@@ -30,24 +19,10 @@ interface PublishIssue {
   problem: string;
 }
 
-const STATUS_BADGES: Record<DraftDetail["status"], { label: string; className: string }> = {
-  transcribing: { label: "转写中", className: "bg-sky-100 text-sky-700" },
-  proofreading: { label: "未校对", className: "bg-amber-100 text-amber-700" },
-  published: { label: "已定稿", className: "bg-emerald-100 text-emerald-700" },
-};
-
-/** 毫秒 → m:ss.s（校对页也按这个口径展示起止） */
-function formatMs(ms: number): string {
-  const total = ms / 1000;
-  const m = Math.floor(total / 60);
-  const s = total - m * 60;
-  return `${m}:${s.toFixed(1).padStart(4, "0")}`;
-}
-
 export default function DraftDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params?.id;
-  const [draft, setDraft] = useState<DraftDetail | null>(null);
+  const [draft, setDraft] = useState<DraftDetailView | null>(null);
   const [failed, setFailed] = useState(false);
   // V0.2 整改：定稿发布的进行中/结果反馈
   const [publishing, setPublishing] = useState(false);
@@ -66,7 +41,7 @@ export default function DraftDetailPage() {
         setFailed(true);
         return;
       }
-      const body = (await res.json()) as { draft?: DraftDetail };
+      const body = (await res.json()) as { draft?: DraftDetailView };
       setDraft(body.draft ?? null);
     } catch {
       setFailed(true);

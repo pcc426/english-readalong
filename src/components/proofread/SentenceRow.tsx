@@ -2,17 +2,10 @@
 
 // 文本校对页的单句行（票 07）：可编辑文本 + 播放本句 + 删除 + 与下句合并。
 // 保存反馈分四态：保存中… / 已保存 ✓ / 保存失败，请重试 / 无提示。
+import { formatMs } from "@/components/shared/draft-ui";
 import type { DraftSentenceView } from "./types";
 
 export type RowSaveState = "saving" | "saved" | "error";
-
-/** 毫秒 → m:ss.s（与草稿详情页同一口径） */
-function formatMs(ms: number): string {
-  const total = ms / 1000;
-  const m = Math.floor(total / 60);
-  const s = total - m * 60;
-  return `${m}:${s.toFixed(1).padStart(4, "0")}`;
-}
 
 const SAVE_HINTS: Record<RowSaveState, { text: string; className: string }> = {
   saving: { text: "保存中…", className: "text-slate-400" },

@@ -5,6 +5,11 @@
 // 管理员与教材单元）；定稿走 POST /api/drafts/[id]/publish（09 号票端点，
 // standard 包落在公开标准目录，全账号可见）。UI 不做自动化测试，走手工验收清单。
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { STATUS_BADGES } from "@/components/shared/draft-ui";
+import {
+  MAX_MB,
+  precheckVideoFile,
+} from "@/components/shared/upload-precheck";
 
 export interface TextbookCatalogUnit {
   unitId: string;
@@ -28,18 +33,6 @@ interface StandardDraftOverview {
 }
 
 type AccessState = "loading" | "allowed" | "denied";
-
-const STATUS_BADGES: Record<
-  StandardDraftOverview["status"],
-  { label: string; className: string }
-> = {
-  transcribing: { label: "转写中", className: "bg-sky-100 text-sky-700" },
-  proofreading: { label: "未校对", className: "bg-amber-100 text-amber-700" },
-  published: { label: "已定稿", className: "bg-emerald-100 text-emerald-700" },
-};
-
-const MAX_MB = 200;
-const OK_EXTENSIONS = ["mp4", "m4v", "mov"];
 
 export default function StandardAdminClient({
   catalog,
@@ -107,15 +100,9 @@ export default function StandardAdminClient({
   function handleFileChange(f: File | null) {
     setError(null);
     if (f) {
-      const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
-      if (!OK_EXTENSIONS.includes(ext)) {
-        setError("仅支持 mp4 / m4v / mov 视频");
-        setFile(null);
-        if (fileInputRef.current) fileInputRef.current.value = "";
-        return;
-      }
-      if (f.size > MAX_MB * 1024 * 1024) {
-        setError(`视频超过 ${MAX_MB}MB，请压缩后再上传`);
+      const problem = precheckVideoFile(f);
+      if (problem) {
+        setError(problem);
         setFile(null);
         if (fileInputRef.current) fileInputRef.current.value = "";
         return;

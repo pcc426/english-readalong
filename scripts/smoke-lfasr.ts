@@ -14,6 +14,7 @@ import { createUploadPayloadBuilder } from "../src/lib/drafts/transcription/xunf
 import {
   XunfeiTranscriptionService,
 } from "../src/lib/drafts/transcription/xunfei/service.ts";
+import { xunfeiTranscriptionConfigured } from "../src/lib/drafts/transcription/env.ts";
 
 const DEFAULT_FIXTURE = path.join(
   import.meta.dirname,
@@ -25,15 +26,16 @@ const POLL_TIMEOUT_MS = 10 * 60 * 1000; // 小文件 10 分钟足够（讯飞 SL
 const VIDEO_EXTS = new Set([".mp4", ".mov", ".m4v"]);
 
 async function main() {
-  const appId = process.env.LFASR_APP_ID;
-  const apiKey = process.env.LFASR_API_KEY;
-  const apiSecret = process.env.LFASR_API_SECRET;
-  if (!appId || !apiKey || !apiSecret) {
+  // 凭据检查复用 env.ts 的单一来源（V0.2 整改）；三件套值仍从 env 逐个取
+  if (!xunfeiTranscriptionConfigured(process.env)) {
     console.log(
       "SKIP: 未配置 LFASR_APP_ID / LFASR_API_KEY / LFASR_API_SECRET（.env），不跑真实冒烟"
     );
     return;
   }
+  const appId = process.env.LFASR_APP_ID;
+  const apiKey = process.env.LFASR_API_KEY;
+  const apiSecret = process.env.LFASR_API_SECRET;
 
   const filePath = process.argv[2] ?? DEFAULT_FIXTURE;
   const ext = path.extname(filePath).toLowerCase();
@@ -58,8 +60,9 @@ async function main() {
       `样本: ${filePath}（${payload.data.length} bytes，时长约 ${payload.durationSec}s）`
     );
 
+    // xunfeiTranscriptionConfigured 已确保三件套非空；TS 无法跨函数收窄，此处断言
     const service = new XunfeiTranscriptionService(
-      { appId, apiKey, apiSecret },
+      { appId: appId!, apiKey: apiKey!, apiSecret: apiSecret! },
       { buildPayload }
     );
 

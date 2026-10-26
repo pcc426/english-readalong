@@ -8,11 +8,25 @@ import type { ReadableStream as NodeWebReadableStream } from "node:stream/web";
 export const MAX_UPLOAD_BYTES = 200 * 1024 * 1024;
 export const MAX_DURATION_MS = 5 * 60 * 1000;
 
-/** 扩展名 → 允许的 content-type（格式校验按扩展名 + content-type 双查） */
+/**
+ * 扩展名 → 响应 content-type（单一来源）。
+ * 鉴权媒体路由（/api/media）按它回 content-type。
+ */
+export const VIDEO_CONTENT_TYPES: Record<string, string> = {
+  mp4: "video/mp4",
+  m4v: "video/x-m4v",
+  mov: "video/quicktime",
+};
+
+/**
+ * 扩展名 → 允许的 content-type（格式校验按扩展名 + content-type 双查）。
+ * 与 VIDEO_CONTENT_TYPES 同一扩展名集合；m4v 额外收 video/mp4
+ * （浏览器对 .m4v 文件的上报不一致），响应仍统一回 x-m4v。
+ */
 const SUPPORTED_VIDEO_TYPES: Record<string, readonly string[]> = {
-  mp4: ["video/mp4"],
-  m4v: ["video/x-m4v", "video/mp4"],
-  mov: ["video/quicktime"],
+  mp4: [VIDEO_CONTENT_TYPES.mp4],
+  m4v: [VIDEO_CONTENT_TYPES.m4v, VIDEO_CONTENT_TYPES.mp4],
+  mov: [VIDEO_CONTENT_TYPES.mov],
 };
 
 export function supportedExtensions(): string[] {

@@ -158,14 +158,15 @@ function collapseAndFilter(
   return out;
 }
 
+/** 窄化助手：讯飞响应各层都可能不是对象，service/parse 共用（单一来源） */
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function tryJsonParse(raw: string): unknown {
   try {
     return JSON.parse(raw) as unknown;
   } catch {
     return undefined;
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
