@@ -15,6 +15,7 @@ afterEach(() => {
   cleanups.length = 0;
   delete process.env.DB_PATH;
   delete process.env.UPLOADS_DIR;
+  delete process.env.CONTENT_DATA_DIR;
 });
 
 function setupEnv(): void {
@@ -24,8 +25,8 @@ function setupEnv(): void {
   cleanups.push(() => rmSync(uploadsDir, { recursive: true, force: true }));
 }
 
-function accountIdOf(email: string): string {
-  sessionCookieFor(email);
+function accountIdOf(email: string, isAdmin = false): string {
+  sessionCookieFor(email, isAdmin);
   const db = openDb(process.env.DB_PATH!);
   const row = db.prepare("SELECT id FROM accounts WHERE email = ?").get(email) as {
     id: string;
@@ -118,5 +119,72 @@ describe("GET /api/media/*", () => {
     const id = accountIdOf("parent@test.com");
     const res = await get([id, "ghost.mp4"], "parent@test.com");
     expect(res.status).toBe(404);
+  });
+});
+
+describe("GET /api/media/* · 标准内容视频（12 号票）", () => {
+  /** 落一个已发布标准内容包（运行时标准目录），视频引用 adminId 目录下的 clip.mp4 */
+  function seedStandardPack(adminId: string): void {
+    const dataDir = mkdtempSync(path.join(tmpdir(), "ra-stdpack-"));
+    process.env.CONTENT_DATA_DIR = dataDir;
+    cleanups.push(() => rmSync(dataDir, { recursive: true, force: true }));
+    const dir = path.join(dataDir, "standard");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      path.join(dir, "std-1.json"),
+      JSON.stringify({
+        id: "std-1",
+        title: "五上 U2 Story time",
+        source: "standard-upload",
+        video: `${adminId}/clip.mp4`,
+        type: "standard",
+        owner: null,
+        sentences: [{ text: "hello", start: 0, end: 0.9 }],
+      }),
+      "utf8"
+    );
+  }
+
+  it("登录家长可播管理员制作的标准内容视频（登录后才可播，跨账号放行仅限标准包引用的文件）", async () => {
+    setupEnv();
+    const adminId = accountIdOf("admin@test.com", true);
+    seedVideo(adminId);
+    seedStandardPack(adminId);
+
+    const res = await get([adminId, "clip.mp4"], "parent@test.com");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("video/mp4");
+    expect(Buffer.from(await res.arrayBuffer())).toEqual(
+      Buffer.from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    );
+  });
+
+  it("未被任何标准内容引用的他人文件仍然 404（自定义内容不因此泄露）", async () => {
+    setupEnv();
+    const adminId = accountIdOf("admin@test.com", true);
+    seedVideo(adminId); // clip.mp4 存在但没有标准包引用它
+    seedStandardPack(adminId);
+
+    const res = await get([adminId, "ghost.mp4"], "parent@test.com");
+    expect(res.status).toBe(404);
+  });
+
+  it("标准内容引用但文件已缺失：404", async () => {
+    setupEnv();
+    const adminId = accountIdOf("admin@test.com", true);
+    seedStandardPack(adminId); // 引用了 clip.mp4 但没落文件
+
+    const res = await get([adminId, "clip.mp4"], "parent@test.com");
+    expect(res.status).toBe(404);
+  });
+
+  it("未登录访问标准内容视频：401（标准视频同样走鉴权）", async () => {
+    setupEnv();
+    const adminId = accountIdOf("admin@test.com", true);
+    seedVideo(adminId);
+    seedStandardPack(adminId);
+
+    const res = await get([adminId, "clip.mp4"]);
+    expect(res.status).toBe(401);
   });
 });

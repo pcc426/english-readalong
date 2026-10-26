@@ -11,6 +11,7 @@ import {
   getDraft,
   setDraftVideo,
 } from "@/lib/drafts/repo";
+import { createStandardDraft } from "@/lib/drafts/standard-drafts";
 import { finalizeDraft } from "@/lib/drafts/finalize";
 
 const cleanups: Array<() => void> = [];
@@ -55,8 +56,8 @@ function ctx(id: string) {
   return { params: Promise.resolve({ id }) };
 }
 
-function accountIdOf(email: string): string {
-  sessionCookieFor(email);
+function accountIdOf(email: string, isAdmin = false): string {
+  sessionCookieFor(email, isAdmin);
   const db = openDb(process.env.DB_PATH!);
   try {
     const row = db.prepare("SELECT id FROM accounts WHERE email = ?").get(email) as {
@@ -183,6 +184,49 @@ describe("GET /api/units/[id]", () => {
       const res = await GET(authedGet(), ctx(otherDraft.id)); // parent 的 cookie
       expect(res.status).toBe(404);
       expect((await res.json()).error.code).toBe("UNIT_NOT_FOUND");
+    });
+  });
+
+  describe("标准内容（票 12 接线）", () => {
+    /** 管理员经真实链路发布一个标准内容包（含练习记录用的多句） */
+    function seedPublishedStandard(adminId: string): string {
+      const db = openDb(process.env.DB_PATH!);
+      try {
+        const draft = createStandardDraft(db, {
+          accountId: adminId,
+          title: "五上 U2 Story time",
+          unitId: "五上-U2",
+          moduleKind: "Story time",
+        });
+        setDraftVideo(db, draft.id, `${adminId}/demo.mp4`);
+        completeTranscription(db, draft.id, [
+          { text: "hello", startMs: 0, endMs: 900 },
+          { text: "world", startMs: 1000, endMs: 1800 },
+        ]);
+        finalizeDraft(db, getDraft(db, draft.id)!);
+        return draft.id;
+      } finally {
+        db.close();
+      }
+    }
+
+    it("已发布标准内容对任意家长账号可见可练：视频改写为鉴权媒体路由", async () => {
+      setupEnv();
+      const adminId = accountIdOf("admin@test.com", true);
+      const contentId = seedPublishedStandard(adminId);
+      insertAttempt(contentId, accountIdOf("parent@test.com"), 0, 90);
+
+      const res = await GET(authedGet(), ctx(contentId)); // parent 的 cookie
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.unit.id).toBe(contentId);
+      expect(body.unit.source).toBe("standard-upload");
+      // standard-upload 视频同样走鉴权媒体路由（10 号票只认 custom-upload，12 号票补上）
+      expect(body.unit.video).toBe(`/api/media/${adminId}/demo.mp4`);
+      expect(body.unit.sentences[0]).toMatchObject({
+        text: "hello",
+        bestScore: 90,
+      });
     });
   });
 });

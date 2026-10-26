@@ -38,7 +38,9 @@ export function ownedContentDetail(
     db.close();
   }
 
-  if (unit.source === "custom-upload") {
+  // 上传类内容（自定义与标准）的视频引用是 <accountId>/<file>（票 09/12 定稿契约），
+  // 统一改写为鉴权媒体路由地址；标准内容（随代码目录）保持公开静态路径。
+  if (unit.source === "custom-upload" || unit.source === "standard-upload") {
     unit.video = unit.video.replace(/^\/media\//, "/api/media/");
   }
   return unit;
