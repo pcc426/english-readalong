@@ -1,5 +1,6 @@
 import { FakeTranscriptionService } from "./fake";
 import { XunfeiTranscriptionService } from "./xunfei/service";
+import { XunfeiLlmTranscriptionService } from "./xunfei/llm";
 import {
   extractAudioFromEnv,
   missingCredentialsError,
@@ -44,8 +45,10 @@ export function getTranscriptionService(): TranscriptionService {
 /**
  * 从环境构造转写服务（生产入口，密钥只走环境变量）：
  * - LFASR_APP_ID / LFASR_API_KEY / LFASR_API_SECRET 三件套齐全 →
- *   讯飞 LFASR 适配器（LFASR_EXTRACT_AUDIO=1 时先 ffmpeg 抽音轨再提交，
- *   mp4 直收与否待真机冒烟确认）；
+ *   讯飞录音文件转写。LFASR_MODE 选版本：
+ *   - llm（默认）：录音文件转写大模型（office-api-ist-dx.iflyaisol.com，
+ *     请求头 signature 鉴权，只收音频，恒用 ffmpeg 抽轨）；
+ *   - standard：录音文件转写标准版（raasr.xfyun.cn/v2/api）；
  * - 生产（NODE_ENV=production）缺三件套 → 抛中文启动错误（票 13），
  *   不静默回退假转写。经 runTranscription 落到草稿 transcribe_error，
  *   详情页会显示完整指路文案；
@@ -55,11 +58,21 @@ export function createTranscriptionServiceFromEnv(
   env: Record<string, string | undefined> = process.env
 ): TranscriptionService {
   if (xunfeiTranscriptionConfigured(env)) {
-    return new XunfeiTranscriptionService({
-      appId: env.LFASR_APP_ID!,
-      apiKey: env.LFASR_API_KEY!,
-      apiSecret: env.LFASR_API_SECRET!,
-      extractAudio: extractAudioFromEnv(env),
+    const appId = env.LFASR_APP_ID!;
+    const apiKey = env.LFASR_API_KEY!;
+    const apiSecret = env.LFASR_API_SECRET!;
+    if (env.LFASR_MODE === "standard") {
+      return new XunfeiTranscriptionService({
+        appId,
+        apiKey,
+        apiSecret,
+        extractAudio: extractAudioFromEnv(env),
+      });
+    }
+    return new XunfeiLlmTranscriptionService({
+      appId,
+      accessKeyId: apiKey,
+      accessKeySecret: apiSecret,
     });
   }
   if (env.NODE_ENV === "production") {

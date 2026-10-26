@@ -76,8 +76,14 @@ function collectCandidates(node: unknown, depth: number): SentenceCandidate[] {
     return text ? [{ text, bg: node.bg, ed: node.ed, fromRl }] : [];
   }
 
-  // 包络/中间层：lattice、data、帧数组、rt/ws 数组，继续下钻
-  const children = [node.lattice, node.data, node.rt, node.ws];
+  // 包络/中间层：lattice、data、json_1best、帧数组、rt/ws 数组，继续下钻
+  const children = [
+    node.lattice,
+    node.data,
+    node.json_1best,
+    node.rt,
+    node.ws,
+  ];
   return children.flatMap((child) => collectCandidates(child, depth + 1));
 }
 

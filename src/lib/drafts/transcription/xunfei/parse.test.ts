@@ -120,4 +120,25 @@ describe("parseLfasrSentences", () => {
     ];
     expect(parseLfasrSentences(decoded).map((s) => s.text)).toEqual(["B", "A"]);
   });
+
+  it("真实 lattice 形态：条目是 {json_1best: '<字符串化的帧>'}", () => {
+    const frame = (bg: string, ed: string, words: string[]) =>
+      JSON.stringify({
+        st: {
+          bg,
+          ed,
+          rt: [{ ws: words.map((w) => ({ cw: [{ w }] })) }],
+        },
+      });
+    const decoded = {
+      lattice: [
+        { json_1best: frame("880", "1680", ["Hello", " there"]) },
+        { json_1best: frame("2390", "3640", ["How are you?"]) },
+      ],
+    };
+    expect(parseLfasrSentences(decoded)).toEqual([
+      { text: "Hello there", startMs: 880, endMs: 1680 },
+      { text: "How are you?", startMs: 2390, endMs: 3640 },
+    ]);
+  });
 });

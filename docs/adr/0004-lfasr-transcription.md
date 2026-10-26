@@ -11,7 +11,11 @@
 - **VPS 自托管 whisper**：需升配内存、引入 Python 运行时与任务队列，运维面扩大；本项目部署前置依赖只有 ffmpeg，不想为一个功能加一整条运行时栈。whisper 的输出也需再做句子切分与时间戳对齐。
 
 **实现约束**：
-- 签名与请求手写（`signa = base64(HmacSHA1(key=apiSecret, data=MD5hex(appid+ts)))`，node:crypto），不引讯飞 SDK；HTTP 用全局 fetch。
+- 讯飞「录音文件转写」有两个版本，接口与密钥归属都不同，用 `LFASR_MODE` 选择：
+  - `llm`（默认，**录音文件转写大模型**，Ifasr_llm）：`office-api-ist-dx.iflyaisol.com`，请求头 `signature` 鉴权（参数排序后 HMAC-SHA1），只收音频格式 → 恒用 ffmpeg 抽 16kHz 单声道音轨；结果在 `lattice.json_1best` 的 `st.bg/ed`；
+  - `standard`（**标准版**）：`raasr.xfyun.cn/v2/api`，URL 参数 `signa` 鉴权，格式表含 mp4。
+  两版密钥必须来自控制台**同一应用下已开通的那个服务**；混用会得到 26610/000002 一类鉴权错误。
+- 签名与请求手写（标准版 `signa = base64(HmacSHA1(key=apiSecret, data=MD5hex(appId+ts)))`；大模型版请求头 `signature = base64(HmacSHA1(accessKeySecret, 排序后的 k=v&…))`，node:crypto），不引讯飞 SDK；HTTP 用全局 fetch。
 - 凭据走环境变量 `LFASR_APP_ID` / `LFASR_API_KEY` / `LFASR_API_SECRET`（与评测的 `XFYUN_*` 是同一平台的两套服务凭据，不混用）；三项齐全才启用真实转写，否则回落假实现（开发环境链路可走通）。
 - 异步节奏：上传 → 建草稿（transcribing）→ 提交拿 orderId 落库 → 服务端退避轮询（5s 起指数退避，60s 封顶，有轮询上限防无限转）→ 完成落 `draft_sentences` 置 proofreading。轮询只发生在真实 provider 下；**进程重启后由 `src/instrumentation.ts` 把 transcribing 且有任务引用的草稿重新拉回轮询**（仅 nodejs runtime、非 build 阶段、有凭据时）。
 - 失败语义：引擎侧确定失败（failType/`type=1`）→ 错误落 `transcribe_error`，草稿保持 transcribing 可重试；完成但零句子同样按失败处理（空校对页没有意义）；转写中网络抖动只记错误继续退避，任务不丢。

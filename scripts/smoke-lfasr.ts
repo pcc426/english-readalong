@@ -14,6 +14,7 @@ import { createUploadPayloadBuilder } from "../src/lib/drafts/transcription/xunf
 import {
   XunfeiTranscriptionService,
 } from "../src/lib/drafts/transcription/xunfei/service.ts";
+import { XunfeiLlmTranscriptionService } from "../src/lib/drafts/transcription/xunfei/llm.ts";
 import { xunfeiTranscriptionConfigured } from "../src/lib/drafts/transcription/env.ts";
 
 const DEFAULT_FIXTURE = path.join(
@@ -53,18 +54,31 @@ async function main() {
   const relPath = `smoke/sample${ext}`;
   copyFileSync(filePath, path.join(uploadsDir, relPath));
   try {
-    const extractAudio = process.env.LFASR_EXTRACT_AUDIO === "1";
+    // 大模型版只收音频：恒开抽轨；标准版看 LFASR_EXTRACT_AUDIO
+    const mode = process.env.LFASR_MODE === "standard" ? "standard" : "llm";
+    const extractAudio =
+      mode === "llm" || process.env.LFASR_EXTRACT_AUDIO === "1";
     const buildPayload = createUploadPayloadBuilder({ extractAudio });
     const payload = await buildPayload(relPath);
     console.log(
-      `样本: ${filePath}（${payload.data.length} bytes，时长约 ${payload.durationSec}s）`
+      `样本: ${filePath}（${payload.data.length} bytes，时长约 ${payload.durationSec}s，模式 ${mode}）`
     );
 
     // xunfeiTranscriptionConfigured 已确保三件套非空；TS 无法跨函数收窄，此处断言
-    const service = new XunfeiTranscriptionService(
-      { appId: appId!, apiKey: apiKey!, apiSecret: apiSecret! },
-      { buildPayload }
-    );
+    const service =
+      mode === "standard"
+        ? new XunfeiTranscriptionService(
+            { appId: appId!, apiKey: apiKey!, apiSecret: apiSecret! },
+            { buildPayload }
+          )
+        : new XunfeiLlmTranscriptionService(
+            {
+              appId: appId!,
+              accessKeyId: apiKey!,
+              accessKeySecret: apiSecret!,
+            },
+            { buildPayload }
+          );
 
     const { taskId } = await service.submit({ videoPath: relPath });
     console.log(`已提交，任务 id: ${taskId}，开始轮询…`);

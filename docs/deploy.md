@@ -70,7 +70,8 @@ ssh <user@VPS> "sed -i 's/{\$DOMAIN}/<你的域名>/' /etc/caddy/Caddyfile && sy
 | 变量 | 必填 | 说明 |
 | --- | --- | --- |
 | `XFYUN_APPID` / `XFYUN_API_KEY` / `XFYUN_API_SECRET` | 是 | 讯飞开放平台「语音评测（流式版）」凭据；控制台创建应用后获得（个人实名认证免费 500 次/天） |
-| `LFASR_APP_ID` / `LFASR_API_KEY` / `LFASR_API_SECRET` | 生产必填 | 讯飞开放平台「录音文件转写（LFASR）」凭据；同一平台、**另一项服务**，需在控制台「语音转写」页单独开通（ADR-0004），与评测凭据不混用。新用户礼包最多 50 小时免费/年 |
+| `LFASR_APP_ID` / `LFASR_API_KEY` / `LFASR_API_SECRET` | 生产必填 | 讯飞开放平台「录音文件转写」凭据；同一平台、**另一项服务**，需在控制台「语音转写」页单独开通（ADR-0004），与评测凭据不混用。新用户礼包最多 50 小时免费/年 |
+| `LFASR_MODE` | 可选 | `llm`（默认，录音文件转写大模型，只收音频、自动抽轨）或 `standard`（标准版，可直接传视频）。两个版本是不同接口、不同密钥归属，按你开通的那个填 |
 | `LFASR_EXTRACT_AUDIO` | 可选 | `=1` 时先用 ffmpeg 抽 16kHz 单声道音轨再提交；LFASR 拒收视频文件时打开（`scripts/smoke-lfasr.ts` 可先实测） |
 | `DB_PATH` | 可选 | SQLite 库路径，默认 `data/readalong.db` |
 | `CONTENT_DIR` | 可选 | 随代码部署的标准内容目录，默认 `content/units` |

@@ -9,6 +9,7 @@ import {
   xunfeiTranscriptionConfigured,
 } from "./current";
 import { XunfeiTranscriptionService } from "./xunfei/service";
+import { XunfeiLlmTranscriptionService } from "./xunfei/llm";
 
 const FULL = {
   LFASR_APP_ID: "app123",
@@ -22,12 +23,13 @@ describe("转写服务工厂（env 开关 fake / 讯飞 LFASR）", () => {
     delete process.env.LFASR_API_KEY;
     delete process.env.LFASR_API_SECRET;
     delete process.env.LFASR_EXTRACT_AUDIO;
+    delete process.env.LFASR_MODE;
   });
 
-  it("三件套齐全 → 讯飞适配器；缺任何一个 → 假实现", () => {
+  it("三件套齐全 → 默认走大模型版；缺任何一个 → 假实现", () => {
     expect(
       createTranscriptionServiceFromEnv({ ...FULL }) instanceof
-        XunfeiTranscriptionService
+        XunfeiLlmTranscriptionService
     ).toBe(true);
     for (const key of Object.keys(FULL)) {
       const partial = { ...FULL };
@@ -39,6 +41,13 @@ describe("转写服务工厂（env 开关 fake / 讯飞 LFASR）", () => {
     }
     expect(
       createTranscriptionServiceFromEnv({}) instanceof FakeTranscriptionService
+    ).toBe(true);
+  });
+
+  it("LFASR_MODE=standard → 标准版适配器", () => {
+    expect(
+      createTranscriptionServiceFromEnv({ ...FULL, LFASR_MODE: "standard" })
+        instanceof XunfeiTranscriptionService
     ).toBe(true);
   });
 
@@ -55,9 +64,10 @@ describe("转写服务工厂（env 开关 fake / 讯飞 LFASR）", () => {
     expect(extractAudioFromEnv({})).toBe(false);
   });
 
-  it("LFASR_EXTRACT_AUDIO 传给适配器（抽音轨开关）", () => {
+  it("标准版模式下 LFASR_EXTRACT_AUDIO 传给适配器（抽音轨开关）", () => {
     const service = createTranscriptionServiceFromEnv({
       ...FULL,
+      LFASR_MODE: "standard",
       LFASR_EXTRACT_AUDIO: "1",
     });
     expect(
@@ -80,12 +90,12 @@ describe("转写服务工厂（env 开关 fake / 讯飞 LFASR）", () => {
     ).toThrow(/生产环境未配置讯飞转写凭据/);
   });
 
-  it("生产凭据齐全 → 讯飞适配器，不受守卫影响", () => {
+  it("生产凭据齐全 → 讯飞大模型版适配器，不受守卫影响", () => {
     expect(
       createTranscriptionServiceFromEnv({
         ...FULL,
         NODE_ENV: "production",
-      }) instanceof XunfeiTranscriptionService
+      }) instanceof XunfeiLlmTranscriptionService
     ).toBe(true);
   });
 
