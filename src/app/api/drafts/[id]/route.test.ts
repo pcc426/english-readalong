@@ -2,9 +2,10 @@ import { afterEach, describe, expect, it } from "vitest";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { DELETE, GET } from "./route";
+import { DELETE, GET, PATCH } from "./route";
 import { openDb, type Db } from "@/lib/db";
 import {
+  confirmDraftSentences,
   setupDb,
   sessionCookieFor,
 } from "@/lib/testing/auth-test-utils";
@@ -242,5 +243,143 @@ describe("DELETE /api/drafts/[id]", () => {
       .prepare("SELECT title FROM content_drafts ORDER BY rowid")
       .all() as Array<{ title: string }>;
     expect(left).toEqual([{ title: "保留" }]);
+  });
+});
+
+describe("PATCH /api/drafts/[id]（改标题，V0.2.4 票 03）", () => {
+  function seedProofreadingDraft(): string {
+    const db = setupEnv();
+    sessionCookieFor("parent@test.com");
+    const accountId = (
+      db.prepare("SELECT id FROM accounts LIMIT 1").get() as { id: string }
+    ).id;
+    const draft = createDraft(db, { accountId, title: "旧标题" });
+    setDraftVideo(db, draft.id, `${accountId}/v.mp4`);
+    completeTranscription(db, draft.id, [
+      { text: "hello", startMs: 0, endMs: 900 },
+    ]);
+    db.close();
+    return draft.id;
+  }
+
+  function seedPublishedDraft(): string {
+    const db = setupEnv();
+    sessionCookieFor("parent@test.com");
+    const accountId = (
+      db.prepare("SELECT id FROM accounts LIMIT 1").get() as { id: string }
+    ).id;
+    const draft = createDraft(db, { accountId, title: "旧标题" });
+    setDraftVideo(db, draft.id, `${accountId}/v.mp4`);
+    completeTranscription(db, draft.id, [
+      { text: "hello", startMs: 0, endMs: 900 },
+    ]);
+    confirmDraftSentences(db, draft.id);
+    db.prepare("UPDATE content_drafts SET status = 'published' WHERE id = ?").run(
+      draft.id
+    );
+    db.close();
+    return draft.id;
+  }
+
+  function patch(id: string, body: unknown, email = "parent@test.com") {
+    return PATCH(
+      new Request(`http://x/api/drafts/${id}`, {
+        method: "PATCH",
+        headers: {
+          cookie: sessionCookieFor(email),
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(body),
+      }),
+      { params: Promise.resolve({ id }) }
+    );
+  }
+
+  it("未登录 401", async () => {
+    seedProofreadingDraft();
+    const res = await PATCH(
+      new Request("http://x/api/drafts/d", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: "新标题" }),
+      }),
+      { params: Promise.resolve({ id: "d" }) }
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it("本人 proofreading：200，标题 trim 后落库，GET 返回新标题", async () => {
+    const id = seedProofreadingDraft();
+    const res = await patch(id, { title: "  新标题  " });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ title: "新标题" });
+
+    const res2 = await GET(
+      new Request(`http://x/api/drafts/${id}`, {
+        headers: { cookie: sessionCookieFor("parent@test.com") },
+      }),
+      { params: Promise.resolve({ id }) }
+    );
+    expect(((await res2.json()) as { draft: { title: string } }).draft.title).toBe(
+      "新标题"
+    );
+  });
+
+  it("空标题 / 非字符串：400 INVALID_TITLE，标题不变", async () => {
+    const id = seedProofreadingDraft();
+    for (const body of [{ title: "   " }, { title: 42 }, {}]) {
+      const res = await patch(id, body);
+      expect(res.status).toBe(400);
+      expect((await res.json()).error.code).toBe("INVALID_TITLE");
+    }
+    const res2 = await patch(id, { title: "旧标题" });
+    expect(res2.status).toBe(200);
+  });
+
+  it("published 草稿 409 DRAFT_NOT_EDITABLE（退回校对后才能改）", async () => {
+    const id = seedPublishedDraft();
+    const res = await patch(id, { title: "新标题" });
+    expect(res.status).toBe(409);
+    expect((await res.json()).error.code).toBe("DRAFT_NOT_EDITABLE");
+  });
+
+  it("他人草稿 404（不暴露存在性）", async () => {
+    seedProofreadingDraft();
+    const otherId = (() => {
+      const db = openDb(process.env.DB_PATH!);
+      try {
+        sessionCookieFor("other@test.com");
+        const accountId = (
+          db.prepare("SELECT id FROM accounts WHERE email = 'other@test.com'").get() as {
+            id: string;
+          }
+        ).id;
+        const draft = createDraft(db, { accountId, title: "别人的" });
+        setDraftVideo(db, draft.id, `${accountId}/v.mp4`);
+        return draft.id;
+      } finally {
+        db.close();
+      }
+    })();
+
+    const res = await patch(otherId, { title: "新标题" }, "parent@test.com");
+    expect(res.status).toBe(404);
+    expect((await res.json()).error.code).toBe("DRAFT_NOT_FOUND");
+  });
+
+  it("坏 JSON：400", async () => {
+    const id = seedProofreadingDraft();
+    const res = await PATCH(
+      new Request(`http://x/api/drafts/${id}`, {
+        method: "PATCH",
+        headers: {
+          cookie: sessionCookieFor("parent@test.com"),
+          "content-type": "application/json",
+        },
+        body: "not-json",
+      }),
+      { params: Promise.resolve({ id }) }
+    );
+    expect(res.status).toBe(400);
   });
 });

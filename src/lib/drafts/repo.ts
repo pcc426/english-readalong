@@ -209,6 +209,13 @@ export function confirmedCountsByDraft(
   return counts;
 }
 
+/** 改草稿标题（V0.2.4 票 03）：发布生成的内容包取草稿标题，校对页可就地改 */
+export function setDraftTitle(db: Db, id: string, title: string): void {
+  db.prepare(
+    `UPDATE content_drafts SET title = ?, updated_at = datetime('now') WHERE id = ?`
+  ).run(title, id);
+}
+
 /** 删草稿（连同句子，显式事务；better-sqlite3 默认不开外键级联） */
 export function deleteDraft(db: Db, id: string): void {
   const tx = db.transaction(() => {

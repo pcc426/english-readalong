@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { requireAccount } from "@/lib/auth/guard";
 import { openDb, dbPath } from "@/lib/db";
 import { errorResponse } from "@/lib/http";
-import { deleteDraft, getDraft, listDraftSentences } from "@/lib/drafts/repo";
+import { deleteDraft, getDraft, listDraftSentences, setDraftTitle } from "@/lib/drafts/repo";
 import { getDraftModule } from "@/lib/drafts/standard-drafts";
 import { deleteUploadVideo } from "@/lib/drafts/storage";
 
@@ -59,6 +59,39 @@ export async function DELETE(req: Request, ctx: Ctx) {
     // 文件已不在（先前的清理/写盘中断）不算错——rm force 语义
     deleteUploadVideo(draft.videoPath);
     return NextResponse.json({ ok: true });
+  } finally {
+    db.close();
+  }
+}
+
+// 改标题（V0.2.4 票 03）：仅本人、仅 proofreading（发布后标题定局，退回校对后可再改）。
+// 发布生成的内容包直接取草稿标题，无需改定稿逻辑。
+export async function PATCH(req: Request, ctx: Ctx) {
+  const auth = requireAccount(req);
+  if (!auth.ok) return auth.response;
+  const { id } = await ctx.params;
+  const db = openDb(dbPath());
+  try {
+    const draft = getDraft(db, id);
+    if (!draft || draft.accountId !== auth.account.id) {
+      return errorResponse(404, "DRAFT_NOT_FOUND", "草稿不存在");
+    }
+    if (draft.status !== "proofreading") {
+      return errorResponse(
+        409,
+        "DRAFT_NOT_EDITABLE",
+        "草稿当前状态不可编辑标题"
+      );
+    }
+    const body = (await req.json().catch(() => null)) as {
+      title?: unknown;
+    } | null;
+    const title = typeof body?.title === "string" ? body.title.trim() : "";
+    if (!title) {
+      return errorResponse(400, "INVALID_TITLE", "标题不能为空");
+    }
+    setDraftTitle(db, id, title);
+    return NextResponse.json({ title });
   } finally {
     db.close();
   }

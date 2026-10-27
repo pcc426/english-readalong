@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import { adjustBoundsMs, CALIBRATE_STEP_MS, MIN_CLIP_MS } from "@/lib/domain/calibrate";
 import { formatMs } from "@/components/shared/draft-ui";
 import {
+  SAVED_HINT_MS,
   useSentenceSave,
 } from "@/components/shared/use-draft-save";
 import {
@@ -47,6 +48,11 @@ export default function ProofreadPage() {
   const [playing, setPlaying] = useState(false);
   const [mutating, setMutating] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  // V0.2.4 票 03：可编辑标题（发布以新标题为准）
+  const [titleValue, setTitleValue] = useState<string | null>(null);
+  const [titleSave, setTitleSave] = useState<
+    null | "saving" | "saved" | "error"
+  >(null);
 
   const sentencesRef = useRef(sentences);
   sentencesRef.current = sentences;
@@ -126,6 +132,36 @@ export default function ProofreadPage() {
   }, [id, seedServerState]);
 
   const current = sentences[Math.min(position, sentences.length - 1)] ?? null;
+
+  // 标题输入框跟随服务端值（载入/保存成功后同步）
+  useEffect(() => {
+    setTitleValue(draft?.title ?? null);
+  }, [draft?.id, draft?.title]);
+
+  async function saveTitle() {
+    if (!id || titleSave === "saving") return;
+    const next = (titleValue ?? "").trim();
+    if (!next || next === draft?.title) {
+      setTitleValue(draft?.title ?? "");
+      return;
+    }
+    setTitleSave("saving");
+    try {
+      const res = await fetch(`/api/drafts/${id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: next }),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      setDraft((prev) => (prev ? { ...prev, title: next } : prev));
+      setTitleValue(next);
+      setTitleSave("saved");
+      setTimeout(() => setTitleSave(null), SAVED_HINT_MS);
+    } catch {
+      setTitleSave("error");
+    }
+  }
+
   const confirmedCount = sentences.filter(
     (s) => s.proofread === "confirmed"
   ).length;
@@ -423,10 +459,17 @@ export default function ProofreadPage() {
       ? textbookSentences[current.index]
       : null;
 
-  // V0.2.4 票 01：提示收敛为一个 banner，只显示最新的一条（互斥派生）
+  // V0.2.4 票 01：提示收敛为一个 banner，只显示最新的一条（互斥派生）；
+  // V0.2.4 票 03：标题保存态并入同一条 banner
   const banner: { tone: "error" | "info" | "success"; text: string } | null =
     (() => {
       if (actionError) return { tone: "error" as const, text: actionError };
+      if (titleSave === "error")
+        return { tone: "error" as const, text: "标题保存失败" };
+      if (titleSave === "saving")
+        return { tone: "info" as const, text: "标题保存中…" };
+      if (titleSave === "saved")
+        return { tone: "success" as const, text: "标题已保存 ✓" };
       if (currentSaveState === "error")
         return { tone: "error" as const, text: "保存失败，请重试" };
       if (currentSaveState === "saving")
@@ -525,9 +568,17 @@ export default function ProofreadPage() {
         </div>
 
         <div className="flex items-baseline gap-2">
-          <h1 className="truncate text-xl font-bold tracking-tight">
-            {draft.title}
-          </h1>
+          {/* V0.2.4 票 03：标题可就地编辑，发布以最新标题为准 */}
+          <input
+            value={titleValue ?? draft.title}
+            onChange={(e) => setTitleValue(e.target.value)}
+            onBlur={() => void saveTitle()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+            }}
+            aria-label="草稿标题"
+            className="min-w-0 flex-1 rounded-xl bg-transparent px-1 py-0.5 text-xl font-bold tracking-tight focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
+          />
           <span className="shrink-0 text-base text-slate-500" role="status">
             已确认 {confirmedCount} / {sentences.length} 句
           </span>
