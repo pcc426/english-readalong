@@ -25,14 +25,6 @@ import type {
   TextbookModuleView,
 } from "@/components/proofread/types";
 
-type SaveState = "saving" | "saved" | "error";
-
-const SAVE_HINTS: Record<SaveState, { text: string; className: string }> = {
-  saving: { text: "保存中…", className: "text-slate-400" },
-  saved: { text: "已保存 ✓", className: "text-emerald-600" },
-  error: { text: "保存失败，请重试", className: "text-red-600" },
-};
-
 const ACTION_BTNS =
   "rounded-2xl bg-white px-4 py-2 text-base font-semibold text-slate-600 ring-1 ring-slate-200 active:bg-slate-50 disabled:opacity-40";
 const ADJUST_BTNS =
@@ -390,6 +382,26 @@ export default function ProofreadPage() {
       ? textbookSentences[current.index]
       : null;
 
+  // V0.2.4 票 01：提示收敛为一个 banner，只显示最新的一条（互斥派生）
+  const banner: { tone: "error" | "info" | "success"; text: string } | null =
+    (() => {
+      if (actionError) return { tone: "error" as const, text: actionError };
+      if (currentSaveState === "error")
+        return { tone: "error" as const, text: "保存失败，请重试" };
+      if (currentSaveState === "saving")
+        return { tone: "info" as const, text: "保存中…" };
+      if (currentSaveState === "saved")
+        return { tone: "success" as const, text: "已保存 ✓" };
+      if (draft?.type === "standard" && textbookFailed)
+        return {
+          tone: "error" as const,
+          text: "教材原文加载失败，可直接手工校对",
+        };
+      if (draft?.type === "standard" && textbookSentences !== null && !textbookAligned)
+        return { tone: "info" as const, text: TEXTBOOK_MISALIGNED_HINT };
+      return null;
+    })();
+
   if (notFound || failed || draft === null) {
     return (
       <div className="mx-auto max-w-xl px-5 py-8">
@@ -454,7 +466,7 @@ export default function ProofreadPage() {
       </div>
 
       {/* 右列：操作区，固定宽、独立滚动 */}
-      <aside className="flex h-full w-[26rem] shrink-0 flex-col gap-3 overflow-y-auto border-l border-slate-200 bg-slate-50 p-4">
+      <aside className="flex h-full w-[30rem] shrink-0 flex-col gap-3 overflow-y-auto border-l border-slate-200 bg-slate-50 p-4">
         <div className="flex items-center justify-between gap-2">
           <a href={backHref} className="shrink-0 text-base text-emerald-700">
             {backLabel}
@@ -473,22 +485,18 @@ export default function ProofreadPage() {
           </span>
         </div>
 
-        {draft.type === "standard" && textbookFailed && (
-          <p role="alert" className="rounded-xl bg-amber-50 px-3 py-1.5 text-sm text-amber-700">
-            教材原文加载失败，可直接手工校对。
-          </p>
-        )}
-        {draft.type === "standard" &&
-          textbookSentences !== null &&
-          !textbookAligned && (
-            <p role="status" className="rounded-xl bg-amber-50 px-3 py-1.5 text-sm text-amber-700">
-              {TEXTBOOK_MISALIGNED_HINT}
-            </p>
-          )}
-
-        {actionError && (
-          <p role="alert" className="rounded-xl bg-red-50 px-4 py-2 text-base text-red-600">
-            {actionError}
+        {banner && (
+          <p
+            role={banner.tone === "error" ? "alert" : "status"}
+            className={`rounded-xl px-3 py-1.5 text-sm ${
+              banner.tone === "error"
+                ? "bg-red-50 text-red-600"
+                : banner.tone === "success"
+                  ? "bg-emerald-50 text-emerald-700"
+                  : "bg-amber-50 text-amber-700"
+            }`}
+          >
+            {banner.text}
           </p>
         )}
 
@@ -505,11 +513,6 @@ export default function ProofreadPage() {
               ) : (
                 <span className="rounded-full bg-slate-100 px-3 py-0.5 text-base text-slate-400">
                   未确认
-                </span>
-              )}
-              {currentSaveState && (
-                <span role="status" className={`text-base ${SAVE_HINTS[currentSaveState].className}`}>
-                  {SAVE_HINTS[currentSaveState].text}
                 </span>
               )}
               <button
@@ -643,7 +646,7 @@ export default function ProofreadPage() {
               }`}
             >
               {current.proofread === "confirmed"
-                ? "本句已确认 ✓（再改动会回到未确认）"
+                ? "本句已确认 ✓"
                 : "✓ 确认本句"}
             </button>
           </section>
