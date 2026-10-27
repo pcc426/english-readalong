@@ -6,7 +6,15 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { Account } from "./types";
 
-export default function TopNav({ account }: { account: Account }) {
+export default function TopNav({
+  account,
+  collapsed,
+  onToggleSidebar,
+}: {
+  account: Account;
+  collapsed: boolean;
+  onToggleSidebar: () => void;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
 
@@ -25,8 +33,18 @@ export default function TopNav({ account }: { account: Account }) {
   }
 
   return (
-    <header className="flex items-center justify-end gap-4 border-b border-slate-100 bg-white px-6 py-3">
-      <span className="truncate text-base text-slate-500">{account.email}</span>
+    <header className="flex items-center gap-4 border-b border-slate-100 bg-white px-6 py-3">
+      {/* 侧边栏折叠开关（V0.2.3）：给校对/练习页的操作列腾空间 */}
+      <button
+        type="button"
+        onClick={onToggleSidebar}
+        aria-label={collapsed ? "展开菜单" : "收起菜单"}
+        title={collapsed ? "展开菜单" : "收起菜单"}
+        className="shrink-0 rounded-2xl px-3 py-2 text-xl text-slate-600 ring-1 ring-slate-200 active:bg-slate-50"
+      >
+        ☰
+      </button>
+      <span className="ml-auto truncate text-base text-slate-500">{account.email}</span>
       <button
         type="button"
         onClick={handleLogout}

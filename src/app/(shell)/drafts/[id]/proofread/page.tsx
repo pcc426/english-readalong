@@ -320,6 +320,31 @@ export default function ProofreadPage() {
     });
   }
 
+  /** 设为播放位（V0.2.3）：把起点/终点设为视频当前播放位置，钳制后防抖保存。
+   * ASR 切点偏差可达 10s+，±0.25s 步进不现实——自由播放/拖到想要的位置一键落点。 */
+  function setToPlayhead(field: "start" | "end") {
+    const v = videoRef.current;
+    if (!v || !current) return;
+    const ms = Math.max(0, Math.round(v.currentTime * 1000));
+    const index = current.index;
+    setSentences((prev) =>
+      prev.map((s) => {
+        if (s.index !== index) return s;
+        if (field === "start") {
+          const start = Math.max(0, Math.min(ms, s.endMs - MIN_CLIP_MS));
+          return { ...s, startMs: start };
+        }
+        let end = Math.max(ms, s.startMs + MIN_CLIP_MS);
+        const duration = v.duration;
+        if (typeof duration === "number" && duration > 0) {
+          end = Math.min(end, Math.round(duration * 1000));
+        }
+        return { ...s, endMs: Math.max(end, s.startMs + MIN_CLIP_MS) };
+      })
+    );
+    scheduleSave(index);
+  }
+
   function togglePlay() {
     const v = videoRef.current;
     if (!v || !current) return;
@@ -414,14 +439,16 @@ export default function ProofreadPage() {
   }
 
   return (
-    <div className="flex h-[100dvh] overflow-hidden">
-      {/* 左列：视频常驻（竖版占满高度，横版按宽适配），黑底居中 */}
+    <div className="flex h-full overflow-hidden">
+      {/* 左列：视频常驻（竖版占满高度，横版按宽适配），黑底居中。
+          controls 供自由拖动/暂停——「设为播放位」以当前播放位置为准 */}
       <div className="flex min-w-0 flex-1 items-center justify-center bg-black p-2">
         <video
           ref={videoRef}
           src={draft.videoUrl}
           onTimeUpdate={handleTimeUpdate}
           preload="auto"
+          controls
           className="max-h-full max-w-full object-contain"
         />
       </div>
@@ -530,23 +557,50 @@ export default function ProofreadPage() {
               </div>
             )}
 
-            {/* 时点微调（原切点页能力并入） */}
-            <p className="mt-3 text-center text-2xl font-bold tabular-nums text-emerald-700">
-              {formatMs(current.startMs)} → {formatMs(current.endMs)}
-            </p>
-            <div className="mt-2 grid grid-cols-4 gap-2">
-              <button type="button" onClick={() => adjust("start", -CALIBRATE_STEP_MS)} disabled={mutating} className={ADJUST_BTNS}>
-                起 −0.25s
-              </button>
-              <button type="button" onClick={() => adjust("start", CALIBRATE_STEP_MS)} disabled={mutating} className={ADJUST_BTNS}>
-                起 ＋0.25s
-              </button>
-              <button type="button" onClick={() => adjust("end", -CALIBRATE_STEP_MS)} disabled={mutating} className={ADJUST_BTNS}>
-                止 −0.25s
-              </button>
-              <button type="button" onClick={() => adjust("end", CALIBRATE_STEP_MS)} disabled={mutating} className={ADJUST_BTNS}>
-                止 ＋0.25s
-              </button>
+            {/* 时点微调（V0.2.3 重排）：每行 = 标签 + 当前值 + 微调 + 设为播放位 */}
+            <div className="mt-3 space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="w-10 shrink-0 text-base font-semibold text-slate-500">起点</span>
+                <span className="w-[4.5rem] text-lg font-bold tabular-nums text-emerald-700">
+                  {formatMs(current.startMs)}
+                </span>
+                <button type="button" onClick={() => adjust("start", -CALIBRATE_STEP_MS)} disabled={mutating} className={ADJUST_BTNS}>
+                  −0.25s
+                </button>
+                <button type="button" onClick={() => adjust("start", CALIBRATE_STEP_MS)} disabled={mutating} className={ADJUST_BTNS}>
+                  ＋0.25s
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setToPlayhead("start")}
+                  disabled={mutating}
+                  title="把起点设为视频当前播放位置"
+                  className={ACTION_BTNS}
+                >
+                  设为起点
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-10 shrink-0 text-base font-semibold text-slate-500">终点</span>
+                <span className="w-[4.5rem] text-lg font-bold tabular-nums text-emerald-700">
+                  {formatMs(current.endMs)}
+                </span>
+                <button type="button" onClick={() => adjust("end", -CALIBRATE_STEP_MS)} disabled={mutating} className={ADJUST_BTNS}>
+                  −0.25s
+                </button>
+                <button type="button" onClick={() => adjust("end", CALIBRATE_STEP_MS)} disabled={mutating} className={ADJUST_BTNS}>
+                  ＋0.25s
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setToPlayhead("end")}
+                  disabled={mutating}
+                  title="把终点设为视频当前播放位置"
+                  className={ACTION_BTNS}
+                >
+                  设为终点
+                </button>
+              </div>
             </div>
 
             {/* 结构操作：新增（拆分长句）/ 并入上一句 / 与下一句合并 / 删除 */}

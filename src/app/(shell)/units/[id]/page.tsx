@@ -36,7 +36,7 @@ export default async function UnitPage({
   if (!unit) notFound();
 
   return (
-    <main className="flex h-[100dvh] overflow-hidden">
+    <main className="flex h-full overflow-hidden">
       <PracticeFlow unit={unit} />
     </main>
   );

@@ -17,6 +17,20 @@ export default function ShellLayout({
   const router = useRouter();
   const [account, setAccount] = useState<Account | null>(null);
   const [failed, setFailed] = useState(false);
+  // 侧边栏折叠（V0.2.3）：给校对/练习页的右操作列腾空间；状态持久化
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    if (localStorage.getItem("sidebar-collapsed") === "1") setCollapsed(true);
+  }, []);
+
+  function toggleSidebar() {
+    setCollapsed((c) => {
+      const next = !c;
+      localStorage.setItem("sidebar-collapsed", next ? "1" : "0");
+      return next;
+    });
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -57,9 +71,13 @@ export default function ShellLayout({
 
   return (
     <div className="flex h-[100dvh]">
-      <Sidebar isAdmin={account.isAdmin} />
+      {!collapsed && <Sidebar isAdmin={account.isAdmin} />}
       <div className="flex min-w-0 flex-1 flex-col">
-        <TopNav account={account} />
+        <TopNav
+          account={account}
+          collapsed={collapsed}
+          onToggleSidebar={toggleSidebar}
+        />
         <main className="min-h-0 flex-1 overflow-y-auto">{children}</main>
       </div>
     </div>
