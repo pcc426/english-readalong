@@ -6,12 +6,10 @@
 // 「自定义」标签与进入练习的链接（走 /units/[id] 既有链路，spec 界面布局）。
 // 前置提示只是体验层校验，真实大小/时长/格式校验以服务端为准（spec 用户故事 30）；
 // UI 不做自动化测试，走 iPad 真机手工验收清单（spec · Testing Decisions）。
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { STATUS_BADGES } from "@/components/shared/draft-ui";
-import {
-  MAX_MB,
-  precheckVideoFile,
-} from "@/components/shared/upload-precheck";
+import { MAX_MB } from "@/components/shared/upload-precheck";
+import { VideoFileField } from "@/components/shared/video-file-field";
 
 // 与 GET /api/drafts 响应对应（壳只走 HTTP，不从 src/lib 引类型）
 interface DraftOverview {
@@ -31,7 +29,6 @@ export default function CustomContentPage() {
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadDrafts = useCallback(async () => {
     try {
@@ -51,20 +48,6 @@ export default function CustomContentPage() {
   useEffect(() => {
     void loadDrafts();
   }, [loadDrafts]);
-
-  function handleFileChange(f: File | null) {
-    setError(null);
-    if (f) {
-      const problem = precheckVideoFile(f);
-      if (problem) {
-        setError(problem);
-        setFile(null);
-        if (fileInputRef.current) fileInputRef.current.value = "";
-        return;
-      }
-    }
-    setFile(f);
-  }
 
   async function handleUpload(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -87,7 +70,6 @@ export default function CustomContentPage() {
       if (res.status === 201) {
         setTitle("");
         setFile(null);
-        if (fileInputRef.current) fileInputRef.current.value = "";
         await loadDrafts();
         return;
       }
@@ -156,14 +138,7 @@ export default function CustomContentPage() {
         <label htmlFor="draft-file" className="mt-5 block text-lg font-semibold">
           视频文件
         </label>
-        <input
-          id="draft-file"
-          ref={fileInputRef}
-          type="file"
-          accept=".mp4,.m4v,.mov,video/mp4,video/x-m4v,video/quicktime"
-          onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
-          className="mt-2 w-full text-lg text-slate-600 file:mr-4 file:rounded-2xl file:border-0 file:bg-slate-100 file:px-4 file:py-3 file:text-lg file:font-semibold file:text-slate-700"
-        />
+        <VideoFileField id="draft-file" file={file} onChange={setFile} />
         <p className="mt-3 text-base text-slate-400">
           支持 mp4 / m4v / mov，不超过 {MAX_MB}MB、5 分钟（最终以服务端校验为准）
         </p>
@@ -176,7 +151,7 @@ export default function CustomContentPage() {
 
         <button
           type="submit"
-          disabled={uploading}
+          disabled={uploading || !file}
           className="mt-5 w-full rounded-2xl bg-emerald-500 py-4 text-xl font-bold text-white shadow-md active:bg-emerald-600 disabled:opacity-40"
         >
           {uploading ? "上传中…" : "上传并开始转写"}

@@ -4,12 +4,10 @@
 // 上传走 POST /api/uploads（type=standard + unitId + moduleKind，服务端二次校验
 // 管理员与教材单元）；定稿走 POST /api/drafts/[id]/publish（09 号票端点，
 // standard 包落在公开标准目录，全账号可见）。UI 不做自动化测试，走手工验收清单。
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { STATUS_BADGES } from "@/components/shared/draft-ui";
-import {
-  MAX_MB,
-  precheckVideoFile,
-} from "@/components/shared/upload-precheck";
+import { MAX_MB } from "@/components/shared/upload-precheck";
+import { VideoFileField } from "@/components/shared/video-file-field";
 
 export interface TextbookCatalogUnit {
   unitId: string;
@@ -54,7 +52,6 @@ export default function StandardAdminClient({
   const [uploading, setUploading] = useState(false);
   const [publishingId, setPublishingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 管理员门禁（非管理员不渲染任何表单，与 /admin 同约定）
   useEffect(() => {
@@ -97,20 +94,6 @@ export default function StandardAdminClient({
 
   const selectedUnit = catalog.find((u) => u.unitId === unitId);
 
-  function handleFileChange(f: File | null) {
-    setError(null);
-    if (f) {
-      const problem = precheckVideoFile(f);
-      if (problem) {
-        setError(problem);
-        setFile(null);
-        if (fileInputRef.current) fileInputRef.current.value = "";
-        return;
-      }
-    }
-    setFile(f);
-  }
-
   async function handleUpload(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (uploading) return;
@@ -141,7 +124,6 @@ export default function StandardAdminClient({
         const body = (await res.json()) as { draft?: { id: string } };
         setTitle("");
         setFile(null);
-        if (fileInputRef.current) fileInputRef.current.value = "";
         await loadDrafts();
         if (body.draft?.id) {
           setNotice("上传成功，转写完成后去校对文本。");
@@ -308,14 +290,7 @@ export default function StandardAdminClient({
         <label htmlFor="std-file" className="mt-5 block text-lg font-semibold">
           视频文件
         </label>
-        <input
-          id="std-file"
-          ref={fileInputRef}
-          type="file"
-          accept=".mp4,.m4v,.mov,video/mp4,video/x-m4v,video/quicktime"
-          onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
-          className="mt-2 w-full text-lg text-slate-600 file:mr-4 file:rounded-2xl file:border-0 file:bg-slate-100 file:px-4 file:py-3 file:text-lg file:font-semibold file:text-slate-700"
-        />
+        <VideoFileField id="std-file" file={file} onChange={setFile} />
         <p className="mt-3 text-base text-slate-400">
           支持 mp4 / m4v / mov，不超过 {MAX_MB}MB、5 分钟；校对页会按该模块的教材原文预填参照
         </p>
@@ -333,7 +308,7 @@ export default function StandardAdminClient({
 
         <button
           type="submit"
-          disabled={uploading}
+          disabled={uploading || !file}
           className="mt-5 w-full rounded-2xl bg-emerald-500 py-4 text-xl font-bold text-white shadow-md active:bg-emerald-600 disabled:opacity-40"
         >
           {uploading ? "上传中…" : "上传并开始转写"}
