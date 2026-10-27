@@ -41,7 +41,7 @@ navigator.mediaDevices.getUserMedia = async () => dest.stream;
 
 再进练习页走流程。
 
-- [ ] `npm run dev`：播放示范 → 自动录音 → 点「读好了」→ 出分且 `practice_attempts` 落库（查库或刷新页面看最好成绩）
-- [ ] 录满 15 秒的自动提交路径同样能出分（上一条的 15s 超时分支）
-- [ ] `npm run build && npm start` 生产模式行为不回归
-- [ ] npm test / npm run typecheck 全绿（基线 382）
+- [x] `npm run dev`：播放示范 → 自动录音 → 点「读好了」→ 出分且 `practice_attempts` 落库（查库或刷新页面看最好成绩）
+- [x] 录满 15 秒的自动提交路径同样能出分（上一条的 15s 超时分支）
+- [x] `npm run build && npm start` 生产模式行为不回归
+- [x] npm test / npm run typecheck 全绿（基线 382）
