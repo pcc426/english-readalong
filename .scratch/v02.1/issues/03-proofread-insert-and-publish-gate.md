@@ -33,7 +33,7 @@
 
 ## 验收
 
-- [ ] insert：成功（含占位时间规则两种分支）/ 401 / 404（越界、他人草稿）/ 409（非 proofreading）均有路由测试
-- [ ] insert 后序号连续、可带初始文本、空文本落库成功
-- [ ] publish：存在未确认句子 → 422 且 issues 列出未确认项；全部 confirmed → 定稿通过（叠加既有校验）
-- [ ] npm test / npm run typecheck 全绿（基线 382，只增不减）
+- [x] insert：成功（含占位时间规则两种分支）/ 401 / 404（越界、他人草稿）/ 409（非 proofreading）均有路由测试
+- [x] insert 后序号连续、可带初始文本、空文本落库成功
+- [x] publish：存在未确认句子 → 422 且 issues 列出未确认项；全部 confirmed → 定稿通过（叠加既有校验）
+- [x] npm test / npm run typecheck 全绿（基线 382，只增不减）
