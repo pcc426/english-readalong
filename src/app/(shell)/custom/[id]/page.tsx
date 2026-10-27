@@ -197,16 +197,9 @@ export default function DraftDetailPage() {
           去校对 →
         </a>
       )}
-      {draft.status === "proofreading" && (
-        <a
-          href={`/drafts/${draft.id}/cutpoint`}
-          className="mt-3 block rounded-2xl bg-white py-4 text-center text-xl font-bold text-slate-700 shadow-md ring-1 ring-slate-200 active:bg-slate-50"
-        >
-          切点校对（微调起止时间）→
-        </a>
-      )}
 
-      {/* V0.2 整改：家长定稿入口（票 09 端点；422 逐句问题就地展示） */}
+      {/* V0.2 整改：家长定稿入口（票 09 端点；422 逐句问题就地展示）。
+       * V0.2.1 发布门槛：全部句子确认后才亮起（服务端 422 双保险）。 */}
       {draft.status === "proofreading" && (
         <>
           {publishError && (
@@ -226,14 +219,29 @@ export default function DraftDetailPage() {
               )}
             </div>
           )}
-          <button
-            type="button"
-            onClick={() => void handlePublish()}
-            disabled={publishing}
-            className="mt-3 w-full rounded-2xl bg-white py-4 text-center text-xl font-bold text-emerald-700 shadow-md ring-1 ring-emerald-200 active:bg-emerald-50 disabled:opacity-40"
-          >
-            {publishing ? "定稿中…" : "定稿发布"}
-          </button>
+          {(() => {
+            const unconfirmed = draft.sentences.filter(
+              (s) => s.proofread !== "confirmed"
+            ).length;
+            const allConfirmed = draft.sentences.length > 0 && unconfirmed === 0;
+            return (
+              <>
+                {!allConfirmed && (
+                  <p role="status" className="mt-3 text-lg text-slate-400">
+                    还有 {unconfirmed} 句未确认，确认完才能定稿。
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={() => void handlePublish()}
+                  disabled={publishing || !allConfirmed}
+                  className="mt-3 w-full rounded-2xl bg-white py-4 text-center text-xl font-bold text-emerald-700 shadow-md ring-1 ring-emerald-200 active:bg-emerald-50 disabled:opacity-40"
+                >
+                  {publishing ? "定稿中…" : "定稿发布"}
+                </button>
+              </>
+            );
+          })()}
         </>
       )}
       {draft.status === "published" && justPublished && (

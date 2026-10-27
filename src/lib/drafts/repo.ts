@@ -190,6 +190,25 @@ export function sentenceCountsByDraft(
   return counts;
 }
 
+/** 各草稿已确认（proofread='confirmed'）的句子数（V0.2.1 发布门槛的列表展示） */
+export function confirmedCountsByDraft(
+  db: Db,
+  draftIds: readonly string[]
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  if (draftIds.length === 0) return counts;
+  const placeholders = draftIds.map(() => "?").join(", ");
+  const rows = db
+    .prepare(
+      `SELECT draft_id, COUNT(*) AS n FROM draft_sentences
+       WHERE draft_id IN (${placeholders}) AND proofread = 'confirmed'
+       GROUP BY draft_id`
+    )
+    .all(...draftIds) as Array<{ draft_id: string; n: number }>;
+  for (const row of rows) counts.set(row.draft_id, row.n);
+  return counts;
+}
+
 /** 删草稿（连同句子，显式事务；better-sqlite3 默认不开外键级联） */
 export function deleteDraft(db: Db, id: string): void {
   const tx = db.transaction(() => {

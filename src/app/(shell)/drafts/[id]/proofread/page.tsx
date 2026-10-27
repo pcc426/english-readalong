@@ -1,30 +1,41 @@
 "use client";
 
-// 文本校对页（票 07）：每页 10 句，逐句对照视频画面字幕。
-// 可改文本（失焦或停顿 0.8s 自动保存）、播放本句片段、删除、与下句合并、确认本页；
-// 所有改动即时落草稿，中断后回来接着做。UI 不做自动化，走 iPad 手工验收清单。
-// V0.2 整改：单句保存骨架（saving/saved/error + 防抖 + 没变不发请求）
-// 与切点页共用 useSentenceSave（比对键=文本）。
+// 统一校对页（V0.2.1 票 04，合并原文本校对与切点校对）：
+// 每屏一句——上方视频（高度受限）+ 下方当前句卡片（可编辑文本、±0.25s 时点微调、
+// 新增一句 / 并入上一句 / 与下一句合并 / 删除、确认本句），桌面与 iPad 竖屏一屏完成。
+// 任何改动都会让句子回到「未确认」；全部确认后详情/管理页的定稿按钮才亮起（票 03 门槛）。
+// 标准草稿保留教材原文参照与一键采用（1:1 对齐守卫，V0.2 整改语义不变）。
+// UI 不做自动化，走 iPad 手工验收清单。壳只走 HTTP，不从 src/lib 引类型。
 import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import SentenceRow from "@/components/proofread/SentenceRow";
+import { adjustBoundsMs, CALIBRATE_STEP_MS, MIN_CLIP_MS } from "@/lib/domain/calibrate";
+import { formatMs } from "@/components/shared/draft-ui";
+import {
+  useSentenceSave,
+} from "@/components/shared/use-draft-save";
 import {
   TEXTBOOK_MISALIGNED_HINT,
   textbookAligns,
 } from "@/components/proofread/textbook";
-import {
-  SAVED_HINT_MS,
-  useSentenceSave,
-} from "@/components/shared/use-draft-save";
-import {
-  type DraftSentenceView,
-  type DraftDetailView,
-  type SentenceUpdateResponse,
-  type SentencesResponse,
-  type TextbookModuleView,
+import type {
+  DraftDetailView,
+  DraftSentenceView,
+  SentencesResponse,
+  TextbookModuleView,
 } from "@/components/proofread/types";
 
-const PAGE_SIZE = 10;
+type SaveState = "saving" | "saved" | "error";
+
+const SAVE_HINTS: Record<SaveState, { text: string; className: string }> = {
+  saving: { text: "保存中…", className: "text-slate-400" },
+  saved: { text: "已保存 ✓", className: "text-emerald-600" },
+  error: { text: "保存失败，请重试", className: "text-red-600" },
+};
+
+const ACTION_BTNS =
+  "rounded-2xl bg-white px-4 py-2 text-base font-semibold text-slate-600 ring-1 ring-slate-200 active:bg-slate-50 disabled:opacity-40";
+const ADJUST_BTNS =
+  "rounded-xl bg-slate-100 py-3 text-lg font-bold active:bg-slate-200 disabled:opacity-40";
 
 export default function ProofreadPage() {
   const params = useParams<{ id: string }>();
@@ -34,16 +45,15 @@ export default function ProofreadPage() {
   const [sentences, setSentences] = useState<DraftSentenceView[]>([]);
   const [failed, setFailed] = useState(false);
   const [notFound, setNotFound] = useState(false);
-  // 票 12（仅 standard 草稿）：教材原文句子清单；null=加载中/加载失败或 custom 草稿
+  // 票 12（仅 standard 草稿）：教材原文参照；null = 加载中/失败或 custom 草稿
   const [textbookSentences, setTextbookSentences] = useState<string[] | null>(null);
   const [textbookFailed, setTextbookFailed] = useState(false);
 
-  const [page, setPage] = useState(0);
+  // position 是 sentences 数组下标（插删换血后按位置导航最稳）
+  const [position, setPosition] = useState(0);
+  const [playing, setPlaying] = useState(false);
   const [mutating, setMutating] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [confirming, setConfirming] = useState(false);
-  const [confirmDone, setConfirmDone] = useState(false);
-  const [playingIndex, setPlayingIndex] = useState<number | null>(null);
 
   const sentencesRef = useRef(sentences);
   sentencesRef.current = sentences;
@@ -54,14 +64,14 @@ export default function ProofreadPage() {
     commitSave,
     scheduleSave,
     seedServerState,
-    clearTimers,
     cancelTimer,
+    clearTimers,
     clearSaveStates,
-    noteServerSentence,
   } = useSentenceSave({
     draftId: id,
-    keyOf: (s) => s.text,
-    bodyFor: (s) => ({ text: s.text }),
+    // 比对键=文本+时点：任一变化都要发请求；确认/采用走 overrides.force
+    keyOf: (s) => `${s.text}|${s.startMs}-${s.endMs}`,
+    bodyFor: (s) => ({ text: s.text, startMs: s.startMs, endMs: s.endMs }),
     applySentence: (sentence) =>
       setSentences((prev) =>
         prev.map((s) => (s.index === sentence.index ? sentence : s))
@@ -122,99 +132,145 @@ export default function ProofreadPage() {
     };
   }, [id, seedServerState]);
 
-  const pageCount = Math.max(1, Math.ceil(sentences.length / PAGE_SIZE));
-  const current = Math.min(page, pageCount - 1);
-  const pageSentences = sentences.slice(
-    current * PAGE_SIZE,
-    current * PAGE_SIZE + PAGE_SIZE
-  );
+  const current = sentences[Math.min(position, sentences.length - 1)] ?? null;
   const confirmedCount = sentences.filter(
     (s) => s.proofread === "confirmed"
   ).length;
+  const currentSaveState = current ? saveStates[current.index] : undefined;
 
-  /** 服务端返回整个数组时整体换血（删除/合并后序号变了），顺带清编辑现场 */
+  /** 结构性操作（删/并/插）后整体换血：清编辑现场、停播放、按位置钳制导航 */
   function applySentences(next: DraftSentenceView[]) {
     clearTimers();
     videoRef.current?.pause();
-    setPlayingIndex(null);
+    setPlaying(false);
     clearSaveStates();
     setSentences(next);
     seedServerState(next);
+    setPosition((prev) => Math.min(prev, Math.max(0, next.length - 1)));
   }
 
-  function handleTextChange(index: number, text: string) {
+  /** 微调当前句的某一边：领域层钳制（起点 ≥ 0、最短片段 200ms），
+   * 终点不越过视频末尾（时长未知时不设上限，服务端校验兜底），防抖自动保存 */
+  function adjust(field: "start" | "end", deltaMs: number) {
+    if (!current) return;
+    const index = current.index;
+    setSentences((prev) =>
+      prev.map((s) => {
+        if (s.index !== index) return s;
+        const { start, end } = adjustBoundsMs(
+          { start: s.startMs, end: s.endMs },
+          field,
+          deltaMs
+        );
+        let endMs = end;
+        const duration = videoRef.current?.duration;
+        if (field === "end" && typeof duration === "number" && duration > 0) {
+          endMs = Math.max(
+            start + MIN_CLIP_MS,
+            Math.min(endMs, Math.round(duration * 1000))
+          );
+        }
+        return { ...s, startMs: start, endMs };
+      })
+    );
+    scheduleSave(index);
+  }
+
+  function handleTextChange(text: string) {
+    if (!current) return;
+    const index = current.index;
     setSentences((prev) =>
       prev.map((s) => (s.index === index ? { ...s, text } : s))
     );
     scheduleSave(index);
   }
 
-  function handleCommit(index: number) {
-    cancelTimer(index);
-    void commitSave(index);
+  function handleCommit() {
+    if (!current) return;
+    cancelTimer(current.index);
+    void commitSave(current.index);
   }
 
-  /** 确认本页：逐句 PUT { text, confirm:true }。先取消未触发的防抖，
-   * 确认请求本身带着最新文本，天然覆盖未保存的输入。 */
-  async function handleConfirmPage() {
-    if (confirming || !id) return;
-    setConfirming(true);
-    setConfirmDone(false);
-    setActionError(null);
-    clearTimers();
-    let ok = true;
-    for (const s of pageSentences) {
-      try {
-        const res = await fetch(`/api/drafts/${id}/sentences/${s.index}`, {
-          method: "PUT",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ text: s.text, confirm: true }),
-        });
-        if (!res.ok) throw new Error(String(res.status));
-        const body = (await res.json()) as SentenceUpdateResponse;
-        noteServerSentence(body.sentence);
-      } catch {
-        ok = false;
-        break;
-      }
-    }
-    setConfirming(false);
-    if (ok) {
-      setConfirmDone(true);
-      setTimeout(() => setConfirmDone(false), SAVED_HINT_MS);
-    } else {
-      setActionError("「确认本页」没有完成，请重试");
-    }
+  /** 切句：先把当前句未触发的防抖立即提交，再换句并停掉片段播放 */
+  function selectSentence(nextPos: number) {
+    if (!current || nextPos === position) return;
+    cancelTimer(current.index);
+    void commitSave(current.index);
+    videoRef.current?.pause();
+    setPlaying(false);
+    setPosition(nextPos);
   }
 
-  async function handleDelete(sentence: DraftSentenceView) {
-    if (!id || mutating || confirming) return;
-    if (!window.confirm(`确定删除第 ${sentence.index + 1} 句吗？删除后不能恢复。`)) {
-      return;
-    }
+  /** 确认本句：文本与时点一起确认（PUT confirm:true，force 带最新值）。
+   * 之后任何改动都会被服务端置回 edited（未确认）。 */
+  function confirmSentence() {
+    if (!current) return;
+    void commitSave(current.index, {
+      force: true,
+      body: {
+        text: current.text,
+        startMs: current.startMs,
+        endMs: current.endMs,
+        confirm: true,
+      },
+    });
+  }
+
+  /** 新增一句（拆分长句）：插在当前句后，自动跳到新句开始编辑 */
+  async function handleInsert() {
+    if (!id || !current || mutating) return;
     setMutating(true);
     setActionError(null);
     try {
-      const res = await fetch(`/api/drafts/${id}/sentences/${sentence.index}`, {
-        method: "DELETE",
-      });
+      const res = await fetch(
+        `/api/drafts/${id}/sentences/${current.index}/insert`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ text: "" }),
+        }
+      );
       if (!res.ok) throw new Error(String(res.status));
       const body = (await res.json()) as SentencesResponse;
       applySentences(body.sentences);
+      setPosition(position + 1);
     } catch {
-      setActionError("删除失败，请重试");
+      setActionError("新增失败，请重试");
     } finally {
       setMutating(false);
     }
   }
 
-  async function handleMerge(sentence: DraftSentenceView) {
-    if (!id || mutating || confirming) return;
+  /** 并入上一句：调既有 merge（index-1 与 index 合并） */
+  async function handleMergePrev() {
+    if (!id || !current || mutating || position === 0) return;
+    const target = sentences[position - 1];
     setMutating(true);
     setActionError(null);
     try {
       const res = await fetch(
-        `/api/drafts/${id}/sentences/${sentence.index}/merge`,
+        `/api/drafts/${id}/sentences/${target.index}/merge`,
+        { method: "POST" }
+      );
+      if (!res.ok) throw new Error(String(res.status));
+      const body = (await res.json()) as SentencesResponse;
+      applySentences(body.sentences);
+      setPosition(Math.max(0, position - 1));
+    } catch {
+      setActionError("合并失败，请重试");
+    } finally {
+      setMutating(false);
+    }
+  }
+
+  /** 与下一句合并：调既有 merge（index 与 index+1 合并），留在本句看合并结果 */
+  async function handleMergeNext() {
+    if (!id || !current || mutating) return;
+    setMutating(true);
+    setActionError(null);
+    try {
+      const res = await fetch(
+        `/api/drafts/${id}/sentences/${current.index}/merge`,
         { method: "POST" }
       );
       if (!res.ok) throw new Error(String(res.status));
@@ -227,56 +283,86 @@ export default function ProofreadPage() {
     }
   }
 
-  /** 票 12：一键采用本句的教材原文（走既有 PUT 端点）；
-   * ASR 文本与起止时间不被删除，只是文本被替换，仍可继续手工修改。
-   * 仅在 1:1 对齐时可达（textbookAligned 门禁在渲染层）。 */
-  function handleAdopt(sentence: DraftSentenceView) {
-    if (!textbookSentences || sentence.index >= textbookSentences.length) return;
-    cancelTimer(sentence.index);
-    void commitSave(sentence.index, {
+  async function handleDelete() {
+    if (!id || !current || mutating) return;
+    if (
+      !window.confirm(
+        `确定删除第 ${current.index + 1} 句吗？删除后不能恢复。`
+      )
+    ) {
+      return;
+    }
+    setMutating(true);
+    setActionError(null);
+    try {
+      const res = await fetch(`/api/drafts/${id}/sentences/${current.index}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      const body = (await res.json()) as SentencesResponse;
+      applySentences(body.sentences);
+    } catch {
+      setActionError("删除失败，请重试");
+    } finally {
+      setMutating(false);
+    }
+  }
+
+  /** 票 12：一键采用本句的教材原文（仅 1:1 对齐时可达） */
+  function handleAdopt() {
+    if (!current || !textbookSentences || current.index >= textbookSentences.length)
+      return;
+    cancelTimer(current.index);
+    void commitSave(current.index, {
       force: true,
-      body: { text: textbookSentences[sentence.index] },
+      body: { text: textbookSentences[current.index] },
     });
   }
 
-  function playSentence(sentence: DraftSentenceView) {
+  function togglePlay() {
     const v = videoRef.current;
-    if (!v) return;
-    if (playingIndex === sentence.index) {
+    if (!v || !current) return;
+    if (playing) {
       v.pause();
-      setPlayingIndex(null);
+      setPlaying(false);
       return;
     }
-    v.currentTime = sentence.startMs / 1000;
+    v.currentTime = current.startMs / 1000;
     void v.play();
-    setPlayingIndex(sentence.index);
+    setPlaying(true);
   }
 
-  /** 播到本句结束毫秒就停（字幕画面对照用的就是这一段） */
+  /** 播到本句终点毫秒就停 */
   function handleTimeUpdate() {
     const v = videoRef.current;
-    if (!v || playingIndex === null) return;
-    const s = sentencesRef.current.find((x) => x.index === playingIndex);
-    if (s && v.currentTime * 1000 >= s.endMs) {
+    if (!v || !playing || !current) return;
+    if (v.currentTime * 1000 >= current.endMs) {
       v.pause();
-      setPlayingIndex(null);
+      setPlaying(false);
     }
   }
 
-  // 翻页时停掉上一页的片段播放
-  useEffect(() => {
-    videoRef.current?.pause();
-    setPlayingIndex(null);
-  }, [current]);
-
-  // 票 12：标准草稿从管理端「标准内容制作」进入，返回链接随之不同
-  const backHref = draft?.type === "standard" ? "/admin/standard" : "/custom";
+  // 票 12 + V0.2 整改：standard 草稿从管理端进入，回「标准内容制作」；
+  // custom 草稿回详情页；draft 未加载时退回自定义内容列表兜底
+  const backHref =
+    draft?.type === "standard"
+      ? "/admin/standard"
+      : draft
+        ? `/custom/${draft.id}`
+        : "/custom";
   const backLabel =
-    draft?.type === "standard" ? "← 返回标准内容制作" : "← 返回自定义内容";
+    draft?.type === "standard"
+      ? "← 返回标准内容制作"
+      : draft
+        ? "← 返回内容详情"
+        : "← 返回自定义内容";
 
   // V0.2 整改：句子被增删后与教材模块不再 1:1 对齐，采用按钮整体隐藏
-  //（教材原文参照保留，由人手动对照复制），防一键采用整段错位
   const textbookAligned = textbookAligns(textbookSentences, sentences.length);
+  const textbookText =
+    current && textbookSentences && current.index < textbookSentences.length
+      ? textbookSentences[current.index]
+      : null;
 
   if (notFound || failed || draft === null) {
     return (
@@ -326,183 +412,218 @@ export default function ProofreadPage() {
     );
   }
 
-  const pageAllConfirmed =
-    pageSentences.length > 0 &&
-    pageSentences.every((s) => s.proofread === "confirmed");
-
   return (
-    <div className="mx-auto max-w-xl px-5 py-8">
-      <a href={backHref} className="text-lg text-emerald-700">
-        {backLabel}
-      </a>
-
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        <h1 className="text-3xl font-bold tracking-tight">{draft.title}</h1>
-        <span className="rounded-full bg-amber-100 px-4 py-1 text-lg font-bold text-amber-700">
+    <div className="mx-auto flex h-[100dvh] max-w-2xl flex-col px-4 py-3">
+      {/* 头部：返回 + 标题 + 确认进度（压缩高度，保一屏） */}
+      <div className="flex items-center justify-between gap-3">
+        <a href={backHref} className="shrink-0 text-base text-emerald-700">
+          {backLabel}
+        </a>
+        <span className="shrink-0 rounded-full bg-amber-100 px-3 py-0.5 text-base font-bold text-amber-700">
           未校对
         </span>
       </div>
-
-      <div className="mt-4">
-        <p className="text-lg text-slate-500" role="status">
-          已确认 {confirmedCount} / 共 {sentences.length} 句
-        </p>
-        <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-100">
-          <div
-            className="h-full rounded-full bg-emerald-500 transition-all"
-            style={{
-              width:
-                sentences.length === 0
-                  ? "0%"
-                  : `${(confirmedCount / sentences.length) * 100}%`,
-            }}
-          />
-        </div>
+      <div className="mt-1 flex items-baseline gap-3">
+        <h1 className="truncate text-xl font-bold tracking-tight">
+          {draft.title}
+        </h1>
+        <span className="shrink-0 text-base text-slate-500" role="status">
+          已确认 {confirmedCount} / {sentences.length} 句
+        </span>
       </div>
 
-      <p className="mt-4 text-base text-slate-400">
-        {draft.type === "standard"
-          ? "逐句对照教材原文与视频画面字幕检查文字；与教材不一致的句子可一键采用原文，改动自动保存。"
-          : "逐句对照视频画面字幕检查文字；改动自动保存，中途退出可回来接着做。"}
-      </p>
-
       {draft.type === "standard" && textbookFailed && (
-        <p role="alert" className="mt-2 rounded-2xl bg-amber-50 px-5 py-3 text-base text-amber-700">
+        <p role="alert" className="mt-1 rounded-xl bg-amber-50 px-3 py-1.5 text-sm text-amber-700">
           教材原文加载失败，可直接手工校对。
         </p>
       )}
-      {draft.type === "standard" && textbookSentences !== null && !textbookAligned && (
-        <p role="status" className="mt-2 rounded-2xl bg-amber-50 px-5 py-3 text-base text-amber-700">
-          {TEXTBOOK_MISALIGNED_HINT}
-        </p>
-      )}
+      {draft.type === "standard" &&
+        textbookSentences !== null &&
+        !textbookAligned && (
+          <p role="status" className="mt-1 rounded-xl bg-amber-50 px-3 py-1.5 text-sm text-amber-700">
+            {TEXTBOOK_MISALIGNED_HINT}
+          </p>
+        )}
 
-      {/* 两个校对工具作用于同一草稿，可互相切换（spec · 校对工具） */}
-      <a
-        href={`/drafts/${id}/cutpoint`}
-        className="mt-2 inline-block text-base text-emerald-700 underline underline-offset-4"
-      >
-        要微调句子起止时间？去切点校对 →
-      </a>
-
-      {/* 隐藏的视频元素：只借它按起止毫秒播片段 */}
+      {/* 视频：高度受限（约 1/3 屏），播当前句片段 */}
       <video
         ref={videoRef}
         src={draft.videoUrl}
         onTimeUpdate={handleTimeUpdate}
         preload="auto"
-        className="hidden"
-        aria-hidden
+        className="mt-2 max-h-[36vh] w-full rounded-2xl bg-black object-contain shadow-md"
       />
 
       {actionError && (
-        <p role="alert" className="mt-4 rounded-2xl bg-red-50 px-5 py-3 text-lg text-red-600">
+        <p role="alert" className="mt-2 rounded-xl bg-red-50 px-4 py-2 text-base text-red-600">
           {actionError}
         </p>
       )}
 
-      {sentences.length === 0 ? (
+      {/* 当前句卡片：flex-1 占据剩余空间，内容溢出才滚动 */}
+      {current ? (
+        <section className="mt-3 flex min-h-0 flex-1 flex-col rounded-3xl bg-white p-4 shadow-md ring-1 ring-slate-100">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-slate-100 px-3 py-0.5 text-base font-bold text-slate-500">
+              第 {current.index + 1} 句
+            </span>
+            {current.proofread === "confirmed" ? (
+              <span className="rounded-full bg-emerald-100 px-3 py-0.5 text-base font-semibold text-emerald-700">
+                已确认
+              </span>
+            ) : (
+              <span className="rounded-full bg-slate-100 px-3 py-0.5 text-base text-slate-400">
+                未确认
+              </span>
+            )}
+            {currentSaveState && (
+              <span role="status" className={`text-base ${SAVE_HINTS[currentSaveState].className}`}>
+                {SAVE_HINTS[currentSaveState].text}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={togglePlay}
+              disabled={mutating}
+              className={`ml-auto rounded-xl px-4 py-2 text-base font-bold shadow-sm disabled:opacity-40 ${
+                playing
+                  ? "bg-emerald-600 text-white active:bg-emerald-700"
+                  : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 active:bg-emerald-100"
+              }`}
+            >
+              {playing ? "停止" : "▶ 播放本句"}
+            </button>
+          </div>
+
+          <textarea
+            value={current.text}
+            onChange={(e) => handleTextChange(e.target.value)}
+            onBlur={handleCommit}
+            aria-label={`第 ${current.index + 1} 句文本`}
+            rows={2}
+            className="mt-2 w-full resize-none rounded-2xl bg-slate-50 px-4 py-3 text-xl leading-relaxed ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+          />
+
+          {/* 票 12（仅 standard 草稿）：教材原文参照；ASR 文本与时点保留作对照 */}
+          {textbookText !== null && (
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl bg-sky-50 px-3 py-2">
+              <span className="shrink-0 text-sm font-semibold text-sky-700">
+                教材原文
+              </span>
+              <span className="min-w-0 flex-1 text-sm text-slate-600">
+                {textbookText}
+              </span>
+              {textbookAligned && current.text !== textbookText && (
+                <button
+                  type="button"
+                  onClick={handleAdopt}
+                  disabled={mutating}
+                  className="shrink-0 rounded-xl bg-sky-100 px-3 py-1.5 text-sm font-semibold text-sky-700 active:bg-sky-200 disabled:opacity-40"
+                >
+                  采用教材原文
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* 时点微调（原切点页能力并入） */}
+          <p className="mt-3 text-center text-2xl font-bold tabular-nums text-emerald-700">
+            {formatMs(current.startMs)} → {formatMs(current.endMs)}
+          </p>
+          <div className="mt-2 grid grid-cols-4 gap-2">
+            <button type="button" onClick={() => adjust("start", -CALIBRATE_STEP_MS)} disabled={mutating} className={ADJUST_BTNS}>
+              起 −0.25s
+            </button>
+            <button type="button" onClick={() => adjust("start", CALIBRATE_STEP_MS)} disabled={mutating} className={ADJUST_BTNS}>
+              起 ＋0.25s
+            </button>
+            <button type="button" onClick={() => adjust("end", -CALIBRATE_STEP_MS)} disabled={mutating} className={ADJUST_BTNS}>
+              止 −0.25s
+            </button>
+            <button type="button" onClick={() => adjust("end", CALIBRATE_STEP_MS)} disabled={mutating} className={ADJUST_BTNS}>
+              止 ＋0.25s
+            </button>
+          </div>
+
+          {/* 结构操作：新增（拆分长句）/ 并入上一句 / 与下一句合并 / 删除 */}
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button type="button" onClick={() => void handleInsert()} disabled={mutating} className={ACTION_BTNS}>
+              ＋新增一句
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleMergePrev()}
+              disabled={mutating || position === 0}
+              className={ACTION_BTNS}
+            >
+              并入上一句
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleMergeNext()}
+              disabled={mutating || position >= sentences.length - 1}
+              className={ACTION_BTNS}
+            >
+              与下一句合并
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleDelete()}
+              disabled={mutating || sentences.length <= 1}
+              className="rounded-2xl bg-red-50 px-4 py-2 text-base font-semibold text-red-600 ring-1 ring-red-100 active:bg-red-100 disabled:opacity-40"
+            >
+              删除
+            </button>
+          </div>
+
+          <div className="mt-auto pt-3">
+            <button
+              type="button"
+              onClick={confirmSentence}
+              disabled={mutating || currentSaveState === "saving"}
+              className={`w-full rounded-2xl py-4 text-xl font-bold text-white shadow-md active:bg-emerald-600 disabled:opacity-40 ${
+                current.proofread === "confirmed" ? "bg-emerald-600" : "bg-emerald-500"
+              }`}
+            >
+              {current.proofread === "confirmed"
+                ? "本句已确认 ✓（再改动会回到未确认）"
+                : "✓ 确认本句"}
+            </button>
+            {currentSaveState === "saved" && (
+              <p role="status" className="mt-1 text-center text-base text-emerald-600">
+                已保存 ✓
+              </p>
+            )}
+          </div>
+        </section>
+      ) : (
         <p className="mt-6 rounded-3xl bg-white px-6 py-10 text-center text-xl text-slate-400 shadow-md ring-1 ring-slate-100">
           暂无句子
         </p>
-      ) : (
-        <>
-          <div className="mt-5 flex items-center justify-between">
-            <button
-              type="button"
-              onClick={() => setPage(current - 1)}
-              disabled={current === 0 || mutating || confirming}
-              className="rounded-2xl bg-white px-5 py-2 text-lg font-semibold text-slate-600 shadow-sm ring-1 ring-slate-200 active:bg-slate-50 disabled:opacity-40"
-            >
-              上一页
-            </button>
-            <span className="text-lg text-slate-500">
-              第 {current + 1} / {pageCount} 页
-            </span>
-            <button
-              type="button"
-              onClick={() => setPage(current + 1)}
-              disabled={current >= pageCount - 1 || mutating || confirming}
-              className="rounded-2xl bg-white px-5 py-2 text-lg font-semibold text-slate-600 shadow-sm ring-1 ring-slate-200 active:bg-slate-50 disabled:opacity-40"
-            >
-              下一页
-            </button>
-          </div>
-
-          <ol className="mt-4 space-y-4">
-            {pageSentences.map((s) => (
-              <SentenceRow
-                key={s.index}
-                number={s.index + 1}
-                sentence={s}
-                isLastOverall={s.index === sentences.length - 1}
-                saveState={saveStates[s.index]}
-                playing={playingIndex === s.index}
-                disabled={mutating || confirming}
-                textbook={
-                  textbookSentences && s.index < textbookSentences.length
-                    ? {
-                        text: textbookSentences[s.index],
-                        onAdopt: textbookAligned
-                          ? () => handleAdopt(s)
-                          : undefined,
-                      }
-                    : undefined
-                }
-                onTextChange={(text) => handleTextChange(s.index, text)}
-                onCommit={() => handleCommit(s.index)}
-                onPlay={() => playSentence(s)}
-                onDelete={() => void handleDelete(s)}
-                onMerge={() => void handleMerge(s)}
-              />
-            ))}
-          </ol>
-
-          <button
-            type="button"
-            onClick={() => void handleConfirmPage()}
-            disabled={mutating || confirming || pageAllConfirmed}
-            className={`mt-6 w-full rounded-2xl py-4 text-xl font-bold text-white shadow-md active:bg-emerald-600 disabled:opacity-40 ${
-              confirmDone || pageAllConfirmed ? "bg-emerald-600" : "bg-emerald-500"
-            }`}
-          >
-            {confirming
-              ? "确认中…"
-              : confirmDone
-                ? "本页已确认 ✓"
-                : pageAllConfirmed
-                  ? "本页已全部确认"
-                  : "确认本页"}
-          </button>
-          {confirmDone && (
-            <p role="status" className="mt-2 text-center text-lg text-emerald-600">
-              本页各句已逐句标记为「已确认」
-            </p>
-          )}
-
-          <div className="mt-4 flex items-center justify-between">
-            <button
-              type="button"
-              onClick={() => setPage(current - 1)}
-              disabled={current === 0 || mutating || confirming}
-              className="rounded-2xl bg-white px-5 py-2 text-lg font-semibold text-slate-600 shadow-sm ring-1 ring-slate-200 active:bg-slate-50 disabled:opacity-40"
-            >
-              上一页
-            </button>
-            <span className="text-lg text-slate-500">
-              第 {current + 1} / {pageCount} 页
-            </span>
-            <button
-              type="button"
-              onClick={() => setPage(current + 1)}
-              disabled={current >= pageCount - 1 || mutating || confirming}
-              className="rounded-2xl bg-white px-5 py-2 text-lg font-semibold text-slate-600 shadow-sm ring-1 ring-slate-200 active:bg-slate-50 disabled:opacity-40"
-            >
-              下一页
-            </button>
-          </div>
-        </>
       )}
+
+      {/* 句间导航 */}
+      <div className="mt-2 flex items-center justify-between pb-1">
+        <button
+          type="button"
+          onClick={() => selectSentence(position - 1)}
+          disabled={position === 0 || mutating}
+          className="rounded-2xl bg-white px-5 py-2 text-lg font-semibold text-slate-600 shadow-sm ring-1 ring-slate-200 active:bg-slate-50 disabled:opacity-40"
+        >
+          ‹ 上一句
+        </button>
+        <span className="text-lg text-slate-500">
+          第 {current ? current.index + 1 : 0} / {sentences.length} 句
+        </span>
+        <button
+          type="button"
+          onClick={() => selectSentence(position + 1)}
+          disabled={position >= sentences.length - 1 || mutating}
+          className="rounded-2xl bg-white px-5 py-2 text-lg font-semibold text-slate-600 shadow-sm ring-1 ring-slate-200 active:bg-slate-50 disabled:opacity-40"
+        >
+          下一句 ›
+        </button>
+      </div>
     </div>
   );
 }

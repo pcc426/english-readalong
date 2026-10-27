@@ -27,6 +27,7 @@ interface StandardDraftOverview {
   moduleKind: string | null;
   status: "transcribing" | "proofreading" | "published";
   sentenceCount: number;
+  confirmedCount: number;
   createdAt: string;
 }
 
@@ -347,6 +348,8 @@ export default function StandardAdminClient({
                       ? `${draft.unitId} · ${draft.moduleKind} · `
                       : ""}
                     {draft.sentenceCount} 句
+                    {draft.status === "proofreading" &&
+                      ` · 已确认 ${draft.confirmedCount}/${draft.sentenceCount}`}
                   </p>
                   <div className="mt-4 flex flex-wrap items-center gap-3">
                     {draft.status === "proofreading" && (
@@ -357,20 +360,22 @@ export default function StandardAdminClient({
                         >
                           去校对 →
                         </a>
-                        <a
-                          href={`/drafts/${draft.id}/cutpoint`}
-                          className="text-lg font-semibold text-emerald-700"
-                        >
-                          调切点 →
-                        </a>
-                        <button
-                          type="button"
-                          onClick={() => void handlePublish(draft)}
-                          disabled={publishingId === draft.id}
-                          className="rounded-2xl bg-emerald-500 px-5 py-2 text-lg font-semibold text-white shadow-sm active:bg-emerald-600 disabled:opacity-40"
-                        >
-                          {publishingId === draft.id ? "定稿中…" : "定稿发布"}
-                        </button>
+                        {draft.sentenceCount > 0 &&
+                        draft.confirmedCount < draft.sentenceCount ? (
+                          <span className="text-base text-slate-400">
+                            还有 {draft.sentenceCount - draft.confirmedCount}{" "}
+                            句未确认，确认完才能定稿
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => void handlePublish(draft)}
+                            disabled={publishingId === draft.id}
+                            className="rounded-2xl bg-emerald-500 px-5 py-2 text-lg font-semibold text-white shadow-sm active:bg-emerald-600 disabled:opacity-40"
+                          >
+                            {publishingId === draft.id ? "定稿中…" : "定稿发布"}
+                          </button>
+                        )}
                       </>
                     )}
                     {draft.status === "published" && (

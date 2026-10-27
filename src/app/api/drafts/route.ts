@@ -5,7 +5,7 @@
 import { NextResponse } from "next/server";
 import { requireAccount } from "@/lib/auth/guard";
 import { openDb, dbPath } from "@/lib/db";
-import { listDraftsByAccount, sentenceCountsByDraft } from "@/lib/drafts/repo";
+import { listDraftsByAccount, sentenceCountsByDraft, confirmedCountsByDraft } from "@/lib/drafts/repo";
 import { draftModuleMapByAccount } from "@/lib/drafts/standard-drafts";
 
 export const dynamic = "force-dynamic";
@@ -23,8 +23,13 @@ export async function GET(req: Request) {
   try {
     const modules = draftModuleMapByAccount(db, auth.account.id);
     const drafts = listDraftsByAccount(db, auth.account.id, type ?? undefined);
-    // V0.2 整改：句子计数一次批量查询，取代逐草稿 N+1
+    // V0.2 整改：句子计数一次批量查询，取代逐草稿 N+1；
+    // V0.2.1：确认计数同批查询（发布门槛的列表展示）
     const counts = sentenceCountsByDraft(
+      db,
+      drafts.map((d) => d.id)
+    );
+    const confirmed = confirmedCountsByDraft(
       db,
       drafts.map((d) => d.id)
     );
@@ -39,6 +44,7 @@ export async function GET(req: Request) {
           moduleKind: module?.moduleKind ?? null,
           status: d.status,
           sentenceCount: counts.get(d.id) ?? 0,
+          confirmedCount: confirmed.get(d.id) ?? 0,
           createdAt: d.createdAt,
         };
       }),
