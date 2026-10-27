@@ -53,6 +53,8 @@ export default function StandardAdminClient({
   const [uploading, setUploading] = useState(false);
   const [publishingId, setPublishingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // V0.2.4 票 04：退回校对的进行中反馈
+  const [unpublishingId, setUnpublishingId] = useState<string | null>(null);
 
   // 管理员门禁（非管理员不渲染任何表单，与 /admin 同约定）
   useEffect(() => {
@@ -171,6 +173,42 @@ export default function StandardAdminClient({
       setError("网络开小差了，请重试");
     } finally {
       setPublishingId(null);
+    }
+  }
+
+  /** V0.2.4 票 04：退回校对。强确认写明清空后果；成功后刷新列表（卡片回校对态） */
+  async function handleUnpublish(draft: StandardDraftOverview) {
+    if (unpublishingId) return;
+    if (
+      !window.confirm(
+        `确定把「${draft.title}」退回校对吗？\n\n` +
+          `· 该内容会立即从所有家庭的练习列表中消失；\n` +
+          `· 所有家庭在这条内容上的练习记录将被清空；\n` +
+          `· 校对成果保留，改完后重新定稿即可（练习链接不变）。`
+      )
+    ) {
+      return;
+    }
+    setUnpublishingId(draft.id);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await fetch(`/api/drafts/${draft.id}/unpublish`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        await loadDrafts();
+        setNotice("已退回校对，改完句子重新确认并定稿即可重新发布。");
+        return;
+      }
+      const body = (await res.json().catch(() => null)) as {
+        error?: { message?: string };
+      } | null;
+      setError(body?.error?.message ?? "退回失败，请重试");
+    } catch {
+      setError("网络开小差了，请重试");
+    } finally {
+      setUnpublishingId(null);
     }
   }
 
@@ -379,12 +417,22 @@ export default function StandardAdminClient({
                       </>
                     )}
                     {draft.status === "published" && (
-                      <a
-                        href={`/units/${draft.id}`}
-                        className="text-lg font-semibold text-emerald-700"
-                      >
-                        查看 →
-                      </a>
+                      <>
+                        <a
+                          href={`/units/${draft.id}`}
+                          className="text-lg font-semibold text-emerald-700"
+                        >
+                          查看 →
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => void handleUnpublish(draft)}
+                          disabled={unpublishingId === draft.id}
+                          className="rounded-2xl bg-red-50 px-4 py-2 text-lg font-semibold text-red-600 ring-1 ring-red-100 active:bg-red-100 disabled:opacity-40"
+                        >
+                          {unpublishingId === draft.id ? "退回中…" : "退回校对"}
+                        </button>
+                      </>
                     )}
                     <button
                       type="button"

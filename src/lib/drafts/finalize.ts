@@ -3,7 +3,7 @@
 // 草稿停在 proofreading 可重试。状态更新的辅助函数按票面要求放本模块，不动 repo.ts。
 // 标准内容分支（票 12）：包写入运行时标准目录（data/content/standard/），
 // type=standard、owner 置空（公开），source=standard-upload。
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { customContentRoot, standardRuntimeDir } from "@/lib/content/loader";
 import type { ContentPack } from "@/lib/content/schema";
@@ -116,4 +116,29 @@ export function finalizeDraft(db: Db, draft: Draft): ContentPack {
   writeFileSync(abs, JSON.stringify(pack, null, 2), "utf8");
   markDraftPublished(db, draft.id);
   return pack;
+}
+
+/**
+ * 退回校对（V0.2.4 票 04）：published → proofreading。
+ * - 清空该内容**所有账号**的练习记录：句子结构可能已变，旧进度会错位，
+ *   保留有害（用户明确决定清空）；
+ * - 删除已发布内容包文件：内容从所有账号的列表与练习中消失，
+ *   直到重新定稿（同 id 重发，练习链接不变）；
+ * - 草稿句子原样保留——只为改一两句话而不用整个重新上传校对。
+ * 顺序：先事务落库（记录+状态），再删文件；文件已缺失不算错。
+ */
+export function unpublishDraft(db: Db, draft: Draft): void {
+  const tx = db.transaction(() => {
+    db.prepare("DELETE FROM practice_attempts WHERE unit_id = ?").run(draft.id);
+    db.prepare(
+      `UPDATE content_drafts SET status = 'proofreading', updated_at = datetime('now')
+       WHERE id = ?`
+    ).run(draft.id);
+  });
+  tx();
+  const abs =
+    draft.type === "standard"
+      ? standardPackPathFor(draft.id)
+      : packPathFor(draft.accountId, draft.id);
+  rmSync(abs, { force: true });
 }

@@ -32,6 +32,9 @@ export default function DraftDetailPage() {
   // V0.2 整改：转写失败重试的进行中/结果反馈
   const [retrying, setRetrying] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
+  // V0.2.4 票 04：退回校对的进行中/结果反馈
+  const [unpublishing, setUnpublishing] = useState(false);
+  const [unpublishError, setUnpublishError] = useState<string | null>(null);
 
   const loadDraft = useCallback(async () => {
     if (!id) return;
@@ -74,6 +77,41 @@ export default function DraftDetailPage() {
       setRetryError("网络开小差了，请重试");
     } finally {
       setRetrying(false);
+    }
+  }
+
+  /** V0.2.4 票 04：退回校对。强确认写明清空后果；成功后整份详情重拉，
+   * 回到校对态 UI（句子原样保留，改错句 → 重新确认 → 再次定稿）。 */
+  async function handleUnpublish() {
+    if (!id || unpublishing) return;
+    if (
+      !window.confirm(
+        `确定把「${draft?.title ?? ""}」退回校对吗？\n\n` +
+          `· 该内容会立即从所有家庭的练习列表中消失；\n` +
+          `· 所有家庭在这条内容上的练习记录将被清空；\n` +
+          `· 校对成果保留，改完后重新定稿即可（练习链接不变）。`
+      )
+    ) {
+      return;
+    }
+    setUnpublishing(true);
+    setUnpublishError(null);
+    try {
+      const res = await fetch(`/api/drafts/${id}/unpublish`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        await loadDraft();
+        return;
+      }
+      const body = (await res.json().catch(() => null)) as {
+        error?: { message?: string };
+      } | null;
+      setUnpublishError(body?.error?.message ?? "退回失败，请重试");
+    } catch {
+      setUnpublishError("网络开小差了，请重试");
+    } finally {
+      setUnpublishing(false);
     }
   }
 
@@ -258,6 +296,26 @@ export default function DraftDetailPage() {
           >
             去练习 →
           </a>
+        </>
+      )}
+
+      {/* V0.2.4 票 04：发布者可退回校对（清空该内容所有家庭的练习记录），
+       * 改错句后重新确认、定稿，不必整个重新上传校对 */}
+      {draft.status === "published" && (
+        <>
+          {unpublishError && (
+            <p role="alert" className="mt-4 text-lg text-red-600">
+              {unpublishError}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => void handleUnpublish()}
+            disabled={unpublishing}
+            className="mt-8 rounded-2xl bg-red-50 px-5 py-3 text-lg font-semibold text-red-600 ring-1 ring-red-100 active:bg-red-100 disabled:opacity-40"
+          >
+            {unpublishing ? "退回中…" : "退回校对（发现错误要改时用）"}
+          </button>
         </>
       )}
     </div>

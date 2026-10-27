@@ -8,6 +8,7 @@ import {
   createDraft,
   completeTranscription,
   getDraft,
+  listDraftSentences,
   setDraftVideo,
   type Draft,
   type DraftSentence,
@@ -19,6 +20,7 @@ import {
   FinalizeValidationError,
   packPathFor,
   standardPackPathFor,
+  unpublishDraft,
   validateDraftSentences,
 } from "./finalize";
 
@@ -320,6 +322,46 @@ describe("finalizeDraft · 标准内容（12 号票）", () => {
     const draft = seedStandardDraft(db, adminId, []);
     expect(() => finalizeDraft(db, draft)).toThrow(FinalizeValidationError);
     expect(existsSync(standardPackPathFor(draft.id))).toBe(false);
+    expect(getDraft(db, draft.id)?.status).toBe("proofreading");
+  });
+});
+
+describe("unpublishDraft（V0.2.4 票 04：退回校对）", () => {
+  it("清空所有账号的练习记录、删除内容包、状态回 proofreading；草稿句子保留", () => {
+    const db = setupEnv();
+    const parentId = accountIdOf("parent@test.com");
+    const otherId = accountIdOf("other@test.com");
+    const draft = seedProofreading(db, parentId, [
+      { text: "hello", startMs: 0, endMs: 900 },
+    ]);
+    finalizeDraft(db, draft);
+    // 两个家庭各落一条练习记录（直接插库，模拟发布后两家都练过）
+    db.prepare(
+      `INSERT INTO practice_attempts (unit_id, sentence_index, score, stars, owner)
+       VALUES (?, 0, 90, 3, ?), (?, 0, 80, 2, ?)`
+    ).run(draft.id, parentId, draft.id, otherId);
+    expect(existsSync(packPathFor(parentId, draft.id))).toBe(true);
+
+    unpublishDraft(db, draft);
+
+    const attempts = db
+      .prepare("SELECT COUNT(*) AS n FROM practice_attempts WHERE unit_id = ?")
+      .get(draft.id) as { n: number };
+    expect(attempts.n).toBe(0); // 所有家庭的记录都清空
+    expect(existsSync(packPathFor(parentId, draft.id))).toBe(false); // 内容包移除
+    expect(getDraft(db, draft.id)?.status).toBe("proofreading"); // 回校对态
+    // 草稿句子原样保留，可直接改错句后重新定稿
+    expect(listDraftSentences(db, draft.id)).toHaveLength(1);
+  });
+
+  it("重复退回：不在 published 状态时应由路由 409 拦截（领域层幂等不炸）", () => {
+    const db = setupEnv();
+    const accountId = accountIdOf("parent@test.com");
+    const draft = seedProofreading(db, accountId, [
+      { text: "hello", startMs: 0, endMs: 900 },
+    ]);
+    // 未发布过：直接退回也不抛（幂等），包文件本就不存在
+    expect(() => unpublishDraft(db, draft)).not.toThrow();
     expect(getDraft(db, draft.id)?.status).toBe("proofreading");
   });
 });
