@@ -127,6 +127,7 @@ export default function PracticeFlow({ unit }: { unit: ContentDetail }) {
         else if (intent === "rerecord") void startRecording();
       };
       recorderRef.current = recorder;
+      stopIntentRef.current = "submit"; // 新录音默认意图回到提交，防止残留
       recorder.start();
       blobRef.current = null;
       setHasBlob(false);
@@ -204,10 +205,10 @@ export default function PracticeFlow({ unit }: { unit: ContentDetail }) {
   useEffect(() => {
     if (state.step !== "recording" || !recorderActive) return;
     const timer = setTimeout(() => {
-      setRecordSeconds((s) => {
-        if (s + 1 >= MAX_RECORD_SECONDS) stopRecording("submit");
-        return s + 1;
-      });
+      // 副作用不能放 setState updater 里：dev 严格模式 updater 会双调用，
+      // 第二次对已停止的 recorder 调 stop() 抛 InvalidStateError
+      if (recordSeconds + 1 >= MAX_RECORD_SECONDS) stopRecording("submit");
+      setRecordSeconds(recordSeconds + 1);
     }, TICK_MS);
     return () => clearTimeout(timer);
   }, [state.step, recorderActive, recordSeconds]);
@@ -268,8 +269,11 @@ export default function PracticeFlow({ unit }: { unit: ContentDetail }) {
     dispatch({ type: "retry" });
   }
 
-  // 卸载：按"丢弃"处理并释放麦克风
+  // 挂载/卸载：卸载按"丢弃"处理并释放麦克风。
+  // 挂载时必须把 mountedRef 设回 true——React 严格模式（仅 dev）会先预演一次
+  // 清理，少了这句 ref 会从页面打开起恒为 false，所有录音都被当"已卸载"丢弃。
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
       stopIntentRef.current = "discard";
