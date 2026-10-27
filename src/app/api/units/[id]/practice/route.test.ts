@@ -7,7 +7,7 @@ import { openDb } from "@/lib/db";
 import { setScoringService } from "@/lib/scoring/current";
 import { FakeScoringService } from "@/lib/scoring/fake";
 import { getContentDetail, getContentOverview } from "@/lib/content/view";
-import { sessionCookieFor } from "@/lib/testing/auth-test-utils";
+import { confirmDraftSentences, sessionCookieFor } from "@/lib/testing/auth-test-utils";
 import {
   createDraft,
   completeTranscription,
@@ -99,6 +99,7 @@ function seedPublishedCustom(accountId: string) {
     completeTranscription(db, draft.id, [
       { text: "hello", startMs: 0, endMs: 900 },
     ]);
+    confirmDraftSentences(db, draft.id);
     finalizeDraft(db, getDraft(db, draft.id)!);
     return getDraft(db, draft.id)!;
   } finally {
@@ -268,6 +269,7 @@ describe("POST /api/units/[id]/practice", () => {
         completeTranscription(db, draft.id, [
           { text: "hello", startMs: 0, endMs: 900 },
         ]);
+        confirmDraftSentences(db, draft.id);
         if (status === "published") finalizeDraft(db, getDraft(db, draft.id)!);
         return getDraft(db, draft.id)!;
       } finally {

@@ -6,6 +6,7 @@ import { createDraft, listDraftSentences, completeTranscription, sentenceCountsB
 import {
   SentenceEditError,
   deleteSentence,
+  insertSentenceAfter,
   mergeSentenceWithNext,
   mergeText,
   updateSentence,
@@ -321,5 +322,89 @@ describe("sentenceCountsByDraft（V0.2 整改：草稿列表批量计数）", ()
   it("空批次直接返回空映射，不发查询", () => {
     const db = setupDb("ra-counts-empty");
     expect(sentenceCountsByDraft(db, []).size).toBe(0);
+  });
+});
+
+describe("insertSentenceAfter（V0.2.1 拆分长句）", () => {
+  it("中间插入：新句 seq=index+1，占位时间取当前句结束到下一句开始的空隙，后续序号后移", () => {
+    const { db, draftId } = seededDb();
+
+    const sentences = insertSentenceAfter(db, draftId, 0, {
+      text: "Hello, Kitty!",
+    });
+
+    expect(sentences).toHaveLength(4);
+    expect(sentences[1]).toEqual({
+      index: 1,
+      text: "Hello, Kitty!",
+      startMs: 3200, // 当前句结束
+      endMs: 3400, // 下一句开始（空隙）
+      proofread: "edited",
+    });
+    expect(sentences[2]).toMatchObject({ index: 2, text: "My name is Danny." });
+    expect(sentences[3]).toMatchObject({ index: 3, text: "What is your name?" });
+    // 库中无空洞
+    expect(
+      listDraftSentences(db, draftId).map((s) => s.index)
+    ).toEqual([0, 1, 2, 3]);
+  });
+
+  it("下一句起始晚于本句结束：占位时间取两者之间的空隙", () => {
+    const { db, draftId } = seededDb();
+
+    const sentences = insertSentenceAfter(db, draftId, 0, { text: "" });
+
+    // SEED 第 1/2 句之间有 200ms 空隙（3200 → 3400）
+    expect(sentences[1]).toMatchObject({ startMs: 3200, endMs: 3400 });
+  });
+
+  it("下一句紧贴本句结束时：给 当前句结束 +250ms，允许与下一句重叠", () => {
+    const { db, draftId } = seededDb();
+    // 先把第 2 句起点改成与第 1 句终点紧贴
+    updateSentence(db, draftId, 1, { startMs: 3200 });
+
+    const sentences = insertSentenceAfter(db, draftId, 0, { text: "" });
+
+    expect(sentences[1]).toMatchObject({ startMs: 3200, endMs: 3450 });
+    expect(sentences[1].endMs).toBeGreaterThan(sentences[1].startMs);
+  });
+
+  it("在最后一句后插入：没有下一句，占位为 结束+250ms", () => {
+    const { db, draftId } = seededDb();
+
+    const sentences = insertSentenceAfter(db, draftId, 2, { text: "The end." });
+
+    expect(sentences).toHaveLength(4);
+    expect(sentences[3]).toEqual({
+      index: 3,
+      text: "The end.",
+      startMs: 8900,
+      endMs: 9150,
+      proofread: "edited",
+    });
+  });
+
+  it("缺省 text 落空串（草稿态允许，发布校验会拦）", () => {
+    const { db, draftId } = seededDb();
+
+    const sentences = insertSentenceAfter(db, draftId, 0, {});
+
+    expect(sentences[1].text).toBe("");
+  });
+
+  it("text 非字符串报 SENTENCE_INVALID", () => {
+    const { db, draftId } = seededDb();
+
+    expect(codes(() => insertSentenceAfter(db, draftId, 0, { text: 42 }))).toBe(
+      "SENTENCE_INVALID"
+    );
+  });
+
+  it("序号越界报 SENTENCE_NOT_FOUND", () => {
+    const { db, draftId } = seededDb();
+
+    expect(codes(() => insertSentenceAfter(db, draftId, 99, {}))).toBe(
+      "SENTENCE_NOT_FOUND"
+    );
   });
 });

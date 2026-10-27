@@ -30,6 +30,13 @@ export function setupDb(prefix = "ra-test"): ReturnType<typeof openDb> {
   return db;
 }
 
+/** 草稿全部句子置 confirmed（V0.2.1 发布门槛）：走真实定稿链路的测试种子用 */
+export function confirmDraftSentences(db: ReturnType<typeof openDb>, draftId: string): void {
+  db.prepare(
+    `UPDATE draft_sentences SET proofread = 'confirmed' WHERE draft_id = ?`
+  ).run(draftId);
+}
+
 let cookieCache: { dbPath: string; email: string; cookie: string } | null = null;
 
 /** 当前库中找该邮箱的账号，没有则以 secret123 密码创建（邀请制账号原语），

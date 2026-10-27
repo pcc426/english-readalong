@@ -41,7 +41,8 @@ function msToSeconds(ms: number): number {
   return Math.round(ms / 100) / 10;
 }
 
-/** 定稿校验：每句有文本（非空白）且起止合法（start ≥ 0 且 end > start） */
+/** 定稿校验：每句有文本（非空白）、起止合法（start ≥ 0 且 end > start）、
+ * 且已确认（V0.2.1：确认本句 = 文本与时点都过目，全确认才允许定稿） */
 export function validateDraftSentences(sentences: DraftSentence[]): FinalizeIssue[] {
   if (sentences.length === 0) {
     return [{ index: null, problem: "草稿还没有句子，无法定稿" }];
@@ -57,6 +58,9 @@ export function validateDraftSentences(sentences: DraftSentence[]): FinalizeIssu
         index: s.index,
         problem: `${label}起止时间非法（${s.startMs}–${s.endMs}ms）`,
       });
+    }
+    if (s.proofread !== "confirmed") {
+      issues.push({ index: s.index, problem: `${label}还未确认` });
     }
   }
   return issues;

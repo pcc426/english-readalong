@@ -53,6 +53,10 @@ function seedProofreading(
   const draft = createDraft(db, { accountId, title });
   setDraftVideo(db, draft.id, `${accountId}/${draft.id}.mp4`);
   completeTranscription(db, draft.id, sentences);
+  // 默认全部已确认：这些测试关注文本/起止校验本身；确认门槛的专门用例见文末
+  db.prepare(
+    `UPDATE draft_sentences SET proofread = 'confirmed' WHERE draft_id = ?`
+  ).run(draft.id);
   return getDraft(db, draft.id)!;
 }
 
@@ -125,6 +129,28 @@ describe("POST /api/drafts/[id]/publish", () => {
     expect(body.error.code).toBe("INVALID_DRAFT");
     expect(body.error.issues).toEqual([
       { index: 1, problem: expect.stringContaining("文本") },
+    ]);
+    expect(existsSync(packPathFor(accountId, draft.id))).toBe(false);
+    expect(getDraft(db, draft.id)?.status).toBe("proofreading");
+  });
+
+  it("存在未确认句子：422 指出未确认项，不产生半成品（V0.2.1 发布门槛）", async () => {
+    const db = setupEnv();
+    const accountId = accountIdOf("parent@test.com");
+    const draft = seedProofreading(db, accountId, [
+      { text: "hello", startMs: 0, endMs: 900 },
+      { text: "world", startMs: 1234, endMs: 2345 },
+    ]);
+    db.prepare(
+      `UPDATE draft_sentences SET proofread = 'edited' WHERE draft_id = ? AND seq = 1`
+    ).run(draft.id);
+
+    const res = await post(draft.id, sessionCookieFor("parent@test.com"));
+    expect(res.status).toBe(422);
+    const body = await res.json();
+    expect(body.error.code).toBe("INVALID_DRAFT");
+    expect(body.error.issues).toEqual([
+      { index: 1, problem: expect.stringContaining("未确认") },
     ]);
     expect(existsSync(packPathFor(accountId, draft.id))).toBe(false);
     expect(getDraft(db, draft.id)?.status).toBe("proofreading");
@@ -230,6 +256,9 @@ describe("POST /api/drafts/[id]/publish · 标准内容（12 号票）", () => {
     completeTranscription(db, draft.id, [
       { text: "hello", startMs: 0, endMs: 900 },
     ]);
+    db.prepare(
+      `UPDATE draft_sentences SET proofread = 'confirmed' WHERE draft_id = ?`
+    ).run(draft.id);
     return draft.id;
   }
 

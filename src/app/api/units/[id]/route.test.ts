@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { GET } from "./route";
 import { openDb } from "@/lib/db";
-import { authedGet, sessionCookieFor } from "@/lib/testing/auth-test-utils";
+import { authedGet, confirmDraftSentences, sessionCookieFor } from "@/lib/testing/auth-test-utils";
 import {
   createDraft,
   completeTranscription,
@@ -78,6 +78,7 @@ function seedPublishedCustom(accountId: string) {
     completeTranscription(db, draft.id, [
       { text: "hello", startMs: 0, endMs: 900 },
     ]);
+    confirmDraftSentences(db, draft.id);
     finalizeDraft(db, getDraft(db, draft.id)!);
     return getDraft(db, draft.id)!;
   } finally {
@@ -205,6 +206,7 @@ describe("GET /api/units/[id]", () => {
           { text: "hello", startMs: 0, endMs: 900 },
           { text: "world", startMs: 1000, endMs: 1800 },
         ]);
+        confirmDraftSentences(db, draft.id);
         finalizeDraft(db, getDraft(db, draft.id)!);
         return draft.id;
       } finally {

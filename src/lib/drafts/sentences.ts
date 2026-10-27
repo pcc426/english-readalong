@@ -78,6 +78,19 @@ function shiftSeqUpFrom(db: Db, draftId: string, from: number): void {
   for (const row of rows) move.run(draftId, row.seq);
 }
 
+/** seq >= from 的句子整体后移一位（插入新句用）：按降序逐行挪，目标位总是空出 */
+function shiftSeqDownFrom(db: Db, draftId: string, from: number): void {
+  const rows = db
+    .prepare(
+      "SELECT seq FROM draft_sentences WHERE draft_id = ? AND seq >= ? ORDER BY seq DESC"
+    )
+    .all(draftId, from) as Array<{ seq: number }>;
+  const move = db.prepare(
+    "UPDATE draft_sentences SET seq = seq + 1 WHERE draft_id = ? AND seq = ?"
+  );
+  for (const row of rows) move.run(draftId, row.seq);
+}
+
 interface ResolvedPatch {
   text: string;
   startMs: number;
@@ -218,6 +231,44 @@ export function mergeSentenceWithNext(
        WHERE draft_id = ? AND seq = ?`
     ).run(text, startMs, endMs, draftId, index);
     shiftSeqUpFrom(db, draftId, index + 2);
+    touchDraft(db, draftId);
+  });
+  tx();
+  return listDraftSentences(db, draftId);
+}
+
+/**
+ * 在第 index 句之后插入新句（V0.2.1 票 03：拆分过长分句用）。
+ * 时间占位：下一句起始晚于本句结束时取两者之间的空隙，否则给本句结束 + 250ms
+ * （允许与下一句重叠——发布校验只要求 end>start，时点精调归统一校对页微调）。
+ * 文本缺省空串（草稿态允许，发布校验会拦）；置 edited；返回整个句子数组。
+ */
+export function insertSentenceAfter(
+  db: Db,
+  draftId: string,
+  index: number,
+  input: unknown
+): DraftSentence[] {
+  const current = getSentence(db, draftId, index);
+  if (!current) throw new SentenceEditError("SENTENCE_NOT_FOUND", "句子不存在");
+  const body =
+    typeof input === "object" && input !== null && !Array.isArray(input)
+      ? (input as Record<string, unknown>)
+      : {};
+  if (body.text !== undefined && typeof body.text !== "string") {
+    throw new SentenceEditError("SENTENCE_INVALID", "text 必须是字符串");
+  }
+  const text = typeof body.text === "string" ? body.text : "";
+  const next = getSentence(db, draftId, index + 1);
+  const startMs = current.endMs;
+  const endMs =
+    next && next.startMs > current.endMs ? next.startMs : current.endMs + 250;
+  const tx = db.transaction(() => {
+    shiftSeqDownFrom(db, draftId, index + 1);
+    db.prepare(
+      `INSERT INTO draft_sentences (draft_id, seq, text, start_ms, end_ms, proofread)
+       VALUES (?, ?, ?, ?, ?, 'edited')`
+    ).run(draftId, index + 1, text, startMs, endMs);
     touchDraft(db, draftId);
   });
   tx();

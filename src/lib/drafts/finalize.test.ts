@@ -48,7 +48,9 @@ function accountIdOf(email: string, isAdmin = false): string {
   return row.id;
 }
 
-/** 直接经 repo 落一个 proofreading 草稿（句子原样入表，可构造非法数据） */
+/** 直接经 repo 落一个 proofreading 草稿（句子原样入表，可构造非法数据）。
+ * 默认全部句子置 confirmed——这些测试关注文本/起止问题本身；
+ * 确认门槛的专门用例见 validateDraftSentences / finalizeDraft 的未确认小节。 */
 function seedProofreading(
   db: Db,
   accountId: string,
@@ -57,16 +59,24 @@ function seedProofreading(
   const draft = createDraft(db, { accountId, title: "家里的英语" });
   setDraftVideo(db, draft.id, `${accountId}/${draft.id}.mp4`);
   completeTranscription(db, draft.id, sentences);
+  confirmAllSentences(db, draft.id);
   return getDraft(db, draft.id)!;
+}
+
+function confirmAllSentences(db: Db, draftId: string): void {
+  db.prepare(
+    `UPDATE draft_sentences SET proofread = 'confirmed' WHERE draft_id = ?`
+  ).run(draftId);
 }
 
 function sent(
   index: number,
   text: string,
   startMs: number,
-  endMs: number
+  endMs: number,
+  proofread: DraftSentence["proofread"] = "confirmed"
 ): DraftSentence {
-  return { index, text, startMs, endMs, proofread: "auto" };
+  return { index, text, startMs, endMs, proofread };
 }
 
 describe("validateDraftSentences", () => {
@@ -88,6 +98,18 @@ describe("validateDraftSentences", () => {
     expect(issues[0].problem).toContain("文本");
     expect(issues[1].index).toBe(2);
     expect(issues[1].problem).toContain("起止");
+  });
+
+  it("未确认的句子被逐句指出（V0.2.1 发布门槛）", () => {
+    const issues = validateDraftSentences([
+      sent(0, "hello", 0, 900, "confirmed"),
+      sent(1, "world", 1000, 1800, "auto"),
+      sent(2, "!", 2000, 2500, "edited"),
+    ]);
+    expect(issues).toEqual([
+      { index: 1, problem: expect.stringContaining("未确认") },
+      { index: 2, problem: expect.stringContaining("未确认") },
+    ]);
   });
 });
 
@@ -196,6 +218,31 @@ describe("finalizeDraft", () => {
     }
     expect(existsSync(packPathFor(accountId, draft.id))).toBe(false);
   });
+
+  it("存在未确认句子：校验失败指出未确认项，不写文件（V0.2.1 发布门槛）", () => {
+    const db = setupEnv();
+    const accountId = accountIdOf("parent@test.com");
+    const draft = seedProofreading(db, accountId, [
+      { text: "hello", startMs: 0, endMs: 900 },
+      { text: "world", startMs: 1234, endMs: 2345 },
+    ]);
+    // 把第 2 句打回未确认（模拟校对页又改了一次）
+    db.prepare(
+      `UPDATE draft_sentences SET proofread = 'edited' WHERE draft_id = ? AND seq = 1`
+    ).run(draft.id);
+
+    try {
+      finalizeDraft(db, draft);
+      expect.unreachable("应当抛出 FinalizeValidationError");
+    } catch (err) {
+      const issues = (err as FinalizeValidationError).issues;
+      expect(issues).toEqual([
+        { index: 1, problem: expect.stringContaining("未确认") },
+      ]);
+    }
+    expect(existsSync(packPathFor(accountId, draft.id))).toBe(false);
+    expect(getDraft(db, draft.id)?.status).toBe("proofreading");
+  });
 });
 
 describe("buildContentPack · 标准内容（12 号票）", () => {
@@ -238,6 +285,7 @@ describe("finalizeDraft · 标准内容（12 号票）", () => {
     });
     setDraftVideo(db, draft.id, `${adminId}/${draft.id}.mp4`);
     completeTranscription(db, draft.id, sentences);
+    confirmAllSentences(db, draft.id);
     return getDraft(db, draft.id)!;
   }
 
