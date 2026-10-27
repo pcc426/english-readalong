@@ -3,7 +3,6 @@ import { notFound, redirect } from "next/navigation";
 import { openDb, dbPath } from "@/lib/db";
 import { getAccountBySession, SESSION_COOKIE } from "@/lib/auth/sessions";
 import { ownedContentDetail } from "@/lib/owned-content";
-import { sourceLabel } from "@/lib/content/source-label";
 import PracticeFlow from "./PracticeFlow";
 
 export const dynamic = "force-dynamic";
@@ -37,14 +36,7 @@ export default async function UnitPage({
   if (!unit) notFound();
 
   return (
-    <main className="mx-auto flex h-[100dvh] max-w-xl flex-col overflow-hidden px-5 py-2">
-      <a href="/" className="text-base text-slate-500">
-        ‹ 单元列表
-      </a>
-      <h1 className="mt-1 text-2xl font-bold">{unit.title}</h1>
-      <p className="text-base text-slate-500">
-        {sourceLabel(unit.source)} · {unit.sentences.length} 句
-      </p>
+    <main className="flex h-[100dvh] overflow-hidden">
       <PracticeFlow unit={unit} />
     </main>
   );

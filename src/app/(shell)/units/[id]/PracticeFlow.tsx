@@ -10,6 +10,7 @@ import {
   type FlowState,
 } from "@/lib/domain/practice-flow";
 import { mapScoreToStars } from "@/lib/domain/stars";
+import { sourceLabel } from "@/lib/content/source-label";
 import type { ContentDetail } from "@/lib/content/view";
 
 // 录音最长秒数：超时自动提交，防止孩子忘按"读好了"一直录
@@ -394,14 +395,16 @@ export default function PracticeFlow({ unit }: { unit: ContentDetail }) {
   const result = state.step === "scored" ? state.result : null;
 
   return (
-    <div className="mt-2 flex min-h-0 flex-1 flex-col">
-      <div className="relative flex min-h-0 flex-1 justify-center">
+    <>
+      {/* 左列：视频常驻（竖版占满高度，横版按宽适配），REC 角标叠加其上；
+          出分鼓励语渲染在右列，视频尺寸恒定不再被挤压 */}
+      <div className="relative flex min-w-0 flex-1 items-center justify-center bg-black">
         <video
           ref={videoRef}
           src={unit.video}
           playsInline
           preload="metadata"
-          className="max-h-full w-auto max-w-full rounded-2xl bg-black shadow-md"
+          className="max-h-full max-w-full object-contain"
         />
         {state.step === "recording" && recorderActive && (
           <div className="absolute left-3 top-3 flex items-center gap-2 rounded-full bg-red-600 px-3 py-1 text-lg font-bold text-white">
@@ -411,8 +414,48 @@ export default function PracticeFlow({ unit }: { unit: ContentDetail }) {
         )}
       </div>
 
-      {/* 三大控制按钮：上一句 / 暂停·继续 / 下一句 */}
-      <div className="mt-2 grid shrink-0 grid-cols-3 gap-3">
+      {/* 右列：操作区，固定宽、独立滚动 */}
+      <aside className="flex h-full w-[26rem] shrink-0 flex-col gap-3 overflow-y-auto border-l border-slate-200 bg-slate-50 p-4">
+        <div>
+          <a href="/" className="text-base text-emerald-700">
+            ‹ 单元列表
+          </a>
+          <h1 className="mt-1 truncate text-2xl font-bold">{unit.title}</h1>
+          <p className="text-base text-slate-500">
+            {sourceLabel(unit.source)} · {unit.sentences.length} 句
+          </p>
+        </div>
+
+        {/* 句子导航 */}
+        <nav
+          className="grid shrink-0 gap-2"
+          style={{ gridTemplateColumns: `repeat(${Math.min(total, 7)}, minmax(0, 1fr))` }}
+        >
+          {unit.sentences.map((s) => {
+            const isCurrent = state.step !== "finished" && state.index === s.index;
+            const best = localBest[s.index];
+            const stars = best != null ? mapScoreToStars(best) : null;
+            return (
+              <button
+                key={s.index}
+                onClick={() => dispatch({ type: "select", index: s.index })}
+                className={`rounded-xl py-3 text-xl font-bold shadow-sm ${
+                  isCurrent
+                    ? "bg-emerald-500 text-white"
+                    : "bg-white text-slate-600 ring-1 ring-slate-200"
+                }`}
+              >
+                {s.index + 1}
+                <span className="block text-xs font-normal text-amber-400">
+                  {stars != null ? "★".repeat(stars) : "未练"}
+                </span>
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* 三大控制按钮：上一句 / 暂停·继续 / 下一句 */}
+        <div className="grid shrink-0 grid-cols-3 gap-3">
         <button
           onClick={prevSentence}
           disabled={state.step === "idle"}
@@ -601,33 +644,7 @@ export default function PracticeFlow({ unit }: { unit: ContentDetail }) {
             );
           })()}
 
-      {/* 句子导航 */}
-      <nav
-        className="mt-3 grid shrink-0 gap-2"
-        style={{ gridTemplateColumns: `repeat(${Math.min(total, 7)}, minmax(0, 1fr))` }}
-      >
-        {unit.sentences.map((s) => {
-          const isCurrent = state.step !== "finished" && state.index === s.index;
-          const best = localBest[s.index];
-          const stars = best != null ? mapScoreToStars(best) : null;
-          return (
-            <button
-              key={s.index}
-              onClick={() => dispatch({ type: "select", index: s.index })}
-              className={`rounded-xl py-3 text-xl font-bold shadow-sm ${
-                isCurrent
-                  ? "bg-emerald-500 text-white"
-                  : "bg-white text-slate-600 ring-1 ring-slate-200"
-              }`}
-            >
-              {s.index + 1}
-              <span className="block text-xs font-normal text-amber-400">
-                {stars != null ? "★".repeat(stars) : "未练"}
-              </span>
-            </button>
-          );
-        })}
-      </nav>
-    </div>
+    </aside>
+    </>
   );
 }

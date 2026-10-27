@@ -1,8 +1,9 @@
 "use client";
 
-// 统一校对页（V0.2.1 票 04，合并原文本校对与切点校对）：
-// 每屏一句——上方视频（高度受限）+ 下方当前句卡片（可编辑文本、±0.25s 时点微调、
-// 新增一句 / 并入上一句 / 与下一句合并 / 删除、确认本句），桌面与 iPad 竖屏一屏完成。
+// 统一校对页（V0.2.1 票 04，合并原文本校对与切点校对；V0.2.2 票 01 改左右分栏）：
+// 左列视频常驻（竖版占满整列高度），右列固定宽、独立滚动——当前句卡片
+// （可编辑文本、±0.25s 时点微调、新增一句 / 并入上一句 / 与下一句合并 / 删除、
+// 确认本句）全部在右列，整页无纵向滚动条。
 // 任何改动都会让句子回到「未确认」；全部确认后详情/管理页的定稿按钮才亮起（票 03 门槛）。
 // 标准草稿保留教材原文参照与一键采用（1:1 对齐守卫，V0.2 整改语义不变）。
 // UI 不做自动化，走 iPad 手工验收清单。壳只走 HTTP，不从 src/lib 引类型。
@@ -413,175 +414,177 @@ export default function ProofreadPage() {
   }
 
   return (
-    <div className="mx-auto flex h-[100dvh] max-w-2xl flex-col px-4 py-3">
-      {/* 头部：返回 + 标题 + 确认进度（压缩高度，保一屏） */}
-      <div className="flex items-center justify-between gap-3">
-        <a href={backHref} className="shrink-0 text-base text-emerald-700">
-          {backLabel}
-        </a>
-        <span className="shrink-0 rounded-full bg-amber-100 px-3 py-0.5 text-base font-bold text-amber-700">
-          未校对
-        </span>
-      </div>
-      <div className="mt-1 flex items-baseline gap-3">
-        <h1 className="truncate text-xl font-bold tracking-tight">
-          {draft.title}
-        </h1>
-        <span className="shrink-0 text-base text-slate-500" role="status">
-          已确认 {confirmedCount} / {sentences.length} 句
-        </span>
+    <div className="flex h-[100dvh] overflow-hidden">
+      {/* 左列：视频常驻（竖版占满高度，横版按宽适配），黑底居中 */}
+      <div className="flex min-w-0 flex-1 items-center justify-center bg-black p-2">
+        <video
+          ref={videoRef}
+          src={draft.videoUrl}
+          onTimeUpdate={handleTimeUpdate}
+          preload="auto"
+          className="max-h-full max-w-full object-contain"
+        />
       </div>
 
-      {draft.type === "standard" && textbookFailed && (
-        <p role="alert" className="mt-1 rounded-xl bg-amber-50 px-3 py-1.5 text-sm text-amber-700">
-          教材原文加载失败，可直接手工校对。
-        </p>
-      )}
-      {draft.type === "standard" &&
-        textbookSentences !== null &&
-        !textbookAligned && (
-          <p role="status" className="mt-1 rounded-xl bg-amber-50 px-3 py-1.5 text-sm text-amber-700">
-            {TEXTBOOK_MISALIGNED_HINT}
+      {/* 右列：操作区，固定宽、独立滚动 */}
+      <aside className="flex h-full w-[26rem] shrink-0 flex-col gap-3 overflow-y-auto border-l border-slate-200 bg-slate-50 p-4">
+        <div className="flex items-center justify-between gap-2">
+          <a href={backHref} className="shrink-0 text-base text-emerald-700">
+            {backLabel}
+          </a>
+          <span className="shrink-0 rounded-full bg-amber-100 px-3 py-0.5 text-base font-bold text-amber-700">
+            未校对
+          </span>
+        </div>
+
+        <div className="flex items-baseline gap-2">
+          <h1 className="truncate text-xl font-bold tracking-tight">
+            {draft.title}
+          </h1>
+          <span className="shrink-0 text-base text-slate-500" role="status">
+            已确认 {confirmedCount} / {sentences.length} 句
+          </span>
+        </div>
+
+        {draft.type === "standard" && textbookFailed && (
+          <p role="alert" className="rounded-xl bg-amber-50 px-3 py-1.5 text-sm text-amber-700">
+            教材原文加载失败，可直接手工校对。
+          </p>
+        )}
+        {draft.type === "standard" &&
+          textbookSentences !== null &&
+          !textbookAligned && (
+            <p role="status" className="rounded-xl bg-amber-50 px-3 py-1.5 text-sm text-amber-700">
+              {TEXTBOOK_MISALIGNED_HINT}
+            </p>
+          )}
+
+        {actionError && (
+          <p role="alert" className="rounded-xl bg-red-50 px-4 py-2 text-base text-red-600">
+            {actionError}
           </p>
         )}
 
-      {/* 视频：高度受限（约 1/3 屏），播当前句片段 */}
-      <video
-        ref={videoRef}
-        src={draft.videoUrl}
-        onTimeUpdate={handleTimeUpdate}
-        preload="auto"
-        className="mt-2 max-h-[36vh] w-full rounded-2xl bg-black object-contain shadow-md"
-      />
-
-      {actionError && (
-        <p role="alert" className="mt-2 rounded-xl bg-red-50 px-4 py-2 text-base text-red-600">
-          {actionError}
-        </p>
-      )}
-
-      {/* 当前句卡片：flex-1 占据剩余空间，内容溢出才滚动 */}
-      {current ? (
-        <section className="mt-3 flex min-h-0 flex-1 flex-col rounded-3xl bg-white p-4 shadow-md ring-1 ring-slate-100">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-slate-100 px-3 py-0.5 text-base font-bold text-slate-500">
-              第 {current.index + 1} 句
-            </span>
-            {current.proofread === "confirmed" ? (
-              <span className="rounded-full bg-emerald-100 px-3 py-0.5 text-base font-semibold text-emerald-700">
-                已确认
+        {current && (
+          <section className="rounded-3xl bg-white p-4 shadow-md ring-1 ring-slate-100">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-slate-100 px-3 py-0.5 text-base font-bold text-slate-500">
+                第 {current.index + 1} 句
               </span>
-            ) : (
-              <span className="rounded-full bg-slate-100 px-3 py-0.5 text-base text-slate-400">
-                未确认
-              </span>
-            )}
-            {currentSaveState && (
-              <span role="status" className={`text-base ${SAVE_HINTS[currentSaveState].className}`}>
-                {SAVE_HINTS[currentSaveState].text}
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={togglePlay}
-              disabled={mutating}
-              className={`ml-auto rounded-xl px-4 py-2 text-base font-bold shadow-sm disabled:opacity-40 ${
-                playing
-                  ? "bg-emerald-600 text-white active:bg-emerald-700"
-                  : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 active:bg-emerald-100"
-              }`}
-            >
-              {playing ? "停止" : "▶ 播放本句"}
-            </button>
-          </div>
-
-          <textarea
-            value={current.text}
-            onChange={(e) => handleTextChange(e.target.value)}
-            onBlur={handleCommit}
-            aria-label={`第 ${current.index + 1} 句文本`}
-            rows={2}
-            className="mt-2 w-full resize-none rounded-2xl bg-slate-50 px-4 py-3 text-xl leading-relaxed ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-400"
-          />
-
-          {/* 票 12（仅 standard 草稿）：教材原文参照；ASR 文本与时点保留作对照 */}
-          {textbookText !== null && (
-            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl bg-sky-50 px-3 py-2">
-              <span className="shrink-0 text-sm font-semibold text-sky-700">
-                教材原文
-              </span>
-              <span className="min-w-0 flex-1 text-sm text-slate-600">
-                {textbookText}
-              </span>
-              {textbookAligned && current.text !== textbookText && (
-                <button
-                  type="button"
-                  onClick={handleAdopt}
-                  disabled={mutating}
-                  className="shrink-0 rounded-xl bg-sky-100 px-3 py-1.5 text-sm font-semibold text-sky-700 active:bg-sky-200 disabled:opacity-40"
-                >
-                  采用教材原文
-                </button>
+              {current.proofread === "confirmed" ? (
+                <span className="rounded-full bg-emerald-100 px-3 py-0.5 text-base font-semibold text-emerald-700">
+                  已确认
+                </span>
+              ) : (
+                <span className="rounded-full bg-slate-100 px-3 py-0.5 text-base text-slate-400">
+                  未确认
+                </span>
               )}
+              {currentSaveState && (
+                <span role="status" className={`text-base ${SAVE_HINTS[currentSaveState].className}`}>
+                  {SAVE_HINTS[currentSaveState].text}
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={togglePlay}
+                disabled={mutating}
+                className={`ml-auto rounded-xl px-4 py-2 text-base font-bold shadow-sm disabled:opacity-40 ${
+                  playing
+                    ? "bg-emerald-600 text-white active:bg-emerald-700"
+                    : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 active:bg-emerald-100"
+                }`}
+              >
+                {playing ? "停止" : "▶ 播放本句"}
+              </button>
             </div>
-          )}
 
-          {/* 时点微调（原切点页能力并入） */}
-          <p className="mt-3 text-center text-2xl font-bold tabular-nums text-emerald-700">
-            {formatMs(current.startMs)} → {formatMs(current.endMs)}
-          </p>
-          <div className="mt-2 grid grid-cols-4 gap-2">
-            <button type="button" onClick={() => adjust("start", -CALIBRATE_STEP_MS)} disabled={mutating} className={ADJUST_BTNS}>
-              起 −0.25s
-            </button>
-            <button type="button" onClick={() => adjust("start", CALIBRATE_STEP_MS)} disabled={mutating} className={ADJUST_BTNS}>
-              起 ＋0.25s
-            </button>
-            <button type="button" onClick={() => adjust("end", -CALIBRATE_STEP_MS)} disabled={mutating} className={ADJUST_BTNS}>
-              止 −0.25s
-            </button>
-            <button type="button" onClick={() => adjust("end", CALIBRATE_STEP_MS)} disabled={mutating} className={ADJUST_BTNS}>
-              止 ＋0.25s
-            </button>
-          </div>
+            <textarea
+              value={current.text}
+              onChange={(e) => handleTextChange(e.target.value)}
+              onBlur={handleCommit}
+              aria-label={`第 ${current.index + 1} 句文本`}
+              rows={3}
+              className="mt-2 w-full resize-none rounded-2xl bg-slate-50 px-4 py-3 text-xl leading-relaxed ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            />
 
-          {/* 结构操作：新增（拆分长句）/ 并入上一句 / 与下一句合并 / 删除 */}
-          <div className="mt-2 flex flex-wrap gap-2">
-            <button type="button" onClick={() => void handleInsert()} disabled={mutating} className={ACTION_BTNS}>
-              ＋新增一句
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleMergePrev()}
-              disabled={mutating || position === 0}
-              className={ACTION_BTNS}
-            >
-              并入上一句
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleMergeNext()}
-              disabled={mutating || position >= sentences.length - 1}
-              className={ACTION_BTNS}
-            >
-              与下一句合并
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleDelete()}
-              disabled={mutating || sentences.length <= 1}
-              className="rounded-2xl bg-red-50 px-4 py-2 text-base font-semibold text-red-600 ring-1 ring-red-100 active:bg-red-100 disabled:opacity-40"
-            >
-              删除
-            </button>
-          </div>
+            {/* 票 12（仅 standard 草稿）：教材原文参照；ASR 文本与时点保留作对照 */}
+            {textbookText !== null && (
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl bg-sky-50 px-3 py-2">
+                <span className="shrink-0 text-sm font-semibold text-sky-700">
+                  教材原文
+                </span>
+                <span className="min-w-0 flex-1 text-sm text-slate-600">
+                  {textbookText}
+                </span>
+                {textbookAligned && current.text !== textbookText && (
+                  <button
+                    type="button"
+                    onClick={handleAdopt}
+                    disabled={mutating}
+                    className="shrink-0 rounded-xl bg-sky-100 px-3 py-1.5 text-sm font-semibold text-sky-700 active:bg-sky-200 disabled:opacity-40"
+                  >
+                    采用教材原文
+                  </button>
+                )}
+              </div>
+            )}
 
-          <div className="mt-auto pt-3">
+            {/* 时点微调（原切点页能力并入） */}
+            <p className="mt-3 text-center text-2xl font-bold tabular-nums text-emerald-700">
+              {formatMs(current.startMs)} → {formatMs(current.endMs)}
+            </p>
+            <div className="mt-2 grid grid-cols-4 gap-2">
+              <button type="button" onClick={() => adjust("start", -CALIBRATE_STEP_MS)} disabled={mutating} className={ADJUST_BTNS}>
+                起 −0.25s
+              </button>
+              <button type="button" onClick={() => adjust("start", CALIBRATE_STEP_MS)} disabled={mutating} className={ADJUST_BTNS}>
+                起 ＋0.25s
+              </button>
+              <button type="button" onClick={() => adjust("end", -CALIBRATE_STEP_MS)} disabled={mutating} className={ADJUST_BTNS}>
+                止 −0.25s
+              </button>
+              <button type="button" onClick={() => adjust("end", CALIBRATE_STEP_MS)} disabled={mutating} className={ADJUST_BTNS}>
+                止 ＋0.25s
+              </button>
+            </div>
+
+            {/* 结构操作：新增（拆分长句）/ 并入上一句 / 与下一句合并 / 删除 */}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button type="button" onClick={() => void handleInsert()} disabled={mutating} className={ACTION_BTNS}>
+                ＋新增一句
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleMergePrev()}
+                disabled={mutating || position === 0}
+                className={ACTION_BTNS}
+              >
+                并入上一句
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleMergeNext()}
+                disabled={mutating || position >= sentences.length - 1}
+                className={ACTION_BTNS}
+              >
+                与下一句合并
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDelete()}
+                disabled={mutating || sentences.length <= 1}
+                className="rounded-2xl bg-red-50 px-4 py-2 text-base font-semibold text-red-600 ring-1 ring-red-100 active:bg-red-100 disabled:opacity-40"
+              >
+                删除
+              </button>
+            </div>
+
             <button
               type="button"
               onClick={confirmSentence}
               disabled={mutating || currentSaveState === "saving"}
-              className={`w-full rounded-2xl py-4 text-xl font-bold text-white shadow-md active:bg-emerald-600 disabled:opacity-40 ${
+              className={`mt-3 w-full rounded-2xl py-4 text-xl font-bold text-white shadow-md active:bg-emerald-600 disabled:opacity-40 ${
                 current.proofread === "confirmed" ? "bg-emerald-600" : "bg-emerald-500"
               }`}
             >
@@ -589,41 +592,32 @@ export default function ProofreadPage() {
                 ? "本句已确认 ✓（再改动会回到未确认）"
                 : "✓ 确认本句"}
             </button>
-            {currentSaveState === "saved" && (
-              <p role="status" className="mt-1 text-center text-base text-emerald-600">
-                已保存 ✓
-              </p>
-            )}
-          </div>
-        </section>
-      ) : (
-        <p className="mt-6 rounded-3xl bg-white px-6 py-10 text-center text-xl text-slate-400 shadow-md ring-1 ring-slate-100">
-          暂无句子
-        </p>
-      )}
+          </section>
+        )}
 
-      {/* 句间导航 */}
-      <div className="mt-2 flex items-center justify-between pb-1">
-        <button
-          type="button"
-          onClick={() => selectSentence(position - 1)}
-          disabled={position === 0 || mutating}
-          className="rounded-2xl bg-white px-5 py-2 text-lg font-semibold text-slate-600 shadow-sm ring-1 ring-slate-200 active:bg-slate-50 disabled:opacity-40"
-        >
-          ‹ 上一句
-        </button>
-        <span className="text-lg text-slate-500">
-          第 {current ? current.index + 1 : 0} / {sentences.length} 句
-        </span>
-        <button
-          type="button"
-          onClick={() => selectSentence(position + 1)}
-          disabled={position >= sentences.length - 1 || mutating}
-          className="rounded-2xl bg-white px-5 py-2 text-lg font-semibold text-slate-600 shadow-sm ring-1 ring-slate-200 active:bg-slate-50 disabled:opacity-40"
-        >
-          下一句 ›
-        </button>
-      </div>
+        {/* 句间导航 */}
+        <div className="mt-auto flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => selectSentence(position - 1)}
+            disabled={position === 0 || mutating}
+            className="rounded-2xl bg-white px-5 py-2 text-lg font-semibold text-slate-600 shadow-sm ring-1 ring-slate-200 active:bg-slate-50 disabled:opacity-40"
+          >
+            ‹ 上一句
+          </button>
+          <span className="text-lg text-slate-500">
+            第 {current ? current.index + 1 : 0} / {sentences.length} 句
+          </span>
+          <button
+            type="button"
+            onClick={() => selectSentence(position + 1)}
+            disabled={position >= sentences.length - 1 || mutating}
+            className="rounded-2xl bg-white px-5 py-2 text-lg font-semibold text-slate-600 shadow-sm ring-1 ring-slate-200 active:bg-slate-50 disabled:opacity-40"
+          >
+            下一句 ›
+          </button>
+        </div>
+      </aside>
     </div>
   );
 }
