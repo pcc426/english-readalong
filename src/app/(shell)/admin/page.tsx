@@ -82,7 +82,7 @@ function SubmitButton(props: { submitting: boolean; children: ReactNode }) {
     <button
       type="submit"
       disabled={props.submitting}
-      className="mt-6 w-full rounded-2xl bg-emerald-500 py-4 text-xl font-bold text-white shadow-md active:bg-emerald-600 disabled:opacity-40"
+      className="mt-auto w-full pt-6 rounded-2xl bg-emerald-500 py-4 text-xl font-bold text-white shadow-md active:bg-emerald-600 disabled:opacity-40"
     >
       {props.children}
     </button>
@@ -136,7 +136,7 @@ function AccountForm(props: {
   return (
     <form
       onSubmit={handleSubmit}
-      className="w-full max-w-sm rounded-3xl bg-white p-8 shadow-md ring-1 ring-slate-100"
+      className="flex h-full flex-col"
     >
       <h2 className="text-2xl font-bold tracking-tight">{props.title}</h2>
       <Field
@@ -225,38 +225,54 @@ export default function AdminPage() {
   }, []);
 
   return (
-    <div className="flex min-h-full flex-col items-center justify-center px-5 py-10">
-      {access === "loading" && <p className="text-lg text-slate-400">加载中…</p>}
+    <>
+      {access === "loading" && (
+        <div className="flex min-h-full items-center justify-center px-5 py-10">
+          <p className="text-lg text-slate-400">加载中…</p>
+        </div>
+      )}
       {access === "denied" && (
-        <div className="w-full max-w-sm rounded-3xl bg-white p-8 text-center shadow-md ring-1 ring-slate-100">
-          <h1 className="text-2xl font-bold tracking-tight">无权限</h1>
-          <p className="mt-3 text-lg text-slate-500">
-            此页面仅管理员可见，请用管理员账号登录。
-          </p>
+        <div className="flex min-h-full items-center justify-center px-5 py-10">
+          <div className="w-full max-w-sm rounded-3xl bg-white p-8 text-center shadow-md ring-1 ring-slate-100">
+            <h1 className="text-2xl font-bold tracking-tight">无权限</h1>
+            <p className="mt-3 text-lg text-slate-500">
+              此页面仅管理员可见，请用管理员账号登录。
+            </p>
+          </div>
         </div>
       )}
       {access === "allowed" && (
-        <>
-          <h1 className="mb-8 text-3xl font-bold tracking-tight">管理</h1>
-          <div className="flex w-full flex-col items-center gap-8 md:flex-row md:items-start md:justify-center">
-            <CreateAccountForm />
-            <ResetPasswordForm />
-          </div>
-          {/* 票 12：标准内容制作入口（仅管理员渲染，接口层另有 403 双保险） */}
-          <div className="mt-10 w-full max-w-md rounded-3xl bg-white p-7 text-center shadow-md ring-1 ring-slate-100">
-            <h2 className="text-2xl font-bold tracking-tight">标准内容制作</h2>
-            <p className="mt-2 text-lg text-slate-500">
-              用同一条上传→校对→定稿管线制作沪教版教材内容，定稿后全账号可见。
-            </p>
+        <div className="mx-auto max-w-5xl px-6 py-8">
+          <h1 className="text-3xl font-bold tracking-tight">管理</h1>
+
+          {/* 主任务 hero：标准内容制作。后续新增管理功能在下方卡片区整宽向下堆叠 */}
+          <section className="mt-8 flex flex-col gap-6 rounded-3xl bg-emerald-50 p-8 ring-1 ring-emerald-100 md:flex-row md:items-center md:justify-between">
+            <div className="max-w-xl">
+              <h2 className="text-2xl font-bold tracking-tight text-emerald-900">
+                标准内容制作
+              </h2>
+              <p className="mt-2 text-lg text-emerald-800/80">
+                用同一条上传→校对→定稿管线制作沪教版教材内容，定稿后全账号可见。
+              </p>
+            </div>
             <a
               href="/admin/standard"
-              className="mt-4 inline-block rounded-2xl bg-emerald-500 px-8 py-3 text-xl font-bold text-white shadow-md active:bg-emerald-600"
+              className="shrink-0 rounded-2xl bg-emerald-500 px-8 py-4 text-center text-xl font-bold text-white shadow-md active:bg-emerald-600"
             >
               进入标准内容制作 →
             </a>
+          </section>
+
+          <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
+            <section className="h-full rounded-3xl bg-white p-7 shadow-md ring-1 ring-slate-100">
+              <CreateAccountForm />
+            </section>
+            <section className="h-full rounded-3xl bg-white p-7 shadow-md ring-1 ring-slate-100">
+              <ResetPasswordForm />
+            </section>
           </div>
-        </>
+        </div>
       )}
-    </div>
+    </>
   );
 }
