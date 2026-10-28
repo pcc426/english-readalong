@@ -1,8 +1,8 @@
 "use client";
 
-// 管理页（票 02）：管理员创建家长账号与重置密码。独立页面，不走侧边栏壳
-// （侧边栏的「管理」入口是 03 号票）。加载时经 /api/auth/me 判定权限，
-// 未登录/非管理员只显示无权限提示，不渲染任何表单。
+// 管理页：管理员创建家长账号与重置密码。V0.2.5（票 01）从 (shell) 外移入壳内，
+// 修复进入后侧边栏/TopNav 消失、只能浏览器返回的 bug；URL 仍为 /admin。
+// 加载时经 /api/auth/me 判定权限，未登录/非管理员只显示无权限提示，不渲染任何表单。
 // UI 不做自动化测试，走手工验收清单（spec · Testing Decisions）。
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { isValidEmail, MIN_PASSWORD_LENGTH } from "@/lib/admin/validation";
@@ -225,7 +225,7 @@ export default function AdminPage() {
   }, []);
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center px-5 py-10">
+    <div className="flex min-h-full flex-col items-center justify-center px-5 py-10">
       {access === "loading" && <p className="text-lg text-slate-400">加载中…</p>}
       {access === "denied" && (
         <div className="w-full max-w-sm rounded-3xl bg-white p-8 text-center shadow-md ring-1 ring-slate-100">
@@ -257,6 +257,6 @@ export default function AdminPage() {
           </div>
         </>
       )}
-    </main>
+    </div>
   );
 }
