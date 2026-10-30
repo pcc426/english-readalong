@@ -6,10 +6,10 @@
 // 提交只带 type + unitId + moduleKind + file；服务端查注册表后用课文名生成草稿标题，
 // 枚举串由草稿字段现算（见 src/lib/textbook/title.ts）。
 // 上传走 POST /api/uploads（服务端二次校验管理员与版本/书/单元/模块）；
-// 定稿走 POST /api/drafts/[id]/publish（09 号票端点，standard 包落在公开标准目录，
-// 全账号可见）。UI 不做自动化测试，走手工验收清单。
+// 定稿发布只从预览页发起（V0.3 票 09 / ADR 0005），此列表入口为「去预览」；
+// standard 包定稿后落在公开标准目录，全账号可见。UI 不做自动化测试，走手工验收清单。
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { STATUS_BADGES } from "@/components/shared/draft-ui";
+import { STATUS_BADGES, previewGate } from "@/components/shared/draft-ui";
 import { MAX_MB } from "@/components/shared/upload-precheck";
 import { VideoFileField } from "@/components/shared/video-file-field";
 import { buildEnumTitle } from "@/lib/textbook/title";
@@ -70,7 +70,6 @@ export default function StandardAdminClient({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [publishingId, setPublishingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   // V0.2.4 票 04：退回校对的进行中反馈
   const [unpublishingId, setUnpublishingId] = useState<string | null>(null);
@@ -169,38 +168,6 @@ export default function StandardAdminClient({
       setError("网络开小差了，请重试");
     } finally {
       setUploading(false);
-    }
-  }
-
-  async function handlePublish(draft: StandardDraftOverview) {
-    if (publishingId) return;
-    if (
-      !window.confirm(
-        `确定把「${draft.title}」定稿发布吗？发布后所有账号可见。`
-      )
-    ) {
-      return;
-    }
-    setPublishingId(draft.id);
-    setError(null);
-    setNotice(null);
-    try {
-      const res = await fetch(`/api/drafts/${draft.id}/publish`, {
-        method: "POST",
-      });
-      if (res.ok) {
-        await loadDrafts();
-        setNotice("已定稿发布，所有账号的「教材内容」里都能看到。");
-        return;
-      }
-      const body = (await res.json().catch(() => null)) as {
-        error?: { message?: string };
-      } | null;
-      setError(body?.error?.message ?? "定稿失败，请重试");
-    } catch {
-      setError("网络开小差了，请重试");
-    } finally {
-      setPublishingId(null);
     }
   }
 
@@ -434,6 +401,8 @@ export default function StandardAdminClient({
           ) : (
             drafts.map((draft) => {
               const badge = STATUS_BADGES[draft.status];
+              // 票 09：与校对页/custom 详情同一把尺（previewGate）
+              const gate = previewGate(draft.sentenceCount, draft.confirmedCount);
               return (
                 <div
                   key={draft.id}
@@ -464,21 +433,22 @@ export default function StandardAdminClient({
                         >
                           去校对 →
                         </a>
-                        {draft.sentenceCount > 0 &&
-                        draft.confirmedCount < draft.sentenceCount ? (
-                          <span className="text-base text-slate-400">
-                            还有 {draft.sentenceCount - draft.confirmedCount}{" "}
-                            句未确认，确认完才能定稿
-                          </span>
-                        ) : (
+                        {gate.canPreview ? (
+                          /* V0.3 票 09 / ADR 0005：定稿发布只从预览页发起，此处只送人去预览 */
                           <button
                             type="button"
-                            onClick={() => void handlePublish(draft)}
-                            disabled={publishingId === draft.id}
+                            onClick={() => {
+                              window.location.href = `/drafts/${draft.id}/preview`;
+                            }}
                             className="rounded-2xl bg-emerald-500 px-5 py-2 text-lg font-semibold text-white shadow-sm active:bg-emerald-600 disabled:opacity-40"
                           >
-                            {publishingId === draft.id ? "定稿中…" : "定稿发布"}
+                            去预览
                           </button>
+                        ) : (
+                          <span className="text-base text-slate-400">
+                            还有 {gate.unconfirmedCount}{" "}
+                            句未确认，确认完才能定稿
+                          </span>
                         )}
                       </>
                     )}
