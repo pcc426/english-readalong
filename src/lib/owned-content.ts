@@ -14,6 +14,22 @@ import { bestAttemptsBySentence, completionDistribution, latestRunStars } from "
 import { encouragementFor } from "@/lib/domain/encouragement";
 
 /**
+ * 内部 /media/ 地址 → 鉴权媒体路由（票 01/05）：上传类内容（自定义与标准上传）
+ * 改写为 /api/media/<accountId>/<file>；随代码内容的裸文件名改写为
+ * /api/media/shipped/<file>。poster 与 video 同形，共用本改写。
+ */
+function authMediaUrl(source: string, ref: string): string {
+  if (source === "custom-upload" || source === "standard-upload") {
+    return ref.replace(/^\/media\//, "/api/media/");
+  }
+  if (ref.startsWith("/media/")) {
+    const name = ref.slice("/media/".length);
+    return `/api/media/shipped/${encodeURIComponent(name)}`;
+  }
+  return ref;
+}
+
+/**
  * 单元详情（按账号）：句子最好成绩只取本人练习记录。
  * 自定义内容的视频引用是 <accountId>/<file>（票 09 定稿契约），
  * 统一改写为鉴权媒体路由地址；标准内容保持公开静态路径。
@@ -40,21 +56,10 @@ export function ownedContentDetail(
 
   // 上传类内容（自定义与标准）的视频引用是 <accountId>/<file>（票 09/12 定稿契约），
   // 统一改写为鉴权媒体路由地址；随代码的标准内容（video 是文件名）同样不静态公开，
-  // 走 /api/media/shipped/<文件名> 鉴权命名空间。
-  if (unit.source === "custom-upload" || unit.source === "standard-upload") {
-    unit.video = unit.video.replace(/^\/media\//, "/api/media/");
-  } else if (unit.video.startsWith("/media/")) {
-    const name = unit.video.slice("/media/".length);
-    unit.video = `/api/media/shipped/${encodeURIComponent(name)}`;
-  }
-  // 封面（票 01）与视频同一套改写：poster 与 video 同形（随代码包为裸文件名）
+  // 走 /api/media/shipped/<文件名> 鉴权命名空间。封面（票 01）与视频同一套改写。
+  unit.video = authMediaUrl(unit.source, unit.video);
   if (unit.poster) {
-    if (unit.source === "custom-upload" || unit.source === "standard-upload") {
-      unit.poster = unit.poster.replace(/^\/media\//, "/api/media/");
-    } else if (unit.poster.startsWith("/media/")) {
-      const name = unit.poster.slice("/media/".length);
-      unit.poster = `/api/media/shipped/${encodeURIComponent(name)}`;
-    }
+    unit.poster = authMediaUrl(unit.source, unit.poster);
   }
   return unit;
 }
@@ -83,6 +88,10 @@ export function ownedContentOverview(
       u.encouragement = encouragementFor(dist);
       // 最近一次练习的总星数（票 04）：与完成度同批按账号覆盖全量视图的 null 占位
       u.latestRunStars = latestRunStars(db, pack.id, { owner: accountId });
+      // 封面（票 05 网格卡）：列表行的 /media/ 内部地址同样改写为鉴权路由
+      if (u.poster) {
+        u.poster = authMediaUrl(u.source, u.poster);
+      }
     }
   } finally {
     db.close();

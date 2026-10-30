@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { GET } from "./route";
@@ -212,6 +212,66 @@ describe("GET /api/units", () => {
       expect(body.units.map((u: { id: string }) => u.id)).not.toContain(otherDraft.id);
       // 标准内容照常返回
       expect(body.units.map((u: { id: string }) => u.id)).toContain("u2-dragon-dance");
+    });
+  });
+
+  describe("列表卡新字段（票 05：封面改写 + 单元下拉数据）", () => {
+    it("随代码包带 poster：列表行同样改写为 shipped 鉴权媒体路由；无 poster 为 null", async () => {
+      setupEnv();
+      writeFileSync(
+        path.join(process.env.CONTENT_DIR!, "u3.json"),
+        JSON.stringify({
+          id: "u3-poster",
+          title: "Amazing plants",
+          source: "沪教版五上 Unit 3 · Chant time",
+          video: "五上_U3.mp4",
+          poster: "五上_U3.jpg",
+          sentences: [{ text: "x", start: 0, end: 1 }],
+        }),
+        "utf8"
+      );
+
+      const res = await GET(authedGet("http://x/api/units"));
+      const body = await res.json();
+      const byId = (id: string) =>
+        body.units.find((u: { id: string }) => u.id === id);
+      expect(byId("u3-poster").poster).toBe(
+        `/api/media/shipped/${encodeURIComponent("五上_U3.jpg")}`
+      );
+      expect(byId("u2-dragon-dance").poster).toBeNull();
+    });
+
+    it("运行时标准上传包带 poster：改写为鉴权媒体路由", async () => {
+      setupEnv();
+      const owner = accountIdOf("parent@test.com");
+      const stdDir = path.join(process.env.CONTENT_DATA_DIR!, "standard");
+      mkdirSync(stdDir, { recursive: true });
+      writeFileSync(
+        path.join(stdDir, "up.json"),
+        JSON.stringify({
+          id: "up-pack",
+          title: "Unit 5 Rhyme",
+          source: "standard-upload",
+          video: `${owner}/u5.mp4`,
+          poster: `${owner}/u5.jpg`,
+          sentences: [{ text: "hi", start: 0, end: 1 }],
+        }),
+        "utf8"
+      );
+
+      const res = await GET(authedGet("http://x/api/units"));
+      const row = (await res.json()).units.find(
+        (u: { id: string }) => u.id === "up-pack"
+      );
+      expect(row.poster).toBe(`/api/media/${owner}/u5.jpg`);
+    });
+
+    it("textbookUnits：注册教材全部单元（序号＋英文标题）随响应下发，供单元下拉", async () => {
+      setupEnv();
+      const res = await GET(authedGet("http://x/api/units"));
+      const body = await res.json();
+      expect(body.textbookUnits[0]).toEqual({ no: 1, title: "Clubs in our school" });
+      expect(body.textbookUnits).toHaveLength(10);
     });
   });
 });

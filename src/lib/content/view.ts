@@ -18,6 +18,9 @@ export interface ContentOverview {
   /** 枚举副标题（沪教版五上-Unit2-Story time-7句，票 03/spec 决策 15）；
    * 无归属时为 null，界面回退 sourceLabel 文案。 */
   subtitle: string | null;
+  /** 竖版封面（9:16）内部 /media/ 地址（票 01/05）；无封面为 null。
+   * 这里不是最终 URL，owned-content 会改写为鉴权媒体路由（同 video）。 */
+  poster: string | null;
   percentages: {
     threeStar: number;
     twoStar: number;
@@ -109,6 +112,7 @@ export function getContentOverview(query: ContentQuery = {}): ContentOverview[] 
         unitNo: pack.unitNo ?? null,
         moduleKind: pack.moduleKind ?? null,
         subtitle: standardEnumSubtitle(pack),
+        poster: pack.poster ? `/media/${pack.poster}` : null,
         percentages: dist.percentages,
         encouragement: encouragementFor(dist),
         latestRunStars: null,

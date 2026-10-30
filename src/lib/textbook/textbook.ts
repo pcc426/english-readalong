@@ -145,6 +145,22 @@ export interface PackAttributionFields {
   moduleKind?: string;
 }
 
+/** 首页单元下拉的单项（票 05）：单元序号＋教材英文标题 */
+export interface TextbookUnitRef {
+  no: number;
+  title: string;
+}
+
+/**
+ * 注册教材的全部单元（票 05 单元下拉数据源）：按注册册序 × 教材目录序。
+ * 服务端拼好随 API 下发（同 enum-subtitle 的约定：教材 JSON 不进浏览器包）。
+ */
+export function registeredUnits(): TextbookUnitRef[] {
+  return registeredBooks.flatMap(({ data }) =>
+    data.units.map((u) => ({ no: u.index, title: u.title }))
+  );
+}
+
 /**
  * 教材列表默认排序（票 03，spec 决策 18）：seriesCode → grade → term → unitNo
  * → 模块在教材 JSON modules 数组中的顺序（不是 MODULE_KINDS 字母/声明序——
