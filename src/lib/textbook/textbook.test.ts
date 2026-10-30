@@ -1,11 +1,13 @@
 import { describe, it, expect } from "vitest";
 import {
+  compareStandardPacks,
   findBookData,
   findTextbookModuleDetail,
   getTextbookModule,
   parseTextbook,
   registeredBooks,
   series,
+  textbookPackAttribution,
 } from "./textbook";
 
 /** 构造一份最小合法教材数据，供坏数据用例在其上做破坏。 */
@@ -141,6 +143,77 @@ describe("getTextbookModule", () => {
     expect(getTextbookModule("五上-U99", "Talking time")).toBeUndefined();
     expect(getTextbookModule("五上-U1", "Song time")).toBeUndefined();
     expect(getTextbookModule("", "")).toBeUndefined();
+  });
+});
+
+describe("textbookPackAttribution（定稿落内容包归属字段，票 03）", () => {
+  it("按草稿的 unitId/moduleKind 反查注册表，带回版本/书/单元号/课文名", () => {
+    expect(textbookPackAttribution("五上-U2", "Story time")).toEqual({
+      seriesCode: "sh-jiaoban-new",
+      bookId: "grade5a",
+      unitNo: 2,
+      moduleKind: "Story time",
+      lessonTitle: "The dragon dance",
+    });
+    expect(textbookPackAttribution("五上-U3", "Chant time")).toMatchObject({
+      unitNo: 3,
+      lessonTitle: "Parts of plants",
+    });
+  });
+
+  it("单元或栏目未命中时返回 undefined（草稿引用坏了要显式暴露）", () => {
+    expect(textbookPackAttribution("五上-U99", "Story time")).toBeUndefined();
+    expect(textbookPackAttribution("五上-U3", "Story time")).toBeUndefined();
+  });
+});
+
+describe("compareStandardPacks（教材列表默认排序，票 03）", () => {
+  const attr = (
+    unitNo: number,
+    moduleKind: string,
+    bookId = "grade5a",
+    seriesCode = "sh-jiaoban-new",
+  ) => ({ seriesCode, bookId, unitNo, moduleKind });
+
+  it("按 单元序号 → 模块在教材 JSON 中的顺序 排（不是字母序：U1 Talking 在 Story 前）", () => {
+    const input = [
+      attr(3, "Reading time"),
+      attr(1, "Story time"),
+      attr(3, "Chant time"),
+      attr(2, "Talking time"),
+      attr(1, "Talking time"),
+    ];
+    const sorted = [...input].sort(compareStandardPacks);
+    expect(sorted.map((p) => `${p.unitNo}-${p.moduleKind}`)).toEqual([
+      "1-Talking time",
+      "1-Story time",
+      "2-Talking time",
+      "3-Chant time",
+      "3-Reading time",
+    ]);
+  });
+
+  it("同册内按单元序号排；比较对相同归属自反（grade/term 维度随注册表扩册生效）", () => {
+    // 注册表当前只有 grade5a；用字段不同的假包验证比较维度不会串序
+    const a = attr(1, "Talking time");
+    const b = attr(2, "Talking time");
+    expect(compareStandardPacks(a, b)).toBeLessThan(0);
+    expect(compareStandardPacks(b, a)).toBeGreaterThan(0);
+    expect(compareStandardPacks(a, a)).toBe(0);
+  });
+
+  it("归属字段不全或注册表查不到的包沉底，彼此保持原序（稳定）", () => {
+    const noFields = {};
+    const partial = attr(2, "Talking time");
+    delete (partial as Partial<typeof partial>).moduleKind;
+    const unknownBook = attr(1, "Talking time", "grade6a");
+    const u1 = attr(1, "Talking time");
+    const u3 = attr(3, "Chant time");
+    const input = [noFields, u1, unknownBook, partial, u3];
+    const sorted = [...input].sort(compareStandardPacks);
+    expect(sorted.slice(0, 2)).toEqual([u1, u3]);
+    // 沉底组保持输入相对顺序（稳定排序）
+    expect(sorted.slice(2)).toEqual([noFields, unknownBook, partial]);
   });
 });
 

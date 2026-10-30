@@ -504,7 +504,9 @@ export default function PracticeFlow({
           </a>
           <h1 className="mt-1 truncate text-2xl font-bold">{unit.title}</h1>
           <p className="text-base text-slate-500">
-            {sourceLabel(unit.source)} · {unit.sentences.length} 句
+            {/* 枚举副标题（票 03）：标准包带归属时服务端已拼好（含句数）；
+                无归属（custom/老包/预览）回退 sourceLabel + 句数 */}
+            {unit.subtitle ?? `${sourceLabel(unit.source)} · ${unit.sentences.length} 句`}
           </p>
           {/* 票 08：预览模式标记 + 用户指定的 info 提示小字（右栏标题区） */}
           {mode === "preview" && (

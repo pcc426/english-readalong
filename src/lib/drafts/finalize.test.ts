@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { openDb, type Db } from "@/lib/db";
 import { setupDb, sessionCookieFor } from "@/lib/testing/auth-test-utils";
+import { contentPackSchema } from "@/lib/content/schema";
 import {
   createDraft,
   completeTranscription,
@@ -264,13 +265,89 @@ describe("buildContentPack · 标准内容（12 号票）", () => {
   };
 
   it("type=standard：owner 置空、source=standard-upload，视频沿用草稿引用", () => {
-    const pack = buildContentPack(stdDraft, [sent(0, "a", 0, 900)]);
+    const pack = buildContentPack(stdDraft, [sent(0, "a", 0, 900)], {
+      unitId: "五上-U2",
+      moduleKind: "Story time",
+    });
     expect(pack.id).toBe("std-1");
     expect(pack.title).toBe("五上 U2 Story time");
     expect(pack.type).toBe("standard");
     expect(pack.owner).toBeNull();
     expect(pack.source).toBe("standard-upload");
     expect(pack.video).toBe("admin-1/v.mp4");
+  });
+});
+
+describe("buildContentPack · 教材归属落包（票 03）", () => {
+  const baseStdDraft: Draft = {
+    id: "std-1",
+    accountId: "admin-1",
+    title: "The dragon dance",
+    type: "standard",
+    status: "proofreading",
+    videoPath: "admin-1/v.mp4",
+    posterPath: null,
+    transcribeTaskId: null,
+    transcribeError: null,
+    createdAt: "",
+    updatedAt: "",
+  };
+  const baseCustomDraft: Draft = {
+    ...baseStdDraft,
+    id: "d-1",
+    accountId: "acc-1",
+    title: "家里的英语",
+    type: "custom",
+  };
+
+  it("standard 草稿带模块引用：写全归属字段 + 课文名（注册表反查）", () => {
+    const draft: Draft = {
+      ...baseStdDraft,
+      posterPath: "admin-1/v.poster.jpg",
+    };
+    const pack = buildContentPack(draft, [sent(0, "a", 0, 900)], {
+      unitId: "五上-U2",
+      moduleKind: "Story time",
+    });
+    expect(pack).toMatchObject({
+      seriesCode: "sh-jiaoban-new",
+      bookId: "grade5a",
+      unitNo: 2,
+      moduleKind: "Story time",
+      lessonTitle: "The dragon dance",
+      poster: "admin-1/v.poster.jpg",
+    });
+  });
+
+  it("custom 草稿只写 poster，不写归属字段", () => {
+    const draft: Draft = {
+      ...baseCustomDraft,
+      posterPath: "acc-1/v.poster.jpg",
+    };
+    const pack = buildContentPack(draft, [sent(0, "a", 0, 900)]);
+    expect(pack.poster).toBe("acc-1/v.poster.jpg");
+    expect(pack.seriesCode).toBeUndefined();
+    expect(pack.bookId).toBeUndefined();
+    expect(pack.unitNo).toBeUndefined();
+    expect(pack.moduleKind).toBeUndefined();
+    expect(pack.lessonTitle).toBeUndefined();
+  });
+
+  it("草稿没抽到封面（posterPath 为 null）：包不带 poster 字段", () => {
+    const pack = buildContentPack(baseStdDraft, [sent(0, "a", 0, 900)], {
+      unitId: "五上-U2",
+      moduleKind: "Story time",
+    });
+    expect(pack.poster).toBeUndefined();
+  });
+
+  it("注册表查不到模块引用：显式抛错（归属丢失就是这个票要修的 bug，不允许静默落包）", () => {
+    expect(() =>
+      buildContentPack(baseStdDraft, [sent(0, "a", 0, 900)], {
+        unitId: "五上-U99",
+        moduleKind: "Story time",
+      })
+    ).toThrow(/注册表/);
   });
 });
 
@@ -325,6 +402,47 @@ describe("finalizeDraft · 标准内容（12 号票）", () => {
     expect(() => finalizeDraft(db, draft)).toThrow(FinalizeValidationError);
     expect(existsSync(standardPackPathFor(draft.id))).toBe(false);
     expect(getDraft(db, draft.id)?.status).toBe("proofreading");
+  });
+
+  it("定稿从草稿行的 unit_id/module_kind 反查归属写包，poster 沿用草稿封面（票 03）", () => {
+    const db = setupEnv();
+    const adminId = accountIdOf("admin@test.com", true);
+    const draft = seedStandardDraft(db, adminId, [
+      { text: "hello", startMs: 0, endMs: 900 },
+    ]);
+    db.prepare("UPDATE content_drafts SET poster_path = ? WHERE id = ?").run(
+      `${adminId}/v.poster.jpg`,
+      draft.id
+    );
+
+    const pack = finalizeDraft(db, getDraft(db, draft.id)!);
+    expect(pack).toMatchObject({
+      seriesCode: "sh-jiaoban-new",
+      bookId: "grade5a",
+      unitNo: 2,
+      moduleKind: "Story time",
+      lessonTitle: "The dragon dance",
+      poster: `${adminId}/v.poster.jpg`,
+    });
+    const onDisk = JSON.parse(readFileSync(standardPackPathFor(draft.id), "utf8"));
+    expect(contentPackSchema.safeParse(onDisk).success).toBe(true);
+  });
+
+  it("退回校对再重新定稿：归属字段仍正确（unpublish 不删草稿归属，票 03 验收）", () => {
+    const db = setupEnv();
+    const adminId = accountIdOf("admin@test.com", true);
+    const draft = seedStandardDraft(db, adminId, [
+      { text: "hello", startMs: 0, endMs: 900 },
+    ]);
+
+    finalizeDraft(db, draft);
+    unpublishDraft(db, draft);
+    const repack = finalizeDraft(db, getDraft(db, draft.id)!);
+    expect(repack).toMatchObject({
+      unitNo: 2,
+      moduleKind: "Story time",
+      lessonTitle: "The dragon dance",
+    });
   });
 });
 

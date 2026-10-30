@@ -1,5 +1,6 @@
 import { openDb, dbPath } from "@/lib/db";
 import { getContent, listContent, type ContentQuery } from "@/lib/content/loader";
+import { standardEnumSubtitle } from "@/lib/content/enum-subtitle";
 import { bestAttemptsBySentence, completionDistribution } from "@/lib/domain/stats";
 import { encouragementFor } from "@/lib/domain/encouragement";
 
@@ -8,6 +9,15 @@ export interface ContentOverview {
   title: string;
   source: string;
   sentenceCount: number;
+  /** 教材归属排序字段（票 03，spec 决策 18）：标准包带归属时非空；
+   * custom 包/未迁移老包为 null（列表默认排序把它们稳定沉底）。 */
+  seriesCode: string | null;
+  bookId: string | null;
+  unitNo: number | null;
+  moduleKind: string | null;
+  /** 枚举副标题（沪教版五上-Unit2-Story time-7句，票 03/spec 决策 15）；
+   * 无归属时为 null，界面回退 sourceLabel 文案。 */
+  subtitle: string | null;
   percentages: {
     threeStar: number;
     twoStar: number;
@@ -39,6 +49,9 @@ export interface ContentDetail {
   video: string;
   /** 竖版封面（9:16）；无封面为 null。这里是内部 /media/ 地址，owned-content 会改写为鉴权路由 */
   poster: string | null;
+  /** 枚举副标题（票 03）：标准包带归属时为枚举串；无归属（custom/老包）为 null，
+   * 界面回退 sourceLabel。 */
+  subtitle: string | null;
   sentences: SentenceDetail[];
 }
 
@@ -72,6 +85,7 @@ export function getContentDetail(
       // （随代码内容 → /api/media/shipped/…；上传类 → /api/media/<accountId>/…）
       video: `/media/${pack.video}`,
       poster: pack.poster ? `/media/${pack.poster}` : null,
+      subtitle: standardEnumSubtitle(pack),
       sentences,
     };
   } finally {
@@ -90,6 +104,11 @@ export function getContentOverview(query: ContentQuery = {}): ContentOverview[] 
         title: pack.title,
         source: pack.source,
         sentenceCount: pack.sentences.length,
+        seriesCode: pack.seriesCode ?? null,
+        bookId: pack.bookId ?? null,
+        unitNo: pack.unitNo ?? null,
+        moduleKind: pack.moduleKind ?? null,
+        subtitle: standardEnumSubtitle(pack),
         percentages: dist.percentages,
         encouragement: encouragementFor(dist),
         latestRunStars: null,

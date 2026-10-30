@@ -103,3 +103,99 @@ export function findTextbookModuleDetail(
     sentences: found.module.sentences,
   };
 }
+
+/**
+ * 内容包的教材归属字段（票 03）：定稿与迁移落包时按草稿的 unitId/moduleKind
+ * 反查注册表写入。unitId 不冗余存包（可由 bookId+unitNo 推导）。
+ * 注册表查不到（草稿引用坏了）返回 undefined，调用方显式暴露。
+ */
+export interface TextbookPackAttribution {
+  seriesCode: string;
+  bookId: string;
+  unitNo: number;
+  moduleKind: string;
+  lessonTitle: string;
+}
+
+export function textbookPackAttribution(
+  unitId: string,
+  moduleKind: string
+): TextbookPackAttribution | undefined {
+  for (const { book, data } of registeredBooks) {
+    const unit = data.units.find((u) => u.unitId === unitId);
+    const module = unit?.modules.find((m) => m.moduleKind === moduleKind);
+    if (unit && module) {
+      return {
+        seriesCode: series.code,
+        bookId: book.id,
+        unitNo: unit.index,
+        moduleKind: module.moduleKind,
+        lessonTitle: module.title,
+      };
+    }
+  }
+  return undefined;
+}
+
+/** 参与排序的最小归属字段（内容包上的同名字段，缺省 = 未迁移老包/自定义包） */
+export interface PackAttributionFields {
+  seriesCode?: string;
+  bookId?: string;
+  unitNo?: number;
+  moduleKind?: string;
+}
+
+/**
+ * 教材列表默认排序（票 03，spec 决策 18）：seriesCode → grade → term → unitNo
+ * → 模块在教材 JSON modules 数组中的顺序（不是 MODULE_KINDS 字母/声明序——
+ * U1 是 Talking→Story，U3 是 Chant→Talking→Reading，以各单元的教材目录为准）。
+ * 归属字段不全或注册表查不到的包沉底（比较结果恒为 0，保持原有相对顺序）。
+ */
+export function compareStandardPacks(
+  a: PackAttributionFields,
+  b: PackAttributionFields
+): number {
+  const ka = standardPackSortKey(a);
+  const kb = standardPackSortKey(b);
+  if (ka == null || kb == null) {
+    // 有键的排前；两个都无键 → 0（稳定沉底）
+    return ka == null && kb == null ? 0 : ka == null ? 1 : -1;
+  }
+  return (
+    ka.seriesCode.localeCompare(kb.seriesCode) ||
+    ka.grade - kb.grade ||
+    ka.term.localeCompare(kb.term) ||
+    ka.unitNo - kb.unitNo ||
+    ka.moduleIndex - kb.moduleIndex
+  );
+}
+
+interface StandardPackSortKey {
+  seriesCode: string;
+  grade: number;
+  term: string;
+  unitNo: number;
+  moduleIndex: number;
+}
+
+function standardPackSortKey(
+  pack: PackAttributionFields
+): StandardPackSortKey | null {
+  const { seriesCode, bookId, unitNo, moduleKind } = pack;
+  if (seriesCode == null || bookId == null || unitNo == null || moduleKind == null) {
+    return null;
+  }
+  const registered = registeredBooks.find(
+    (b) => b.book.id === bookId && series.code === seriesCode
+  );
+  const unit = registered?.data.units.find((u) => u.index === unitNo);
+  const moduleIndex = unit?.modules.findIndex((m) => m.moduleKind === moduleKind);
+  if (!registered || !unit || moduleIndex == null || moduleIndex < 0) return null;
+  return {
+    seriesCode,
+    grade: registered.book.grade,
+    term: registered.book.term,
+    unitNo,
+    moduleIndex,
+  };
+}

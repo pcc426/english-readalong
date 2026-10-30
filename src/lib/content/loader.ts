@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { compareStandardPacks } from "@/lib/textbook/textbook";
 import { contentPackSchema, type ContentPack } from "./schema";
 
 export type { Sentence, ContentPack } from "./schema";
@@ -68,7 +69,10 @@ function loadStandardPacks(): ContentPack[] {
   const runtimeDir = standardRuntimeDir();
   const runtime = existsSync(runtimeDir) ? loadContentPacks(runtimeDir) : [];
   const shippedIds = new Set(shipped.map((p) => p.id));
-  return [...shipped, ...runtime.filter((p) => !shippedIds.has(p.id))];
+  const merged = [...shipped, ...runtime.filter((p) => !shippedIds.has(p.id))];
+  // 默认排序（票 03，spec 决策 18）：单元序号 → 教材 JSON 模块序，
+  // 不是文件名字典序；未迁移老包（无归属字段）稳定沉底
+  return [...merged].sort(compareStandardPacks);
 }
 
 /**
