@@ -1,22 +1,39 @@
 "use client";
 
-// 标准内容制作的客户端表单与草稿列表（票 12）。
-// 上传走 POST /api/uploads（type=standard + unitId + moduleKind，服务端二次校验
-// 管理员与教材单元）；定稿走 POST /api/drafts/[id]/publish（09 号票端点，
-// standard 包落在公开标准目录，全账号可见）。UI 不做自动化测试，走手工验收清单。
+// 标准内容制作的客户端表单与草稿列表（票 12 + 票 02）。
+// 表单不再收自由标题：版本固定显示「沪教版（上教新版）」，学期/单元/栏目逐级联动，
+// 选完栏目实时预览 主标题（课文名）+ 枚举串（生成器 buildEnumTitle，纯函数）。
+// 提交只带 type + unitId + moduleKind + file；服务端查注册表后用课文名生成草稿标题，
+// 枚举串由草稿字段现算（见 src/lib/textbook/title.ts）。
+// 上传走 POST /api/uploads（服务端二次校验管理员与版本/书/单元/模块）；
+// 定稿走 POST /api/drafts/[id]/publish（09 号票端点，standard 包落在公开标准目录，
+// 全账号可见）。UI 不做自动化测试，走手工验收清单。
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { STATUS_BADGES } from "@/components/shared/draft-ui";
 import { MAX_MB } from "@/components/shared/upload-precheck";
 import { VideoFileField } from "@/components/shared/video-file-field";
+import { buildEnumTitle } from "@/lib/textbook/title";
 
 export interface TextbookCatalogUnit {
   unitId: string;
+  index: number;
   title: string;
-  modules: Array<{ moduleKind: string; title: string }>;
+  modules: Array<{ moduleKind: string; title: string; sentenceCount: number }>;
 }
 
-/** 服务端从教材数据取出的单元/模块清单（RSC props 传入） */
-export type TextbookCatalog = TextbookCatalogUnit[];
+/** 注册表里的一册（学期下拉项）；units 是该册的单元/栏目清单 */
+export interface TextbookCatalogBook {
+  id: string;
+  shortName: string;
+  display: string;
+  units: TextbookCatalogUnit[];
+}
+
+/** 服务端从教材注册表取出的版本 + 书目清单（RSC props 传入） */
+export interface TextbookCatalog {
+  series: { shortName: string; display: string };
+  books: TextbookCatalogBook[];
+}
 
 // 与 GET /api/drafts 响应对应（壳只走 HTTP，不从 src/lib 引类型）
 interface StandardDraftOverview {
@@ -42,11 +59,13 @@ export default function StandardAdminClient({
   const [drafts, setDrafts] = useState<StandardDraftOverview[] | null>(null);
   const [failed, setFailed] = useState(false);
 
-  const [title, setTitle] = useState("");
   const [file, setFile] = useState<File | null>(null);
-  const [unitId, setUnitId] = useState(catalog[0]?.unitId ?? "");
+  const [bookId, setBookId] = useState(catalog.books[0]?.id ?? "");
+  const [unitId, setUnitId] = useState(
+    catalog.books[0]?.units[0]?.unitId ?? ""
+  );
   const [moduleKind, setModuleKind] = useState(
-    catalog[0]?.modules[0]?.moduleKind ?? ""
+    catalog.books[0]?.units[0]?.modules[0]?.moduleKind ?? ""
   );
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -95,17 +114,28 @@ export default function StandardAdminClient({
     if (access === "allowed") void loadDrafts();
   }, [access, loadDrafts]);
 
-  const selectedUnit = catalog.find((u) => u.unitId === unitId);
+  const selectedBook = catalog.books.find((b) => b.id === bookId);
+  const selectedUnit = selectedBook?.units.find((u) => u.unitId === unitId);
+  const selectedModule = selectedUnit?.modules.find(
+    (m) => m.moduleKind === moduleKind
+  );
+  // 枚举串预览：句数此时取教材模块句数占位（校对可增删句，以草稿确认后为准）
+  const enumPreview =
+    selectedBook && selectedUnit && selectedModule
+      ? buildEnumTitle({
+          seriesShortName: catalog.series.shortName,
+          bookShortName: selectedBook.shortName,
+          unitIndex: selectedUnit.index,
+          moduleKind: selectedModule.moduleKind,
+          sentenceCount: selectedModule.sentenceCount,
+        })
+      : null;
 
   async function handleUpload(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (uploading) return;
-    if (!title.trim()) {
-      setError("请先给内容起个标题");
-      return;
-    }
-    if (!unitId || !moduleKind) {
-      setError("请选择教材单元与模块");
+    if (!bookId || !unitId || !moduleKind) {
+      setError("请选择学期、教材单元与栏目");
       return;
     }
     if (!file) {
@@ -117,7 +147,6 @@ export default function StandardAdminClient({
     setNotice(null);
     try {
       const form = new FormData();
-      form.set("title", title.trim());
       form.set("file", file);
       form.set("type", "standard");
       form.set("unitId", unitId);
@@ -125,7 +154,6 @@ export default function StandardAdminClient({
       const res = await fetch("/api/uploads", { method: "POST", body: form });
       if (res.status === 201) {
         const body = (await res.json()) as { draft?: { id: string } };
-        setTitle("");
         setFile(null);
         await loadDrafts();
         if (body.draft?.id) {
@@ -273,17 +301,40 @@ export default function StandardAdminClient({
         onSubmit={handleUpload}
         className="mt-6 rounded-3xl bg-white p-7 shadow-md ring-1 ring-slate-100"
       >
-        <label htmlFor="std-title" className="block text-lg font-semibold">
-          标题
+        <label htmlFor="std-series" className="block text-lg font-semibold">
+          版本
         </label>
-        <input
-          id="std-title"
-          type="text"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="比如：五上 U2 Story time"
+        <p
+          id="std-series"
+          className="mt-2 w-full rounded-2xl bg-slate-100 px-4 py-3 text-lg text-slate-500"
+        >
+          {catalog.series.display}
+        </p>
+        <p className="mt-1 text-base text-slate-400">教材版本固定，不可选择</p>
+
+        <label htmlFor="std-book" className="mt-5 block text-lg font-semibold">
+          学期
+        </label>
+        <select
+          id="std-book"
+          value={bookId}
+          onChange={(e) => {
+            const book = catalog.books.find((b) => b.id === e.target.value);
+            setBookId(e.target.value);
+            setUnitId(book?.units[0]?.unitId ?? "");
+            setModuleKind(book?.units[0]?.modules[0]?.moduleKind ?? "");
+          }}
           className="mt-2 w-full rounded-2xl bg-slate-50 px-4 py-3 text-lg ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-400"
-        />
+        >
+          {catalog.books.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.display}
+            </option>
+          ))}
+        </select>
+        <p className="mt-1 text-base text-slate-400">
+          只开放已有教材数据的学期，其余学期拿到教材后自动开放
+        </p>
 
         <div className="mt-5 flex gap-4">
           <div className="flex-1">
@@ -295,12 +346,14 @@ export default function StandardAdminClient({
               value={unitId}
               onChange={(e) => {
                 setUnitId(e.target.value);
-                const unit = catalog.find((u) => u.unitId === e.target.value);
+                const unit = selectedBook?.units.find(
+                  (u) => u.unitId === e.target.value
+                );
                 setModuleKind(unit?.modules[0]?.moduleKind ?? "");
               }}
               className="mt-2 w-full rounded-2xl bg-slate-50 px-4 py-3 text-lg ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-400"
             >
-              {catalog.map((u) => (
+              {(selectedBook?.units ?? []).map((u) => (
                 <option key={u.unitId} value={u.unitId}>
                   {u.unitId} {u.title}
                 </option>
@@ -325,6 +378,19 @@ export default function StandardAdminClient({
             </select>
           </div>
         </div>
+
+        {selectedModule && (
+          <div className="mt-5 rounded-2xl bg-emerald-50/60 p-4 ring-1 ring-emerald-100">
+            <p className="text-base text-slate-400">标题（自动生成，不可手改）</p>
+            <p className="mt-1 text-xl font-bold">
+              主标题：{selectedModule.title}
+            </p>
+            <p className="mt-1 text-lg text-slate-500">副标题：{enumPreview}</p>
+            <p className="mt-1 text-base text-slate-400">
+              句数以校对确认后的句数为准
+            </p>
+          </div>
+        )}
 
         <label htmlFor="std-file" className="mt-5 block text-lg font-semibold">
           视频文件
