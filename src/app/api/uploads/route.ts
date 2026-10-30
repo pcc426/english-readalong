@@ -18,6 +18,7 @@ import {
   videoAbsPath,
 } from "@/lib/drafts/storage";
 import { getDurationProbe } from "@/lib/drafts/probe";
+import { generateDraftPoster } from "@/lib/drafts/poster";
 import { storeUpload } from "@/lib/drafts/service";
 
 export const dynamic = "force-dynamic";
@@ -112,6 +113,9 @@ export async function POST(req: Request) {
         videoPath,
       });
     }
+    // 封面（票 01）：建草稿后立即抽帧，fire-and-forget 不阻塞响应；
+    // 失败不阻断上传（generateDraftPoster 自吞错，poster 回退 null）
+    void generateDraftPoster(draft.id);
     return NextResponse.json(
       {
         draft:

@@ -45,6 +45,8 @@ export async function GET(req: Request) {
           status: d.status,
           sentenceCount: counts.get(d.id) ?? 0,
           confirmedCount: confirmed.get(d.id) ?? 0,
+          // 封面（票 01）：抽帧完成才有，转写期间列表对缺失容忍（null → 占位）
+          posterUrl: d.posterPath ? `/api/media/${d.posterPath}` : null,
           createdAt: d.createdAt,
         };
       }),

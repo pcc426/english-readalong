@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it } from "vitest";
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { POST } from "./route";
@@ -9,6 +9,7 @@ import {
   sessionCookieFor,
 } from "@/lib/testing/auth-test-utils";
 import { setDurationProbe } from "@/lib/drafts/probe";
+import { setPosterExtractor } from "@/lib/drafts/poster";
 import { setTranscriptionService } from "@/lib/drafts/transcription/current";
 import {
   FakeTranscriptionService,
@@ -25,6 +26,7 @@ afterEach(() => {
   delete process.env.UPLOADS_DIR;
   setDurationProbe(null);
   setTranscriptionService(null);
+  setPosterExtractor(null);
 });
 
 function setupEnv(): Db {
@@ -226,6 +228,92 @@ describe("POST /api/uploads", () => {
       .get(draft.id) as { status: string; transcribe_error: string | null };
     expect(row.status).toBe("transcribing");
     expect(row.transcribe_error).toBe("讯飞 10105");
+  });
+});
+
+describe("POST /api/uploads · 封面抽帧（票 01）", () => {
+  it("上传成功后立即抽帧：poster 异步落库（转写期间列表已能拿到 posterUrl）", async () => {
+    const db = setupEnv();
+    const accountId = accountIdOf(db);
+    setDurationProbe(async () => 30_000);
+    setTranscriptionService(new FakeTranscriptionService());
+    setPosterExtractor(async (_video, poster) => {
+      writeFileSync(poster, Buffer.from([0xff, 0xd8]));
+      return true;
+    });
+
+    const res = await post("要封面", mp4File());
+    expect(res.status).toBe(201);
+    const { draft } = await res.json();
+
+    // fire-and-forget：不阻塞响应，但测试要等它落地
+    await vi.waitFor(async () => {
+      const row = db
+        .prepare("SELECT poster_path FROM content_drafts WHERE id = ?")
+        .get(draft.id) as { poster_path: string | null };
+      expect(row.poster_path).toMatch(
+        new RegExp(`^${accountId}/[0-9a-f-]{36}\\.poster\\.jpg$`)
+      );
+    });
+    const row = db
+      .prepare("SELECT poster_path FROM content_drafts WHERE id = ?")
+      .get(draft.id) as { poster_path: string };
+    expect(existsSync(path.join(process.env.UPLOADS_DIR!, row.poster_path))).toBe(true);
+  });
+
+  it("抽帧失败（ffmpeg 缺失等）：上传照常 201，poster_path 留空不报错", async () => {
+    const db = setupEnv();
+    setDurationProbe(async () => 30_000);
+    setTranscriptionService(new FakeTranscriptionService());
+    setPosterExtractor(async () => false);
+
+    const res = await post("没封面也行", mp4File());
+    expect(res.status).toBe(201);
+    const { draft } = await res.json();
+
+    await vi.waitFor(async () => {
+      const row = db
+        .prepare("SELECT poster_path FROM content_drafts WHERE id = ?")
+        .get(draft.id) as { poster_path: string | null };
+      // 失败结果也要「发生过了」：等它把 poster_path 定格为 null 再断言
+      expect(row.poster_path).toBeNull();
+    });
+  });
+
+  it("标准草稿同一套：抽帧也触发（管理员上传）", async () => {
+    const db = setupEnv();
+    sessionCookieFor("admin@test.com", true);
+    const adminId = findAccountByEmail(db, "admin@test.com")!.id;
+    setDurationProbe(async () => 30_000);
+    setTranscriptionService(new FakeTranscriptionService());
+    setPosterExtractor(async (_video, poster) => {
+      writeFileSync(poster, Buffer.from([0xff, 0xd8]));
+      return true;
+    });
+
+    const form = new FormData();
+    form.set("title", "标准封面");
+    form.set("type", "standard");
+    form.set("unitId", "五上-U2");
+    form.set("moduleKind", "Story time");
+    form.set("file", mp4File());
+    const res = await POST(
+      new Request("http://x/api/uploads", {
+        method: "POST",
+        headers: { cookie: sessionCookieFor("admin@test.com", true) },
+        body: form,
+      })
+    );
+    expect(res.status).toBe(201);
+    const { draft } = await res.json();
+    await vi.waitFor(async () => {
+      const row = db
+        .prepare("SELECT poster_path FROM content_drafts WHERE id = ?")
+        .get(draft.id) as { poster_path: string | null };
+      expect(row.poster_path).toMatch(
+        new RegExp(`^${adminId}/[0-9a-f-]{36}\\.poster\\.jpg$`)
+      );
+    });
   });
 });
 

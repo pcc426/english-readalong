@@ -47,6 +47,15 @@ export function ownedContentDetail(
     const name = unit.video.slice("/media/".length);
     unit.video = `/api/media/shipped/${encodeURIComponent(name)}`;
   }
+  // 封面（票 01）与视频同一套改写：poster 与 video 同形（随代码包为裸文件名）
+  if (unit.poster) {
+    if (unit.source === "custom-upload" || unit.source === "standard-upload") {
+      unit.poster = unit.poster.replace(/^\/media\//, "/api/media/");
+    } else if (unit.poster.startsWith("/media/")) {
+      const name = unit.poster.slice("/media/".length);
+      unit.poster = `/api/media/shipped/${encodeURIComponent(name)}`;
+    }
+  }
   return unit;
 }
 

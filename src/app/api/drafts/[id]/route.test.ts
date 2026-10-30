@@ -12,6 +12,7 @@ import {
 import {
   createDraft,
   setDraftVideo,
+  setDraftPoster,
   completeTranscription,
 } from "@/lib/drafts/repo";
 import { createStandardDraft } from "@/lib/drafts/standard-drafts";
@@ -102,6 +103,28 @@ describe("GET /api/drafts/[id]", () => {
         proofread: "auto",
       },
     ]);
+  });
+
+  it("封面引用与 URL（票 01）：有 poster 时带 posterPath/posterUrl，没有时为 null", async () => {
+    const db = setupEnv();
+    const mine = accountIdOf("parent@test.com");
+    const withPoster = seedDraft(db, mine, "有封面");
+    setDraftPoster(db, withPoster, `${mine}/${withPoster}.poster.jpg`);
+
+    const ok = await GET(reqWith("GET", "parent@test.com", withPoster), {
+      params: Promise.resolve({ id: withPoster }),
+    });
+    const okBody = await ok.json();
+    expect(okBody.draft.posterPath).toBe(`${mine}/${withPoster}.poster.jpg`);
+    expect(okBody.draft.posterUrl).toBe(`/api/media/${mine}/${withPoster}.poster.jpg`);
+
+    const bare = seedDraft(db, mine, "没封面");
+    const res = await GET(reqWith("GET", "parent@test.com", bare), {
+      params: Promise.resolve({ id: bare }),
+    });
+    const body = await res.json();
+    expect(body.draft.posterPath).toBeNull();
+    expect(body.draft.posterUrl).toBeNull();
   });
 
   it("他人与不存在的草稿一律 404（不暴露存在性）", async () => {

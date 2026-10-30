@@ -8,7 +8,7 @@ import {
   setupDb,
   sessionCookieFor,
 } from "@/lib/testing/auth-test-utils";
-import { createDraft, setDraftVideo, completeTranscription } from "@/lib/drafts/repo";
+import { createDraft, setDraftVideo, setDraftPoster, completeTranscription } from "@/lib/drafts/repo";
 import { createStandardDraft } from "@/lib/drafts/standard-drafts";
 
 const cleanups: Array<() => void> = [];
@@ -63,6 +63,26 @@ function seedDraft(
 function get(cookie: string): Promise<Response> {
   return GET(new Request("http://x/api/drafts", { headers: { cookie } }));
 }
+
+describe("GET /api/drafts · posterUrl（票 01）", () => {
+  it("有封面的草稿带 posterUrl（鉴权媒体路由），没封面的为 null（列表对缺失容忍）", async () => {
+    const db = setupEnv();
+    const mine = accountIdOf("parent@test.com");
+    const withPoster = seedDraft(db, mine, "有封面", 1);
+    setDraftPoster(db, withPoster, `${mine}/${withPoster}.poster.jpg`);
+    seedDraft(db, mine, "没封面", 1);
+
+    const res = await get(sessionCookieFor("parent@test.com"));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    const withItem = body.drafts.find((d: { id: string }) => d.id === withPoster);
+    expect(withItem.posterUrl).toBe(
+      `/api/media/${mine}/${withPoster}.poster.jpg`
+    );
+    const noItem = body.drafts.find((d: { id: string }) => d.id !== withPoster);
+    expect(noItem.posterUrl).toBeNull();
+  });
+});
 
 describe("GET /api/drafts", () => {
   it("未登录 401", async () => {

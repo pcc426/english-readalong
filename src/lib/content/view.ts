@@ -33,6 +33,8 @@ export interface ContentDetail {
   title: string;
   source: string;
   video: string;
+  /** 竖版封面（9:16）；无封面为 null。这里是内部 /media/ 地址，owned-content 会改写为鉴权路由 */
+  poster: string | null;
   sentences: SentenceDetail[];
 }
 
@@ -65,6 +67,7 @@ export function getContentDetail(
       // 内部的 /media/ 地址不是最终 URL：owned-content 会改写为鉴权媒体路由
       // （随代码内容 → /api/media/shipped/…；上传类 → /api/media/<accountId>/…）
       video: `/media/${pack.video}`,
+      poster: pack.poster ? `/media/${pack.poster}` : null,
       sentences,
     };
   } finally {
