@@ -9,6 +9,17 @@ describe("replayControl（播放控制排中间按钮）", () => {
     });
   });
 
+  it("播完停住态（preview 票 08）：同录音态，「再播一遍」高亮黄", () => {
+    expect(replayControl("clipDone", false)).toEqual({
+      label: "🔁 再播一遍",
+      highlight: true,
+    });
+    expect(replayControl("clipDone", true)).toEqual({
+      label: "🔁 再播一遍",
+      highlight: true,
+    });
+  });
+
   it("播放中：显示「⏸ 暂停」，深灰不高亮", () => {
     expect(replayControl("playing", false)).toEqual({
       label: "⏸ 暂停",

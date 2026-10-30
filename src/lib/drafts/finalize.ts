@@ -36,8 +36,9 @@ export function standardPackPathFor(packId: string): string {
   return path.join(standardRuntimeDir(), `${packId}.json`);
 }
 
-/** 内容包句子时间以秒为单位（内容模型 schema 约定），草稿内部按毫秒存 */
-function msToSeconds(ms: number): number {
+/** 内容包句子时间以秒为单位（内容模型 schema 约定），草稿内部按毫秒存。
+ * 导出共用（票 08 预览页组装同一换算），保持全站唯一的 ms→0.1s 口径。 */
+export function msToSeconds(ms: number): number {
   return Math.round(ms / 100) / 10;
 }
 

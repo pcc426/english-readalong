@@ -13,6 +13,67 @@ function toRecording(index: number): FlowState {
   return { step: "recording", index };
 }
 
+describe("preview 模式（V0.3 票 08：预览不录音不评分）", () => {
+  it("示范播完停在 clipDone，不进录音态", () => {
+    const state = reduceFlow(
+      { step: "playing", index: 1 },
+      { type: "clipEnded" },
+      TOTAL,
+      "preview"
+    );
+    expect(state).toEqual({ step: "clipDone", index: 1 });
+  });
+
+  it("practice 模式（默认）播完仍进录音态，行为零变化", () => {
+    expect(
+      reduceFlow({ step: "playing", index: 0 }, { type: "clipEnded" }, TOTAL)
+    ).toEqual({ step: "recording", index: 0 });
+    expect(
+      reduceFlow(
+        { step: "playing", index: 0 },
+        { type: "clipEnded" },
+        TOTAL,
+        "practice"
+      )
+    ).toEqual({ step: "recording", index: 0 });
+  });
+
+  it("clipDone 可再播一遍（重播本句示范）", () => {
+    expect(
+      reduceFlow({ step: "clipDone", index: 1 }, { type: "replay" }, TOTAL, "preview")
+    ).toEqual({ step: "playing", index: 1 });
+  });
+
+  it("clipDone 可跳到下一句；末句播完跳过进收尾", () => {
+    expect(
+      reduceFlow({ step: "clipDone", index: 0 }, { type: "skip" }, TOTAL, "preview")
+    ).toEqual({ step: "playing", index: 1 });
+    expect(
+      reduceFlow(
+        { step: "clipDone", index: TOTAL - 1 },
+        { type: "skip" },
+        TOTAL,
+        "preview"
+      )
+    ).toEqual({ step: "finished" });
+  });
+
+  it("clipDone 可点句格换句；评分事件在 preview 无效", () => {
+    expect(
+      reduceFlow(
+        { step: "clipDone", index: 1 },
+        { type: "select", index: 2 },
+        TOTAL,
+        "preview"
+      )
+    ).toEqual({ step: "playing", index: 2 });
+    // 不录音就不可能有 recording 态：submitting/scored 从 clipDone 出发都无效
+    expect(
+      reduceFlow({ step: "clipDone", index: 1 }, { type: "submitting" }, TOTAL, "preview")
+    ).toEqual({ step: "clipDone", index: 1 });
+  });
+});
+
 describe("逐句练习流转状态机（含录音评分）", () => {
   it("初始停在第一句等待开始；开始后播放示范", () => {
     expect(initialFlow()).toEqual({ step: "idle", index: 0 });
