@@ -7,6 +7,7 @@ import {
   initialFlow,
   reduceFlow,
   type FlowEvent,
+  type FlowMode,
   type FlowState,
 } from "@/lib/domain/practice-flow";
 import { mapScoreToStars } from "@/lib/domain/stars";
@@ -37,10 +38,26 @@ const PRAISE: Record<number, Array<{ text: string; src: string }>> = {
 /** 停止录音的意图：提交评分 / 弃旧重录 / 纯丢弃（不重录不提交） */
 type StopIntent = "submit" | "rerecord" | "discard";
 
-export default function PracticeFlow({ unit }: { unit: ContentDetail }) {
+export default function PracticeFlow({
+  unit,
+  mode = "practice",
+  backHref = "/",
+  backLabel = "‹ 单元列表",
+  unconfirmedCount = 0,
+}: {
+  unit: ContentDetail;
+  /** practice＝正式练习（默认，行为零变化）；preview＝草稿预览：不录音不评分（V0.3 票 08） */
+  mode?: FlowMode;
+  /** 左上返回链接（preview 下指向校对页）；默认维持正式练习的「单元列表」 */
+  backHref?: string;
+  backLabel?: string;
+  /** preview 专用：未确认句数，>0 时顶部提示且定稿按钮禁用 */
+  unconfirmedCount?: number;
+}) {
+  const practice = mode === "practice";
   const total = unit.sentences.length;
   const [state, dispatch] = useReducer(
-    (s: FlowState, e: FlowEvent) => reduceFlow(s, e, total),
+    (s: FlowState, e: FlowEvent) => reduceFlow(s, e, total, mode),
     initialFlow()
   );
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -200,15 +217,18 @@ export default function PracticeFlow({ unit }: { unit: ContentDetail }) {
     }
   }
 
-  // 录音态：自动开录（保留已有录音时等用户选择"重新提交"或"重读"）
+  // 录音态：自动开录（保留已有录音时等用户选择"重新提交"或"重读"）。
+  // preview 整体短路：状态机不会进 recording，这里再挡一道，绝不请求麦克风（票 08）
   useEffect(() => {
+    if (!practice) return;
     if (state.step === "recording" && !hasBlob && !recorderActive && !micNotice) {
       void startRecording();
     }
-  }, [state.step, hasBlob, recorderActive, micNotice]);
+  }, [state.step, hasBlob, recorderActive, micNotice, practice]);
 
-  // 录音计时 + 超时自动提交
+  // 录音计时 + 超时自动提交（preview 下整体短路）
   useEffect(() => {
+    if (!practice) return;
     if (state.step !== "recording" || !recorderActive) return;
     const timer = setTimeout(() => {
       // 副作用不能放 setState updater 里：dev 严格模式 updater 会双调用，
@@ -217,7 +237,7 @@ export default function PracticeFlow({ unit }: { unit: ContentDetail }) {
       setRecordSeconds(recordSeconds + 1);
     }, TICK_MS);
     return () => clearTimeout(timer);
-  }, [state.step, recorderActive, recordSeconds]);
+  }, [state.step, recorderActive, recordSeconds, practice]);
 
   // 离开本句（跳句、出分后离开、收尾）时：丢弃进行中的录音与回放 URL，
   // 防止上一句的音频混进下一次提交
@@ -339,15 +359,18 @@ export default function PracticeFlow({ unit }: { unit: ContentDetail }) {
     };
   }, [state, unit.sentences]);
 
-  // 出分展示倒计时
+  // 出分展示倒计时（preview 无出分态，整体短路）
   useEffect(() => {
+    if (!practice) return;
     if (state.step !== "scored") return;
     const timer = setTimeout(() => dispatch({ type: "tick" }), TICK_MS);
     return () => clearTimeout(timer);
-  }, [state]);
+  }, [state, practice]);
 
-  // 出分时播放星级对应的鼓励语音（同档轮换），并把说的短语显示在卡上
+  // 出分时播放星级对应的鼓励语音（同档轮换），并把说的短语显示在卡上。
+  // preview 整体短路：不播鼓励语音（票 08）
   useEffect(() => {
+    if (!practice) return;
     if (state.step !== "scored") return;
     const pool = PRAISE[state.result.stars] ?? [];
     if (pool.length === 0) return;
@@ -367,7 +390,7 @@ export default function PracticeFlow({ unit }: { unit: ContentDetail }) {
       setPraiseText(null);
     };
     // 只在进入出分态时触发一次（tick/held 变化不重播）
-  }, [flowKey]);
+  }, [flowKey, practice]);
 
   const togglePlay = () => {
     const video = videoRef.current;
@@ -392,7 +415,8 @@ export default function PracticeFlow({ unit }: { unit: ContentDetail }) {
       dispatch({ type: "select", index: Math.max(0, state.index - 1) });
   };
   const nextSentence = () => {
-    if (canSkip(state)) dispatch({ type: "skip" });
+    // clipDone（preview 播完停住）同样可跳下一句（票 08）
+    if (canSkip(state) || state.step === "clipDone") dispatch({ type: "skip" });
     else if (state.step === "playing" && state.index + 1 < total)
       dispatch({ type: "select", index: state.index + 1 });
   };
@@ -402,6 +426,51 @@ export default function PracticeFlow({ unit }: { unit: ContentDetail }) {
     setRunId(crypto.randomUUID());
     dispatch({ type: "select", index: 0 });
   };
+
+  // —— 定稿发布（仅 preview 渲染入口，票 08 / ADR 0005：发布动作只从预览页发起） ——
+  // 沿用校对页的确认文案与 422 逐句问题拼接；成功跳真实练习页 /units/{id}
+  const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
+
+  async function publishDraft() {
+    if (publishing) return;
+    if (
+      !window.confirm(
+        `确定把「${unit.title}」定稿发布吗？发布后所有账号可见、可跟读。`
+      )
+    ) {
+      return;
+    }
+    setPublishing(true);
+    setPublishError(null);
+    try {
+      const res = await fetch(`/api/drafts/${unit.id}/publish`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        window.location.href = `/units/${unit.id}`;
+        return;
+      }
+      const body = (await res.json().catch(() => null)) as {
+        error?: {
+          message?: string;
+          issues?: Array<{ index: number | null; problem: string }>;
+        };
+      } | null;
+      const issues = body?.error?.issues
+        ?.map(
+          (i) => (i.index === null ? "" : `第 ${i.index + 1} 句 `) + i.problem
+        )
+        .join("；");
+      setPublishError(
+        (body?.error?.message ?? "定稿失败，请重试") + (issues ? `：${issues}` : "")
+      );
+    } catch {
+      setPublishError("网络开小差了，请重试");
+    } finally {
+      setPublishing(false);
+    }
+  }
 
   const result = state.step === "scored" ? state.result : null;
   // 播放控制排中间按钮的文案与色调（票 11）：录音态重播示范改叫「再播一遍」＝高亮黄
@@ -430,14 +499,35 @@ export default function PracticeFlow({ unit }: { unit: ContentDetail }) {
       {/* 右列：操作区，固定宽、独立滚动 */}
       <aside className="flex h-full w-[26rem] shrink-0 flex-col gap-3 overflow-y-auto border-l border-slate-200 bg-slate-50 p-4">
         <div>
-          <a href="/" className="text-base text-emerald-700">
-            ‹ 单元列表
+          <a href={backHref} className="text-base text-emerald-700">
+            {backLabel}
           </a>
           <h1 className="mt-1 truncate text-2xl font-bold">{unit.title}</h1>
           <p className="text-base text-slate-500">
             {sourceLabel(unit.source)} · {unit.sentences.length} 句
           </p>
+          {/* 票 08：预览模式标记 + 用户指定的 info 提示小字（右栏标题区） */}
+          {mode === "preview" && (
+            <div className="mt-2">
+              <span className="rounded-full bg-sky-100 px-3 py-0.5 text-base font-bold text-sky-700">
+                预览模式
+              </span>
+              <p className="mt-1 text-sm text-slate-500">
+                仅供检查句子切分，不会录音、不会评分
+              </p>
+            </div>
+          )}
         </div>
+
+        {/* 票 08：有未确认句直接访问预览 URL——可预览但定稿按钮禁用 */}
+        {mode === "preview" && unconfirmedCount > 0 && (
+          <p
+            role="status"
+            className="shrink-0 rounded-xl bg-amber-50 px-3 py-2 text-base text-amber-700"
+          >
+            还有 {unconfirmedCount} 句未确认，可预览但不能定稿
+          </p>
+        )}
 
         {/* 当前句 / 录音 / 出分 主卡（票 11：上移到标题行下，当前句文本常驻） */}
         {current && (
@@ -506,6 +596,13 @@ export default function PracticeFlow({ unit }: { unit: ContentDetail }) {
               <p className="mt-3 text-lg text-slate-500">正在评分…</p>
             )}
 
+            {/* 票 08（preview）：示范播完停住等操作——重播/换句，不录音 */}
+            {state.step === "clipDone" && (
+              <p className="mt-3 text-lg text-slate-500">
+                ⏹ 本句播完，可「再播一遍」或换句
+              </p>
+            )}
+
             {state.step === "scored" && result && (
               <div className="mt-3">
                 {praiseText && (
@@ -546,13 +643,18 @@ export default function PracticeFlow({ unit }: { unit: ContentDetail }) {
 
             {(state.step === "idle" || state.step === "finished") && (
               <p className="mt-3 text-lg text-slate-500">
-                {state.step === "idle" ? "准备好就开始吧！" : "整个单元练完啦！"}
+                {state.step === "idle"
+                  ? practice
+                    ? "准备好就开始吧！"
+                    : "点「开始播放」逐句检查切分"
+                  : "整个单元练完啦！"}
               </p>
             )}
           </section>
         )}
 
-        {/* 播放控制排：上一句 / 暂停·继续·再播一遍 / 下一句（票 11：中间按钮改名与配色） */}
+        {/* 播放控制排：上一句 / 暂停·继续·再播一遍 / 下一句（票 11：中间按钮改名与配色）
+            票 08：clipDone（preview 播完停住）中间按钮＝再播一遍、可换下一句 */}
         <div className="grid shrink-0 grid-cols-3 gap-3">
           <button
             onClick={prevSentence}
@@ -562,8 +664,16 @@ export default function PracticeFlow({ unit }: { unit: ContentDetail }) {
             ⏮ 上一句
           </button>
           <button
-            onClick={state.step === "recording" ? replaySentence : togglePlay}
-            disabled={state.step !== "playing" && state.step !== "recording"}
+            onClick={
+              state.step === "recording" || state.step === "clipDone"
+                ? replaySentence
+                : togglePlay
+            }
+            disabled={
+              state.step !== "playing" &&
+              state.step !== "recording" &&
+              state.step !== "clipDone"
+            }
             className={`rounded-2xl py-4 text-xl font-bold text-white shadow-md disabled:opacity-40 ${
               replay.highlight
                 ? "bg-amber-400 active:bg-amber-500"
@@ -574,15 +684,21 @@ export default function PracticeFlow({ unit }: { unit: ContentDetail }) {
           </button>
           <button
             onClick={nextSentence}
-            disabled={state.step === "idle" || state.step === "finished" || (state.step === "playing" && state.index + 1 >= total)}
+            disabled={
+              state.step === "idle" ||
+              state.step === "finished" ||
+              ((state.step === "playing" || state.step === "clipDone") &&
+                state.index + 1 >= total)
+            }
             className="rounded-2xl bg-white py-4 text-xl font-bold text-slate-700 shadow-md ring-1 ring-slate-200 active:bg-slate-100 disabled:opacity-40"
           >
             下一句 ⏭
           </button>
         </div>
 
-        {/* 主操作排（票 11）：开始练习 + 听我读（本句尚无录音时置灰，读完一句后可回放） */}
-        {state.step === "idle" && (
+        {/* 主操作排（票 11）：开始练习 + 听我读（本句尚无录音时置灰，读完一句后可回放）。
+            preview（票 08）：听我读不渲染，只留全宽「开始播放」（用户手势后才能自动播声） */}
+        {state.step === "idle" && practice && (
           <div className="grid shrink-0 grid-cols-[2fr_1fr] gap-3">
             <button
               onClick={() => dispatch({ type: "begin" })}
@@ -599,6 +715,49 @@ export default function PracticeFlow({ unit }: { unit: ContentDetail }) {
               🎧 听我读
             </button>
           </div>
+        )}
+        {state.step === "idle" && !practice && (
+          <button
+            onClick={() => dispatch({ type: "begin" })}
+            className="shrink-0 rounded-2xl bg-emerald-500 py-4 text-2xl font-bold text-white shadow-md active:bg-emerald-600"
+          >
+            ▶ 开始播放
+          </button>
+        )}
+
+        {/* 底部操作排（票 08，仅 preview）：退回校对 / 定稿发布——
+            定稿动作只从预览页发起（ADR 0005），确认文案与 422 展示沿用校对页 */}
+        {mode === "preview" && (
+          <>
+            {publishError && (
+              <p
+                role="alert"
+                className="shrink-0 rounded-xl bg-red-50 px-3 py-2 text-base text-red-600"
+              >
+                {publishError}
+              </p>
+            )}
+            <div className="grid shrink-0 grid-cols-2 gap-3">
+              <a
+                href={backHref}
+                className="rounded-2xl bg-white py-4 text-center text-xl font-bold text-slate-700 shadow-md ring-1 ring-slate-200 active:bg-slate-100"
+              >
+                ← 退回校对
+              </a>
+              <button
+                onClick={() => void publishDraft()}
+                disabled={publishing || unconfirmedCount > 0}
+                title={
+                  unconfirmedCount > 0
+                    ? `还有 ${unconfirmedCount} 句未确认，可预览但不能定稿`
+                    : undefined
+                }
+                className="rounded-2xl bg-emerald-500 py-4 text-xl font-bold text-white shadow-md active:bg-emerald-600 disabled:opacity-40"
+              >
+                定稿发布
+              </button>
+            </div>
+          </>
         )}
 
         {/* 会话过期：覆盖普通提交错误提示，引导去重新登录（回来后本页重新加载即恢复） */}
@@ -648,8 +807,8 @@ export default function PracticeFlow({ unit }: { unit: ContentDetail }) {
           })}
         </nav>
 
-        {/* 收尾总结（票 11：保持在句格之后）；「再练一遍」整体重开换新 runId（票 04） */}
-        {state.step === "finished" && (() => {
+        {/* 收尾总结（票 11：保持在句格之后；preview 无收尾页，票 08）；「再练一遍」整体重开换新 runId（票 04） */}
+        {state.step === "finished" && practice && (() => {
           const earned = unit.sentences.reduce((sum, s) => {
             if (!sessionPracticed.has(s.index) || localBest[s.index] == null) return sum;
             return sum + mapScoreToStars(localBest[s.index]);

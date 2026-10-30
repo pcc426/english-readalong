@@ -13,11 +13,13 @@ export interface ReplayControl {
 }
 
 /**
- * 播放控制排中间按钮：录音态是重播本句示范（票 11 由「再读一遍」改名「再播一遍」），
- * 播放态是暂停/继续；其余状态按钮禁用，文案与深灰沿用现状。
+ * 播放控制排中间按钮：录音态（practice）与播完停住态（preview，票 08）是
+ * 重播本句示范（票 11 由「再读一遍」改名「再播一遍」），播放态是暂停/继续；
+ * 其余状态按钮禁用，文案与深灰沿用现状。
  */
 export function replayControl(step: FlowState["step"], isPaused: boolean): ReplayControl {
-  if (step === "recording") return { label: "🔁 再播一遍", highlight: true };
+  if (step === "recording" || step === "clipDone")
+    return { label: "🔁 再播一遍", highlight: true };
   if (step === "playing") {
     return isPaused
       ? { label: "▶ 继续", highlight: true }
