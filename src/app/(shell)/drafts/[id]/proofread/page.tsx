@@ -11,7 +11,7 @@
 import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { adjustBoundsMs, CALIBRATE_STEP_MS, MIN_CLIP_MS } from "@/lib/domain/calibrate";
-import { formatMs } from "@/components/shared/draft-ui";
+import { formatMs, previewGate } from "@/components/shared/draft-ui";
 import {
   useSentenceSave,
 } from "@/components/shared/use-draft-save";
@@ -176,7 +176,9 @@ export default function ProofreadPage() {
   const confirmedCount = sentences.filter(
     (s) => s.proofread === "confirmed"
   ).length;
-  const unconfirmedCount = sentences.length - confirmedCount;
+  // 票 09：与 custom 详情/标准制作列表同一把尺 previewGate——
+  // 至少一句且全部确认才可去预览；0 句草稿三处都不可预览。
+  const gate = previewGate(sentences.length, confirmedCount);
   const currentSaveState = current ? saveStates[current.index] : undefined;
 
   /** 结构性操作（删/并/插）后整体换血：清编辑现场、停播放、按位置钳制导航 */
@@ -766,9 +768,13 @@ export default function ProofreadPage() {
               onClick={() => {
                 window.location.href = `/drafts/${id}/preview`;
               }}
-              disabled={unconfirmedCount > 0}
+              disabled={!gate.canPreview}
               title={
-                unconfirmedCount > 0 ? `还有 ${unconfirmedCount} 句未确认` : undefined
+                gate.unconfirmedCount > 0
+                  ? `还有 ${gate.unconfirmedCount} 句未确认`
+                  : sentences.length === 0
+                    ? "还没有句子"
+                    : undefined
               }
               className="rounded-2xl bg-emerald-500 px-5 py-2 text-lg font-bold text-white shadow-md active:bg-emerald-600 disabled:opacity-40"
             >

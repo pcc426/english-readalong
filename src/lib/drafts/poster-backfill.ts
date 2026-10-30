@@ -116,7 +116,8 @@ export async function backfillUploadPosters(
       const relVideo = `${accountId}/${name}`;
       const relPoster = posterRelPathFor(relVideo);
       const videoAbs = path.join(root, accountId, name);
-      const posterAbs = path.join(root, accountId, relPoster.slice(accountId.length + 1));
+      // relPoster 已是相对 uploads 根的 <accountId>/<file>.poster.jpg，直接与根拼接
+      const posterAbs = path.join(root, relPoster);
       const videoMtime = mtimeMsOf(videoAbs);
       if (videoMtime != null && isPosterFresh(videoMtime, mtimeMsOf(posterAbs))) {
         results.push({ video: relVideo, poster: relPoster, status: "skipped" });

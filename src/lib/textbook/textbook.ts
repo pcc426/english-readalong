@@ -34,11 +34,6 @@ export const registeredBooks: RegisteredBook[] = bookRegistrations.map(
   (book) => ({ book, data: parseTextbook(book.json) }),
 );
 
-/** 按注册 id 取某册课文数据；未注册返回 undefined。 */
-export function findBookData(bookId: string): TextbookData | undefined {
-  return registeredBooks.find((b) => b.book.id === bookId)?.data;
-}
-
 /** 查询结果：一个单元模块的课文句子（12 号票校对页预填用）。 */
 export interface TextbookModuleRef {
   unitId: string;
@@ -57,29 +52,16 @@ export interface TextbookModuleDetail {
   sentences: string[];
 }
 
-/** 按单元 slug 与栏目原名在注册表各册中定位模块（册简称在 unitId 前缀里）。 */
-function locateModule(
-  unitId: string,
-  moduleKind: string,
-): { unit: TextbookUnit; module: TextbookModule } | undefined {
-  for (const { data } of registeredBooks) {
-    const unit = data.units.find((u) => u.unitId === unitId);
-    const module = unit?.modules.find((m) => m.moduleKind === moduleKind);
-    if (unit && module) return { unit, module };
-  }
-  return undefined;
-}
-
 /**
- * 按单元 slug 与栏目原名查课文句子。
- * unitId 形如「五上-U2」，moduleKind 是教材印刷栏目名（如 "Talking time"），
+ * 按单元 slug 与模块原名查课文句子。
+ * unitId 形如「五上-U2」，moduleKind 是教材印刷模块名（如 "Talking time"），
  * 规则见 schema.ts 头注释。未命中返回 undefined。
  */
 export function getTextbookModule(
   unitId: string,
   moduleKind: string,
 ): TextbookModuleRef | undefined {
-  const found = locateModule(unitId, moduleKind);
+  const found = locateModuleBySlug(unitId, moduleKind);
   if (!found) return undefined;
   return {
     unitId: found.unit.unitId,
@@ -93,7 +75,7 @@ export function findTextbookModuleDetail(
   unitId: string,
   moduleKind: string,
 ): TextbookModuleDetail | undefined {
-  const found = locateModule(unitId, moduleKind);
+  const found = locateModuleBySlug(unitId, moduleKind);
   if (!found) return undefined;
   return {
     unitId: found.unit.unitId,
@@ -121,20 +103,15 @@ export function textbookPackAttribution(
   unitId: string,
   moduleKind: string
 ): TextbookPackAttribution | undefined {
-  for (const { book, data } of registeredBooks) {
-    const unit = data.units.find((u) => u.unitId === unitId);
-    const module = unit?.modules.find((m) => m.moduleKind === moduleKind);
-    if (unit && module) {
-      return {
-        seriesCode: series.code,
-        bookId: book.id,
-        unitNo: unit.index,
-        moduleKind: module.moduleKind,
-        lessonTitle: module.title,
-      };
-    }
-  }
-  return undefined;
+  const found = locateModuleBySlug(unitId, moduleKind);
+  if (!found) return undefined;
+  return {
+    seriesCode: series.code,
+    bookId: found.book.id,
+    unitNo: found.unit.index,
+    moduleKind: found.module.moduleKind,
+    lessonTitle: found.module.title,
+  };
 }
 
 /** 参与排序的最小归属字段（内容包上的同名字段，缺省 = 未迁移老包/自定义包） */
@@ -143,6 +120,54 @@ export interface PackAttributionFields {
   bookId?: string;
   unitNo?: number;
   moduleKind?: string;
+}
+
+/** 注册表定位结果：书、单元、模块及模块在该单元 modules 数组中的下标。
+ * 是 book→unit→module 查找的唯一定义处——按 slug 或按包归属字段两条入口都归它。 */
+export interface ModuleLocation {
+  book: TextbookBookRegistration;
+  unit: TextbookUnit;
+  module: TextbookModule;
+  /** 模块在该单元 modules 数组中的顺序（教材目录序，排序用） */
+  moduleIndex: number;
+}
+
+/** 按单元 slug + 模块原名定位（unitId 已含册简称，遍历各册）。 */
+export function locateModuleBySlug(
+  unitId: string,
+  moduleKind: string
+): ModuleLocation | undefined {
+  for (const { book, data } of registeredBooks) {
+    const unit = data.units.find((u) => u.unitId === unitId);
+    const moduleIndex =
+      unit?.modules.findIndex((m) => m.moduleKind === moduleKind) ?? -1;
+    if (!unit || moduleIndex < 0) continue;
+    return { book, unit, module: unit.modules[moduleIndex], moduleIndex };
+  }
+  return undefined;
+}
+
+/** 按内容包归属字段（版本码 + 书 id + 单元号 + 模块原名）定位；字段不全/查不到返回 undefined。 */
+export function locateModuleByAttribution(
+  fields: PackAttributionFields
+): ModuleLocation | undefined {
+  const { seriesCode, bookId, unitNo, moduleKind } = fields;
+  if (seriesCode == null || bookId == null || unitNo == null || moduleKind == null) {
+    return undefined;
+  }
+  const registered = registeredBooks.find(
+    (b) => b.book.id === bookId && series.code === seriesCode
+  );
+  const unit = registered?.data.units.find((u) => u.index === unitNo);
+  const moduleIndex =
+    unit?.modules.findIndex((m) => m.moduleKind === moduleKind) ?? -1;
+  if (!registered || !unit || moduleIndex < 0) return undefined;
+  return {
+    book: registered.book,
+    unit,
+    module: unit.modules[moduleIndex],
+    moduleIndex,
+  };
 }
 
 /** 首页单元下拉的单项（票 05）：单元序号＋教材英文标题 */
@@ -197,21 +222,13 @@ interface StandardPackSortKey {
 function standardPackSortKey(
   pack: PackAttributionFields
 ): StandardPackSortKey | null {
-  const { seriesCode, bookId, unitNo, moduleKind } = pack;
-  if (seriesCode == null || bookId == null || unitNo == null || moduleKind == null) {
-    return null;
-  }
-  const registered = registeredBooks.find(
-    (b) => b.book.id === bookId && series.code === seriesCode
-  );
-  const unit = registered?.data.units.find((u) => u.index === unitNo);
-  const moduleIndex = unit?.modules.findIndex((m) => m.moduleKind === moduleKind);
-  if (!registered || !unit || moduleIndex == null || moduleIndex < 0) return null;
+  const found = locateModuleByAttribution(pack);
+  if (!found) return null;
   return {
-    seriesCode,
-    grade: registered.book.grade,
-    term: registered.book.term,
-    unitNo,
-    moduleIndex,
+    seriesCode: pack.seriesCode!,
+    grade: found.book.grade,
+    term: found.book.term,
+    unitNo: found.unit.index,
+    moduleIndex: found.moduleIndex,
   };
 }

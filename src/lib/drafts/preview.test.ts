@@ -53,6 +53,35 @@ describe("buildPreviewDetail（票 08：草稿组装不落盘的预览内容）"
     expect(unit.source).toBe("standard-upload");
   });
 
+  it("standard 草稿的副标题：用票 02/03 生成器拼枚举串，句数取当前句数", () => {
+    const { unit } = buildPreviewDetail(
+      makeDraft({ type: "standard" }),
+      [sentence(), sentence({ index: 1 })],
+      { unitId: "五上-U2", moduleKind: "Story time" }
+    );
+    expect(unit.subtitle).toBe("沪教版五上-Unit2-Story time-2句");
+  });
+
+  it("standard 草稿缺教材引用或注册表查不到：subtitle=null（界面回退 sourceLabel）", () => {
+    expect(
+      buildPreviewDetail(makeDraft({ type: "standard" }), [sentence()]).unit
+        .subtitle
+    ).toBeNull();
+    expect(
+      buildPreviewDetail(makeDraft({ type: "standard" }), [sentence()], {
+        unitId: "五上-U99",
+        moduleKind: "Story time",
+      }).unit.subtitle
+    ).toBeNull();
+  });
+
+  it("custom 草稿即使带教材引用也不带枚举串（保持 sourceLabel 语义，spec 决策 16）", () => {
+    const { unit } = buildPreviewDetail(makeDraft({ type: "custom" }), [
+      sentence(),
+    ], { unitId: "五上-U2", moduleKind: "Story time" });
+    expect(unit.subtitle).toBeNull();
+  });
+
   it("句子时间毫秒 → 0.1s 精度秒（与 finalize 换算同口径）", () => {
     const { unit } = buildPreviewDetail(makeDraft(), [
       sentence({ index: 0, startMs: 1234, endMs: 4567 }),

@@ -21,6 +21,60 @@ export const DEBOUNCE_MS = 800;
 
 export type SentenceSaveState = "saving" | "saved" | "needs-reconfirm" | "error";
 
+/**
+ * 防抖保存器（V0.3 票 10）：把「编辑发生」与「网络请求」拆开——
+ * - schedule() 立即回调 onEditStart（状态条马上显示「保存中…」，不等防抖）；
+ * - 只有延迟到期才回调 onFlush（发请求）；期间再次 schedule 重置计时。
+ * 纯控制器、可注入计时函数，单测用假定时器验证时序。
+ */
+export interface DebouncedSaveOptions {
+  delayMs?: number;
+  /** 编辑一发生就回调（同步）：置 saving，替换此前的 saved/needs-reconfirm */
+  onEditStart: (index: number) => void;
+  /** 防抖到期：发起保存请求 */
+  onFlush: (index: number) => void;
+  setTimer?: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>;
+  clearTimer?: (timer: ReturnType<typeof setTimeout>) => void;
+}
+
+export interface DebouncedSave {
+  schedule(index: number): void;
+  cancel(index: number): void;
+  cancelAll(): void;
+}
+
+export function createDebouncedSave(options: DebouncedSaveOptions): DebouncedSave {
+  const delay = options.delayMs ?? DEBOUNCE_MS;
+  const setTimer = options.setTimer ?? setTimeout;
+  const clearTimer = options.clearTimer ?? clearTimeout;
+  const timers = new Map<number, ReturnType<typeof setTimeout>>();
+  return {
+    schedule(index) {
+      options.onEditStart(index);
+      const pending = timers.get(index);
+      if (pending) clearTimer(pending);
+      timers.set(
+        index,
+        setTimer(() => {
+          timers.delete(index);
+          options.onFlush(index);
+        }, delay)
+      );
+    },
+    cancel(index) {
+      const pending = timers.get(index);
+      if (pending) {
+        clearTimer(pending);
+        timers.delete(index);
+      }
+    },
+    cancelAll() {
+      for (const pending of timers.values()) clearTimer(pending);
+      timers.clear();
+    },
+  };
+}
+
 /** V0.3 票 10：PUT 成功后的常驻落定态——服务端确认 → saved；
  * 打回 edited（该句有改动未被确认）→ needs-reconfirm。均不做定时消失。 */
 export function settleStateAfterSave(
@@ -52,8 +106,8 @@ export function useSentenceSave(options: SentenceSaveOptions) {
   const [saveStates, setSaveStates] = useState<Record<number, SentenceSaveState>>({});
   /** 每句最近一次服务端确认的比对键 */
   const serverKeys = useRef<Record<number, string>>({});
-  /** 每句的防抖保存定时器 */
-  const timers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+  /** 防抖保存器（编辑即置 saving，延迟到期才发请求） */
+  const debouncerRef = useRef<DebouncedSave | null>(null);
   // 函数型 options 每次渲染都是新引用，经 ref 转发保持 commitSave 等稳定
   const optionsRef = useRef(options);
   optionsRef.current = options;
@@ -76,14 +130,12 @@ export function useSentenceSave(options: SentenceSaveOptions) {
 
   /** 清掉全部未触发的防抖定时器（换血、整页确认前） */
   const clearTimers = useCallback(() => {
-    for (const t of Object.values(timers.current)) clearTimeout(t);
-    timers.current = {};
+    debouncerRef.current?.cancelAll();
   }, []);
 
   /** 清单句的未触发定时器（失焦立即保存、切句补存前） */
   const cancelTimer = useCallback((index: number) => {
-    clearTimeout(timers.current[index]);
-    delete timers.current[index];
+    debouncerRef.current?.cancel(index);
   }, []);
 
   /** 清空全部保存态提示（换血后现场重置） */
@@ -123,17 +175,22 @@ export function useSentenceSave(options: SentenceSaveOptions) {
     []
   );
 
-  /** 防抖自动保存（文本改动 / 起止微调共用） */
-  const scheduleSave = useCallback(
-    (index: number) => {
-      clearTimeout(timers.current[index]);
-      timers.current[index] = setTimeout(
-        () => void commitSave(index),
-        DEBOUNCE_MS
-      );
-    },
-    [commitSave]
-  );
+  // 防抖器只建一次；onFlush 经 ref 转发到最新的 commitSave（commitSave 本身稳定）
+  const flushRef = useRef(commitSave);
+  flushRef.current = commitSave;
+  if (debouncerRef.current === null) {
+    debouncerRef.current = createDebouncedSave({
+      // V0.3 票 10：编辑一发生就置 saving（不等 800ms 防抖），替换旧的 saved
+      onEditStart: (index) =>
+        setSaveStates((prev) => ({ ...prev, [index]: "saving" })),
+      onFlush: (index) => void flushRef.current(index),
+    });
+  }
+
+  /** 防抖自动保存（文本改动 / 起止微调共用）：立即置 saving，请求延迟发出 */
+  const scheduleSave = useCallback((index: number) => {
+    debouncerRef.current?.schedule(index);
+  }, []);
 
   /** 整页确认等绕过 commitSave 的路径：记录服务端基线并应用返回句子 */
   const noteServerSentence = useCallback((sentence: DraftSentenceView) => {

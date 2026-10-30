@@ -9,6 +9,7 @@ import { notFound, redirect } from "next/navigation";
 import { openDb, dbPath } from "@/lib/db";
 import { getAccountBySession, SESSION_COOKIE } from "@/lib/auth/sessions";
 import { getDraft, listDraftSentences } from "@/lib/drafts/repo";
+import { getDraftModule } from "@/lib/drafts/standard-drafts";
 import { buildPreviewDetail } from "@/lib/drafts/preview";
 import PracticeFlow from "@/app/(shell)/units/[id]/PracticeFlow";
 
@@ -45,7 +46,13 @@ export default async function DraftPreviewPage({
       notFound();
     }
     const sentences = listDraftSentences(db, draft.id);
-    ({ unit, unconfirmedCount } = buildPreviewDetail(draft, sentences));
+    // 标准草稿的教材引用（票 12）→ 枚举串副标题（票 02/03 生成器）
+    const moduleRef = getDraftModule(db, draft.id);
+    ({ unit, unconfirmedCount } = buildPreviewDetail(
+      draft,
+      sentences,
+      moduleRef
+    ));
   } finally {
     db.close();
   }

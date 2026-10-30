@@ -209,7 +209,7 @@ export default function DraftDetailPage() {
             <>
               {!gate.canPreview && (
                 <p role="status" className="mt-3 text-lg text-slate-400">
-                  还有 {gate.unconfirmedCount} 句未确认，确认完才能定稿。
+                  还有 {gate.unconfirmedCount} 句未确认，全部确认后可去预览，预览中定稿发布。
                 </p>
               )}
               <button

@@ -1,8 +1,8 @@
 "use client";
 
 // 标准内容制作的客户端表单与草稿列表（票 12 + 票 02）。
-// 表单不再收自由标题：版本固定显示「沪教版（上教新版）」，学期/单元/栏目逐级联动，
-// 选完栏目实时预览 主标题（课文名）+ 枚举串（生成器 buildEnumTitle，纯函数）。
+// 表单不再收自由标题：版本固定显示「沪教版（上教新版）」，学期/单元/模块逐级联动，
+// 选完模块实时预览 主标题（课文名）+ 枚举串（生成器 buildEnumTitle，纯函数）。
 // 提交只带 type + unitId + moduleKind + file；服务端查注册表后用课文名生成草稿标题，
 // 枚举串由草稿字段现算（见 src/lib/textbook/title.ts）。
 // 上传走 POST /api/uploads（服务端二次校验管理员与版本/书/单元/模块）；
@@ -21,7 +21,7 @@ export interface TextbookCatalogUnit {
   modules: Array<{ moduleKind: string; title: string; sentenceCount: number }>;
 }
 
-/** 注册表里的一册（学期下拉项）；units 是该册的单元/栏目清单 */
+/** 注册表里的一册（学期下拉项）；units 是该册的单元/模块清单 */
 export interface TextbookCatalogBook {
   id: string;
   shortName: string;
@@ -134,7 +134,7 @@ export default function StandardAdminClient({
     e.preventDefault();
     if (uploading) return;
     if (!bookId || !unitId || !moduleKind) {
-      setError("请选择学期、教材单元与栏目");
+      setError("请选择学期、教材单元与模块");
       return;
     }
     if (!file) {
@@ -329,7 +329,7 @@ export default function StandardAdminClient({
           </div>
           <div className="flex-1">
             <label htmlFor="std-module" className="block text-lg font-semibold">
-              栏目
+              模块
             </label>
             <select
               id="std-module"
@@ -447,7 +447,7 @@ export default function StandardAdminClient({
                         ) : (
                           <span className="text-base text-slate-400">
                             还有 {gate.unconfirmedCount}{" "}
-                            句未确认，确认完才能定稿
+                            句未确认，全部确认后可去预览，预览中定稿发布
                           </span>
                         )}
                       </>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { standardEnumSubtitle } from "./enum-subtitle";
-import type { ContentPack } from "./schema";
+import type { ContentPack } from "@/lib/content/schema";
 
 /** 带全归属字段的最小标准包（字段值取自真实注册表：五上-U2 Story time） */
 function stdPack(overrides: Partial<ContentPack> = {}): ContentPack {

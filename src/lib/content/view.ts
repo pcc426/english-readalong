@@ -1,6 +1,6 @@
 import { openDb, dbPath } from "@/lib/db";
 import { getContent, listContent, type ContentQuery } from "@/lib/content/loader";
-import { standardEnumSubtitle } from "@/lib/content/enum-subtitle";
+import { standardEnumSubtitle } from "@/lib/textbook/enum-subtitle";
 import { bestAttemptsBySentence, completionDistribution } from "@/lib/domain/stats";
 import { encouragementFor } from "@/lib/domain/encouragement";
 

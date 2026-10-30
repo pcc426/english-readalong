@@ -12,6 +12,7 @@ import {
 import { listContent } from "@/lib/content/loader";
 import { bestAttemptsBySentence, completionDistribution, latestRunStars } from "@/lib/domain/stats";
 import { encouragementFor } from "@/lib/domain/encouragement";
+import { mediaUrl } from "@/lib/media-url";
 
 /**
  * 内部 /media/ 地址 → 鉴权媒体路由（票 01/05）：上传类内容（自定义与标准上传）
@@ -20,7 +21,7 @@ import { encouragementFor } from "@/lib/domain/encouragement";
  */
 function authMediaUrl(source: string, ref: string): string {
   if (source === "custom-upload" || source === "standard-upload") {
-    return ref.replace(/^\/media\//, "/api/media/");
+    return mediaUrl(ref.replace(/^\/media\//, ""));
   }
   if (ref.startsWith("/media/")) {
     const name = ref.slice("/media/".length);

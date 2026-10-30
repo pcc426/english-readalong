@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
   compareStandardPacks,
-  findBookData,
   findTextbookModuleDetail,
   getTextbookModule,
   parseTextbook,
@@ -45,7 +44,7 @@ function validData(): ReturnType<typeof parseTextbook> {
 
 describe("教材原文产物（content/textbook/grade5a.json）", () => {
   it("从注册表加载并校验，覆盖五上全部 10 个单元", () => {
-    const grade5a = findBookData("grade5a");
+    const grade5a = registeredBooks.find((b) => b.book.id === "grade5a")?.data;
     expect(grade5a).toBeDefined();
     expect(grade5a!.schemaVersion).toBe(1);
     expect(grade5a!.units.map((u) => u.unitId)).toEqual(

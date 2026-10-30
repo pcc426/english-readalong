@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { GET } from "./route";
 import { setupDb, sessionCookieFor } from "@/lib/testing/auth-test-utils";
-import { findBookData } from "@/lib/textbook/textbook";
+import { registeredBooks } from "@/lib/textbook/textbook";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
@@ -35,7 +35,7 @@ describe("GET /api/textbook/module（12 号票教材原文预填）", () => {
   it("登录即可读：返回该模块的教材原句清单（ASR 只作对照）", async () => {
     setupEnv();
     // 数据源从注册表取（票 02 改装载方式）；断言行为与原来一致
-    const unit = findBookData("grade5a")!.units[0];
+    const unit = registeredBooks.find((b) => b.book.id === "grade5a")!.data.units[0];
     const mod = unit.modules[0];
     const res = await get(
       `?unitId=${encodeURIComponent(unit.unitId)}&moduleKind=${encodeURIComponent(mod.moduleKind)}`,

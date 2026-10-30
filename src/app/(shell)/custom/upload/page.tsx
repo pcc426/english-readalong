@@ -114,7 +114,7 @@ export default function CustomUploadPage() {
                 </div>
               </dl>
               <p className="mt-3 text-base text-slate-400">
-                上传后自动转写，约 1–3 分钟；完成后会出现在「制作中」，届时逐句校对即可定稿。
+                上传后自动转写，约 1–3 分钟；完成后会出现在「制作中」，届时按「校对 → 预览 → 定稿」流程完成。
               </p>
             </div>
           )}

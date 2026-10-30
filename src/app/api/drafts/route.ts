@@ -8,6 +8,7 @@ import { openDb, dbPath } from "@/lib/db";
 import { listDraftsByAccount, sentenceCountsByDraft, confirmedCountsByDraft } from "@/lib/drafts/repo";
 import { draftModuleMapByAccount } from "@/lib/drafts/standard-drafts";
 import { latestRunStars } from "@/lib/domain/stats";
+import { mediaUrl } from "@/lib/media-url";
 
 export const dynamic = "force-dynamic";
 
@@ -51,7 +52,7 @@ export async function GET(req: Request) {
           sentenceCount: counts.get(d.id) ?? 0,
           confirmedCount: confirmed.get(d.id) ?? 0,
           // 封面（票 01）：抽帧完成才有，转写期间列表对缺失容忍（null → 占位）
-          posterUrl: d.posterPath ? `/api/media/${d.posterPath}` : null,
+          posterUrl: d.posterPath ? mediaUrl(d.posterPath) : null,
           latestRunStars:
             d.status === "published"
               ? latestRunStars(db, d.id, { owner: auth.account.id })

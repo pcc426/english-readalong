@@ -4,8 +4,11 @@
 // 也不查练习记录——预览不携带任何成绩（bestScore/bestAt 恒 null）。
 // 句子毫秒 → 0.1s 精度秒沿用 finalize 的换算（全站唯一口径）。
 import type { ContentDetail } from "@/lib/content/view";
+import { standardEnumSubtitleForModule } from "@/lib/textbook/enum-subtitle";
+import { mediaUrl } from "@/lib/media-url";
 import { msToSeconds } from "./finalize";
 import type { Draft, DraftSentence } from "./repo";
+import type { DraftModuleRef } from "./standard-drafts";
 
 export interface PreviewData {
   /** 练习页同形状的内容详情：直接喂给 PracticeFlow */
@@ -20,7 +23,8 @@ export interface PreviewData {
 
 export function buildPreviewDetail(
   draft: Draft,
-  sentences: DraftSentence[]
+  sentences: DraftSentence[],
+  moduleRef: DraftModuleRef | null = null
 ): PreviewData {
   const unconfirmedCount = sentences.filter(
     (s) => s.proofread !== "confirmed"
@@ -30,12 +34,19 @@ export function buildPreviewDetail(
     title: draft.title,
     source: draft.type === "standard" ? "standard-upload" : "custom-upload",
     // 草稿视频引用与已发布内容一致（<accountId>/<file>），播放走鉴权媒体路由
-    video: `/api/media/${draft.videoPath}`,
+    video: mediaUrl(draft.videoPath),
     // 封面沿用草稿上传链路抽的帧（票 01）；没抽到为 null，与草稿 API 同一 URL 口径
-    poster: draft.posterPath ? `/api/media/${draft.posterPath}` : null,
-    // 枚举副标题（票 03）只对已发布内容包计算；预览暂不带（界面回退 sourceLabel），
-    // 草稿的 unit_id/module_kind 引用接线留给票 09 的预览-定稿链路
-    subtitle: null,
+    poster: draft.posterPath ? mediaUrl(draft.posterPath) : null,
+    // 枚举副标题（票 02/03 生成器）：标准草稿按草稿的教材单元/模块引用拼串；
+    // custom 草稿保持 sourceLabel 语义（subtitle=null，界面回退文案）
+    subtitle:
+      draft.type === "standard" && moduleRef
+        ? standardEnumSubtitleForModule(
+            moduleRef.unitId,
+            moduleRef.moduleKind,
+            sentences.length
+          )
+        : null,
     sentences: sentences.map((s) => ({
       index: s.index,
       text: s.text,
