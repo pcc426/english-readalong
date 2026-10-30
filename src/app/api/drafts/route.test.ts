@@ -9,6 +9,7 @@ import {
   sessionCookieFor,
 } from "@/lib/testing/auth-test-utils";
 import { createDraft, setDraftVideo, setDraftPoster, completeTranscription } from "@/lib/drafts/repo";
+import { markDraftPublished } from "@/lib/drafts/finalize";
 import { createStandardDraft } from "@/lib/drafts/standard-drafts";
 
 const cleanups: Array<() => void> = [];
@@ -81,6 +82,78 @@ describe("GET /api/drafts · posterUrl（票 01）", () => {
     );
     const noItem = body.drafts.find((d: { id: string }) => d.id !== withPoster);
     expect(noItem.posterUrl).toBeNull();
+  });
+});
+
+describe("GET /api/drafts · latestRunStars（票 06）", () => {
+  /** published 草稿：句子 + 定稿状态，供星数口径测试 */
+  function seedPublished(
+    db: Db,
+    accountId: string,
+    title: string,
+    sentenceCount = 2
+  ): string {
+    const id = seedDraft(db, accountId, title, sentenceCount);
+    markDraftPublished(db, id);
+    return id;
+  }
+
+  function attempt(
+    db: Db,
+    input: {
+      unitId: string;
+      sentenceIndex: number;
+      score: number;
+      stars: number;
+      owner: string;
+      runId: string | null;
+    }
+  ): void {
+    db.prepare(
+      "INSERT INTO practice_attempts (unit_id, sentence_index, score, stars, owner, run_id) VALUES (?, ?, ?, ?, ?, ?)"
+    ).run(input.unitId, input.sentenceIndex, input.score, input.stars, input.owner, input.runId);
+  }
+
+  it("published 草稿带 latestRunStars＝最近一次 run 的星数之和（同 run 同句取最高）", async () => {
+    const db = setupEnv();
+    const mine = accountIdOf("parent@test.com");
+    const id = seedPublished(db, mine, "练过的");
+
+    // 上一轮 run：两句 3+2 星
+    attempt(db, { unitId: id, sentenceIndex: 0, score: 95, stars: 3, owner: mine, runId: "run-a" });
+    attempt(db, { unitId: id, sentenceIndex: 1, score: 85, stars: 2, owner: mine, runId: "run-a" });
+    // 更近的一轮 run：只练了第一句（重读一次取最高 2），总和＝2
+    attempt(db, { unitId: id, sentenceIndex: 0, score: 60, stars: 1, owner: mine, runId: "run-b" });
+    attempt(db, { unitId: id, sentenceIndex: 0, score: 80, stars: 2, owner: mine, runId: "run-b" });
+
+    const res = await get(sessionCookieFor("parent@test.com"));
+    const body = await res.json();
+    const item = body.drafts.find((d: { id: string }) => d.id === id);
+    expect(item.latestRunStars).toBe(2);
+  });
+
+  it("没练过的 published 草稿 latestRunStars 为 null；非 published 一律 null", async () => {
+    const db = setupEnv();
+    const mine = accountIdOf("parent@test.com");
+    const neverPracticed = seedPublished(db, mine, "没练过");
+    const proofreading = seedDraft(db, mine, "校对中", 1);
+
+    const res = await get(sessionCookieFor("parent@test.com"));
+    const body = await res.json();
+    expect(body.drafts.find((d: { id: string }) => d.id === neverPracticed).latestRunStars).toBeNull();
+    expect(body.drafts.find((d: { id: string }) => d.id === proofreading).latestRunStars).toBeNull();
+  });
+
+  it("星数按账号隔离：别人的练习记录不算我的", async () => {
+    const db = setupEnv();
+    const mine = accountIdOf("parent@test.com");
+    const other = accountIdOf("other@test.com");
+    const id = seedPublished(db, mine, "只有别人练过");
+    attempt(db, { unitId: id, sentenceIndex: 0, score: 95, stars: 3, owner: other, runId: "run-x" });
+
+    const res = await get(sessionCookieFor("parent@test.com"));
+    const body = await res.json();
+    expect(body.drafts.find((d: { id: string }) => d.id === id).latestRunStars).toBeNull();
   });
 });
 
