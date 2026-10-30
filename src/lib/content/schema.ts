@@ -19,6 +19,8 @@ export const contentPackSchema = z
     title: z.string().min(1),
     source: z.string().min(1),
     video: z.string().min(1),
+    /** 竖版封面（9:16 JPEG）相对引用：上传类为 <accountId>/<file>.jpg，随代码包为文件名；缺省 = 无封面 */
+    poster: z.string().min(1).optional(),
     /** 内容类型：缺省视为 standard（既有内容包无需修改即合法） */
     type: z.enum(["standard", "custom"]).optional(),
     /** 归属账号 id：standard 必须为空；custom 必须为非空账号 id */
