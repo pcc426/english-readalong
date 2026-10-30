@@ -426,6 +426,44 @@ describe("POST /api/uploads · 标准内容（12 号票）", () => {
     ]);
   });
 
+  it("草稿标题由服务端按教材生成＝课文名，客户端传的 title 被忽略（票 02）", async () => {
+    const db = setupEnv();
+    setDurationProbe(async () => 30_000);
+    setTranscriptionService(new FakeTranscriptionService());
+
+    // postWithFields 会带 title="标准内容制作"——服务端必须无视它
+    const res = await postWithFields(stdFields, mp4File());
+    expect(res.status).toBe(201);
+    const { draft } = await res.json();
+    expect(draft.title).toBe("The dragon dance");
+    const row = db
+      .prepare("SELECT title FROM content_drafts WHERE id = ?")
+      .get(draft.id) as { title: string };
+    expect(row.title).toBe("The dragon dance");
+  });
+
+  it("提交不带 title 字段：标准草照常创建，标题仍是课文名（票 02）", async () => {
+    setupEnv();
+    setDurationProbe(async () => 30_000);
+    setTranscriptionService(new FakeTranscriptionService());
+
+    const form = new FormData();
+    form.set("type", "standard");
+    form.set("unitId", "五上-U2");
+    form.set("moduleKind", "Story time");
+    form.set("file", mp4File());
+    const res = await POST(
+      new Request("http://x/api/uploads", {
+        method: "POST",
+        headers: { cookie: sessionCookieFor("admin@test.com", true) },
+        body: form,
+      })
+    );
+    expect(res.status).toBe(201);
+    const { draft } = await res.json();
+    expect(draft.title).toBe("The dragon dance");
+  });
+
   it("未知 type 值：400 INVALID_TYPE", async () => {
     setupEnv();
     const res = await postWithFields({ type: "premium" }, mp4File());

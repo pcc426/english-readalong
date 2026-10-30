@@ -1,15 +1,18 @@
 // 上传接口（票 05）：multipart（title + file）→ 服务端校验 → 落盘 → 建草稿 → 转写首轮。
 // 校验全在服务端（spec 用户故事 30）：格式按扩展名 + content-type 双查，
 // 大小按解析出的 File.size，时长按可注入的 ffprobe（见 lib/drafts/probe）。
-// 标准内容（票 12）：type=standard + unitId + moduleKind 三个额外表单字段，
-// 仅管理员可发起（403），unit/module 必须在教材数据中存在（400 UNKNOWN_MODULE）。
+// 标准内容（票 12 + 票 02）：type=standard + unitId + moduleKind 三个额外表单字段，
+// 仅管理员可发起（403）；版本/书/单元/模块须全部在教材注册表内（unitId 前缀即册简称，
+// 册/单元/模块逐层在注册表数据里命中，400 UNKNOWN_MODULE）；不再收 title——
+// 草稿标题由服务端按教材生成＝课文名（module.title），枚举串由标题生成器按草稿字段现算。
+// 自定义内容标题仍是自由文本（必填）。
 import { NextResponse } from "next/server";
 import { requireAccount } from "@/lib/auth/guard";
 import { openDb, dbPath } from "@/lib/db";
 import { errorResponse } from "@/lib/http";
 import { createDraftWithTranscription } from "@/lib/drafts/service";
 import { createStandardDraftWithTranscription } from "@/lib/drafts/standard-drafts";
-import { getTextbookModule, type TextbookModuleRef } from "@/lib/textbook/textbook";
+import { findTextbookModuleDetail, type TextbookModuleDetail } from "@/lib/textbook/textbook";
 import {
   checkUploadFormat,
   deleteUploadVideo,
@@ -31,7 +34,7 @@ function parseType(raw: FormDataEntryValue | null): "custom" | "standard" | null
   return null;
 }
 
-/** 标准草稿的教材引用字段：缺失/非字符串一律空串（后续查教材数据统一报 UNKNOWN_MODULE） */
+/** 标准草稿的教材引用字段：缺失/非字符串一律空串（后续查注册表统一报 UNKNOWN_MODULE） */
 function stringField(form: FormData, key: string): string {
   const raw = form.get(key);
   return typeof raw === "string" ? raw.trim() : "";
@@ -48,28 +51,38 @@ export async function POST(req: Request) {
     return errorResponse(400, "INVALID_FORM", "上传内容不是有效的表单数据");
   }
 
-  const rawTitle = form.get("title");
-  const title = typeof rawTitle === "string" ? rawTitle.trim() : "";
-  if (!title) {
-    return errorResponse(400, "INVALID_TITLE", "请填写内容标题");
-  }
-
   const type = parseType(form.get("type"));
   if (!type) {
     return errorResponse(400, "INVALID_TYPE", "内容类型不认识，请刷新后重试");
   }
 
-  // 标准内容：仅管理员可发起；unit/module 必须在教材数据中存在（运行时不解析 PDF，
-  // 句子清单来自构建期一次性提取的 content/textbook 数据）
-  let moduleRef: TextbookModuleRef | null = null;
+  // 标题：自定义内容仍是家长自由填写；标准内容不收 title，
+  // 服务端按 unitId/moduleKind 查教材后用课文名生成（票 02）
+  let title = "";
+  if (type === "custom") {
+    const rawTitle = form.get("title");
+    title = typeof rawTitle === "string" ? rawTitle.trim() : "";
+    if (!title) {
+      return errorResponse(400, "INVALID_TITLE", "请填写内容标题");
+    }
+  }
+
+  // 标准内容：仅管理员可发起；版本/书/单元/模块均在教材注册表内（运行时不解析 PDF，
+  // 句子清单来自构建期一次性提取的 content/textbook 数据，书目录见 registry.ts）
+  let moduleDetail: TextbookModuleDetail | null = null;
   if (type === "standard") {
     if (!auth.account.isAdmin) {
       return errorResponse(403, "FORBIDDEN", "仅管理员可制作标准内容");
     }
-    moduleRef = getTextbookModule(stringField(form, "unitId"), stringField(form, "moduleKind")) ?? null;
-    if (!moduleRef) {
+    moduleDetail =
+      findTextbookModuleDetail(
+        stringField(form, "unitId"),
+        stringField(form, "moduleKind"),
+      ) ?? null;
+    if (!moduleDetail) {
       return errorResponse(400, "UNKNOWN_MODULE", "教材单元或模块不存在，请重新选择");
     }
+    title = moduleDetail.lessonTitle;
   }
 
   const file = form.get("file");
@@ -98,13 +111,13 @@ export async function POST(req: Request) {
     }
 
     let draft;
-    if (type === "standard" && moduleRef) {
+    if (type === "standard" && moduleDetail) {
       draft = await createStandardDraftWithTranscription(db, {
         accountId: auth.account.id,
         title,
         videoPath,
-        unitId: moduleRef.unitId,
-        moduleKind: moduleRef.moduleKind,
+        unitId: moduleDetail.unitId,
+        moduleKind: moduleDetail.moduleKind,
       });
     } else {
       draft = await createDraftWithTranscription(db, {
@@ -119,14 +132,14 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         draft:
-          type === "standard" && moduleRef
+          type === "standard" && moduleDetail
             ? {
                 id: draft.id,
                 title: draft.title,
                 status: draft.status,
                 type: draft.type,
-                unitId: moduleRef.unitId,
-                moduleKind: moduleRef.moduleKind,
+                unitId: moduleDetail.unitId,
+                moduleKind: moduleDetail.moduleKind,
               }
             : { id: draft.id, title: draft.title, status: draft.status },
       },

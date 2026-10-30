@@ -1,14 +1,16 @@
 import { z } from "zod";
+import { books } from "./registry";
 
 /**
  * 教材原文（标准内容的权威句子清单）的数据契约。
  *
  * 产物由一次性脚本 scripts/extract-textbook.py 从教材 PDF 离线提取，
- * 存放在 content/textbook/grade5a.json，运行时不解析 PDF。
+ * 存放在 content/textbook/ 下（书目见 registry.ts 注册表），运行时不解析 PDF。
  *
  * Slug 规则：
- * - unitId：`五上-U<序号>`，序号为教材单元号（1..10），不补零，如「五上-U2」。
- *   前缀「五上」= 五年级上册；后续册别（五下等）用新前缀扩展，互不冲突。
+ * - unitId：`<册简称>-U<序号>`，序号为教材单元号（1..10），不补零，如「五上-U2」。
+ *   册简称来自注册表（registry.ts，如「五上」= 五年级上册）；unitId 正则按
+ *   注册表动态构建，注册新书后自动放行新前缀。
  * - moduleKind：教材印刷的栏目原名（"Talking time" / "Story time" / "Reading time" /
  *   "Chant time" / "Rhyme time" / "Song time"），不做归一改写。
  *   同一 unitId 下 moduleKind 唯一。
@@ -16,7 +18,7 @@ import { z } from "zod";
  *   sentences 下标，供人工校对定位；notes 是模块级的提取备注。
  */
 
-/** 教材印刷的栏目原名。 */
+/** 教材印刷的栏目原名。教材新增栏目时先补这里，枚举外值构建期即报错。 */
 export const MODULE_KINDS = [
   "Talking time",
   "Story time",
@@ -26,12 +28,20 @@ export const MODULE_KINDS = [
   "Song time",
 ] as const;
 
-export const moduleKindSchema = z.enum(MODULE_KINDS);
+export const moduleKindSchema = z.enum(MODULE_KINDS, {
+  error: `不是教材印刷栏目原名：必须是 MODULE_KINDS 六值之一（${MODULE_KINDS.join(" / ")}）；教材出现新栏目时请先补充 MODULE_KINDS 枚举`,
+});
 
-/** 单元 slug：`五上-U<序号>`（见文件头注释）。 */
+/** 单元 slug 前缀合法值来自注册表的册简称（见文件头注释）。 */
+const unitPrefixPattern = books.map((b) => b.shortName).join("|");
+
+/** 单元 slug：`<册简称>-U<序号>`，如「五上-U2」，序号 1..10。 */
 export const unitIdSchema = z
   .string()
-  .regex(/^五上-U(10|[1-9])$/, "unitId 必须是「五上-U<序号>」形态（如 五上-U2），序号 1..10");
+  .regex(
+    new RegExp(`^(${unitPrefixPattern})-U(10|[1-9])$`),
+    `unitId 必须是「<册简称>-U<序号>」形态（如 五上-U2），序号 1..10，册简称须是教材注册表里的书（当前：${books.map((b) => b.shortName).join("、")}）`,
+  );
 
 export const textbookModuleSchema = z
   .object({
