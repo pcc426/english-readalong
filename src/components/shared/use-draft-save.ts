@@ -1,15 +1,16 @@
 "use client";
 
-// 校对/切点两页共享的「单句保存」hook（V0.2 整改）。
-// 两页的 commitSave 骨架完全同构：saving/saved/error 三态 + 已保存提示
-// 定时清除 + 「没变不发请求」（服务端基线比对）+ 防抖自动保存；
-// 差异只在比对键（文本 vs 起止毫秒）与请求体，经 keyOf/bodyFor 注入。
-// 行为约束（与抽取前逐条对应）：
+// 校对页的「单句保存」hook（V0.2 整改抽取；V0.3 票 10 起唯一使用方是校对页）。
+// commitSave 骨架：saving/saved/error + needs-reconfirm 四态 + 「没变不发请求」
+// （服务端基线比对）+ 防抖自动保存；比对键与请求体经 keyOf/bodyFor 注入。
+// 行为约束（与抽取前逐条对应，V0.3 票 10 调整处注明）：
 // - 没变不发请求，但要把该句的残留提示清掉；
 // - 带 overrides（确认/采用教材原文）时跳过比对直接发；
 // - 成功后以服务端返回的句子为准更新基线与页面状态；
-// - saved 提示 SAVED_HINT_MS 后清除（期间若变回 saving/saved 之外的
-//   状态则不动）；失败置 error，等下一次操作覆盖。
+// - saved/needs-reconfirm 均**常驻**（V0.3 票 10 删除 SAVED_HINT_MS 定时消失），
+//   下一次编辑开始时被 saving 替换；失败置 error，等下一次操作覆盖。
+// - PUT 成功后的落定态由 settleStateAfterSave 决定：服务端确认 → saved；
+//   打回 edited（未确认）→ needs-reconfirm（调用方据此渲染「句子已修改，请重新确认」）。
 import { useCallback, useRef, useState } from "react";
 import type {
   DraftSentenceView,
@@ -17,9 +18,16 @@ import type {
 } from "@/components/proofread/types";
 
 export const DEBOUNCE_MS = 800;
-export const SAVED_HINT_MS = 1500;
 
-export type SentenceSaveState = "saving" | "saved" | "error";
+export type SentenceSaveState = "saving" | "saved" | "needs-reconfirm" | "error";
+
+/** V0.3 票 10：PUT 成功后的常驻落定态——服务端确认 → saved；
+ * 打回 edited（该句有改动未被确认）→ needs-reconfirm。均不做定时消失。 */
+export function settleStateAfterSave(
+  sentence: DraftSentenceView
+): Exclude<SentenceSaveState, "saving" | "error"> {
+  return sentence.proofread === "confirmed" ? "saved" : "needs-reconfirm";
+}
 
 export interface SentenceSaveOverrides {
   /** 跳过「没变不发请求」（确认/采用等带指定内容的保存） */
@@ -103,15 +111,11 @@ export function useSentenceSave(options: SentenceSaveOptions) {
         const body = (await res.json()) as SentenceUpdateResponse;
         serverKeys.current[index] = keyOf(body.sentence);
         applySentence(body.sentence);
-        setSaveStates((prev) => ({ ...prev, [index]: "saved" }));
-        setTimeout(() => {
-          setSaveStates((prev) => {
-            if (prev[index] !== "saved") return prev;
-            const next = { ...prev };
-            delete next[index];
-            return next;
-          });
-        }, SAVED_HINT_MS);
+        // V0.3 票 10：saved / needs-reconfirm 都常驻，不再定时清除
+        setSaveStates((prev) => ({
+          ...prev,
+          [index]: settleStateAfterSave(body.sentence),
+        }));
       } catch {
         setSaveStates((prev) => ({ ...prev, [index]: "error" }));
       }

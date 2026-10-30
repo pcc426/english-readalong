@@ -10,7 +10,7 @@ import {
   type ContentOverview,
 } from "@/lib/content/view";
 import { listContent } from "@/lib/content/loader";
-import { bestAttemptsBySentence, completionDistribution } from "@/lib/domain/stats";
+import { bestAttemptsBySentence, completionDistribution, latestRunStars } from "@/lib/domain/stats";
 import { encouragementFor } from "@/lib/domain/encouragement";
 
 /**
@@ -81,6 +81,8 @@ export function ownedContentOverview(
       const dist = completionDistribution(db, pack, { owner: accountId });
       u.percentages = dist.percentages;
       u.encouragement = encouragementFor(dist);
+      // 最近一次练习的总星数（票 04）：与完成度同批按账号覆盖全量视图的 null 占位
+      u.latestRunStars = latestRunStars(db, pack.id, { owner: accountId });
     }
   } finally {
     db.close();

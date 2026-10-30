@@ -25,6 +25,9 @@ export function openDb(dbPath: string): Database.Database {
       stars INTEGER NOT NULL,
       -- 归属字段：MVP 单孩子恒为 NULL，公网化时启用（ADR-0002 的预留）
       owner TEXT,
+      -- 练习 run 归属（票 04）：一次 PracticeFlow 从 begin 到结束/中途退出为一轮，
+      -- 轮内所有 attempt 共享一个 runId；老数据为 NULL（统计口径见 stats.latestRunStars）
+      run_id TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_attempts_unit_sentence
@@ -93,6 +96,8 @@ export function openDb(dbPath: string): Database.Database {
   addColumnIfMissing(db, "content_drafts", "poster_path", "poster_path TEXT");
   // V0.1 早期建出的库可能没有 owner 列（多家庭归属，票 10）
   addColumnIfMissing(db, "practice_attempts", "owner", "owner TEXT");
+  // V0.2 建出的库没有 run_id 列（练习 run 归属，票 04）
+  addColumnIfMissing(db, "practice_attempts", "run_id", "run_id TEXT");
   return db;
 }
 

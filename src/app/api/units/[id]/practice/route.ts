@@ -48,6 +48,11 @@ export async function POST(
   }
   const audio = form.get("audio");
   const sentenceIndex = Number(form.get("sentenceIndex"));
+  // 练习 run 归属（票 04）：PracticeFlow 每轮生成一个 runId；缺省/空串按 NULL 处理，
+  // 旧客户端与既有测试不填不炸。非字符串（FormData 理论上可能塞 File）同样当缺省。
+  const runIdRaw = form.get("runId");
+  const runId =
+    typeof runIdRaw === "string" && runIdRaw.trim() !== "" ? runIdRaw : null;
   if (!(audio instanceof Blob) || audio.size < MIN_AUDIO_BYTES) {
     return errorResponse(400, "EMPTY_AUDIO", "没听清，再读一次吧");
   }
@@ -107,8 +112,8 @@ export async function POST(
     )?.score ?? null;
     const isNewBest = prev === null || score > prev;
     db.prepare(
-      "INSERT INTO practice_attempts (unit_id, sentence_index, score, stars, owner) VALUES (?, ?, ?, ?, ?)"
-    ).run(id, sentenceIndex, score, stars, auth.account.id);
+      "INSERT INTO practice_attempts (unit_id, sentence_index, score, stars, owner, run_id) VALUES (?, ?, ?, ?, ?, ?)"
+    ).run(id, sentenceIndex, score, stars, auth.account.id, runId);
     return NextResponse.json({
       score,
       stars,

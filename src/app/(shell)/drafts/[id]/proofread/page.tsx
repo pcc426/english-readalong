@@ -12,7 +12,6 @@ import { useEffect, useRef, useState } from "react";
 import { adjustBoundsMs, CALIBRATE_STEP_MS, MIN_CLIP_MS } from "@/lib/domain/calibrate";
 import { formatMs } from "@/components/shared/draft-ui";
 import {
-  SAVED_HINT_MS,
   useSentenceSave,
 } from "@/components/shared/use-draft-save";
 import {
@@ -30,6 +29,17 @@ const ACTION_BTNS =
   "rounded-2xl bg-white px-4 py-2 text-base font-semibold text-slate-600 ring-1 ring-slate-200 active:bg-slate-50 disabled:opacity-40";
 const ADJUST_BTNS =
   "rounded-xl bg-slate-100 py-3 text-lg font-bold active:bg-slate-200 disabled:opacity-40";
+
+// V0.3 票 10：常驻状态条四态 + 初始空闲的配色（只切类名，容器始终渲染不塌）。
+// saving 用 animate-pulse 给忙碌感，不引入 spinner 库；idle 为淡色占位。
+type StatusTone = "error" | "saving" | "warn" | "success" | "idle";
+const STATUS_TONE: Record<StatusTone, string> = {
+  error: "bg-red-50 text-red-600",
+  saving: "bg-slate-100 text-slate-600 animate-pulse",
+  warn: "bg-amber-50 text-amber-700",
+  success: "bg-emerald-50 text-emerald-700",
+  idle: "bg-transparent text-slate-400",
+};
 
 export default function ProofreadPage() {
   const params = useParams<{ id: string }>();
@@ -155,8 +165,8 @@ export default function ProofreadPage() {
       if (!res.ok) throw new Error(String(res.status));
       setDraft((prev) => (prev ? { ...prev, title: next } : prev));
       setTitleValue(next);
+      // V0.3 票 10：saved 常驻，不再 1.5s 定时清除
       setTitleSave("saved");
-      setTimeout(() => setTitleSave(null), SAVED_HINT_MS);
     } catch {
       setTitleSave("error");
     }
@@ -459,32 +469,44 @@ export default function ProofreadPage() {
       ? textbookSentences[current.index]
       : null;
 
-  // V0.2.4 票 01：提示收敛为一个 banner，只显示最新的一条（互斥派生）；
-  // V0.2.4 票 03：标题保存态并入同一条 banner
-  const banner: { tone: "error" | "info" | "success"; text: string } | null =
-    (() => {
-      if (actionError) return { tone: "error" as const, text: actionError };
-      if (titleSave === "error")
-        return { tone: "error" as const, text: "标题保存失败" };
-      if (titleSave === "saving")
-        return { tone: "info" as const, text: "标题保存中…" };
-      if (titleSave === "saved")
-        return { tone: "success" as const, text: "标题已保存 ✓" };
-      if (currentSaveState === "error")
-        return { tone: "error" as const, text: "保存失败，请重试" };
-      if (currentSaveState === "saving")
-        return { tone: "info" as const, text: "保存中…" };
-      if (currentSaveState === "saved")
-        return { tone: "success" as const, text: "已保存 ✓" };
-      if (draft?.type === "standard" && textbookFailed)
-        return {
-          tone: "error" as const,
+  // V0.3 票 10：常驻状态条（互斥单条）。优先级：结构操作错误 > 保存失败 >
+  // 保存中 > 待重新确认（服务端把已确认句打回 edited）> 已保存 > 初始空闲。
+  // 标题保存沿用同一状态集合、同一文案；saved/needs-reconfirm 均常驻，
+  // 下一次编辑开始时被 saving 替换。调用方只渲染、不计时。
+  const status: { tone: StatusTone; text: string } = (() => {
+    if (actionError) return { tone: "error" as const, text: actionError };
+    if (titleSave === "error" || currentSaveState === "error")
+      return { tone: "error" as const, text: "保存失败，请重试" };
+    if (titleSave === "saving" || currentSaveState === "saving")
+      return { tone: "saving" as const, text: "保存中…" };
+    if (currentSaveState === "needs-reconfirm")
+      return { tone: "warn" as const, text: "句子已修改，请重新确认" };
+    if (currentSaveState === "saved" || titleSave === "saved")
+      return { tone: "success" as const, text: "所有修改已保存" };
+    // 初始空闲（页面刚加载、无任何修改）：淡色占位，高度不塌
+    return { tone: "idle" as const, text: "所有修改已保存" };
+  })();
+
+  // V0.3 票 10：教材原文提示是另一种常驻信息，不混进保存状态条——
+  // 保持原样条件渲染在状态条下方，不参与保存态切换与跳动问题。
+  const textbookHint:
+    | { role: "alert" | "status"; className: string; text: string }
+    | null =
+    draft?.type === "standard" && textbookFailed
+      ? {
+          role: "alert",
+          className: "bg-red-50 text-red-600",
           text: "教材原文加载失败，可直接手工校对",
-        };
-      if (draft?.type === "standard" && textbookSentences !== null && !textbookAligned)
-        return { tone: "info" as const, text: TEXTBOOK_MISALIGNED_HINT };
-      return null;
-    })();
+        }
+      : draft?.type === "standard" &&
+          textbookSentences !== null &&
+          !textbookAligned
+        ? {
+            role: "status",
+            className: "bg-amber-50 text-amber-700",
+            text: TEXTBOOK_MISALIGNED_HINT,
+          }
+        : null;
 
   if (notFound || failed || draft === null) {
     return (
@@ -584,18 +606,21 @@ export default function ProofreadPage() {
           </span>
         </div>
 
-        {banner && (
+        {/* V0.3 票 10：固定高度常驻状态条——min-h 与单行文案等高（text-sm
+            行高 1.25rem + py-1.5 = 2rem），始终渲染只切文案/配色，右栏不跳动 */}
+        <p
+          role={status.tone === "error" ? "alert" : "status"}
+          className={`flex min-h-8 items-center rounded-xl px-3 py-1.5 text-sm ${STATUS_TONE[status.tone]}`}
+        >
+          {status.text}
+        </p>
+
+        {textbookHint && (
           <p
-            role={banner.tone === "error" ? "alert" : "status"}
-            className={`rounded-xl px-3 py-1.5 text-sm ${
-              banner.tone === "error"
-                ? "bg-red-50 text-red-600"
-                : banner.tone === "success"
-                  ? "bg-emerald-50 text-emerald-700"
-                  : "bg-amber-50 text-amber-700"
-            }`}
+            role={textbookHint.role}
+            className={`rounded-xl px-3 py-1.5 text-sm ${textbookHint.className}`}
           >
-            {banner.text}
+            {textbookHint.text}
           </p>
         )}
 
