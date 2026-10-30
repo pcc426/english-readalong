@@ -2,33 +2,23 @@
 
 // 草稿详情（票 05）：只读展示转写句子与起止时间 + 鉴权视频播放。
 // 校对入口：文本校对（票 07）+ 切点校对（票 08）。
-// V0.2 整改：家长定稿入口——proofreading 状态可在此「定稿发布」
-// （POST /api/drafts/[id]/publish，票 09 端点），422 的逐句问题就地展示。
+// V0.3 票 09 / ADR 0005：定稿发布只从预览页发起——proofreading 态此页入口
+// 改为「去预览」（未全部确认时禁用，与校对页同一把尺 previewGate）。
 // 视图类型复用 components/proofread/types（与 GET /api/drafts/[id] 响应一致）。
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import {
   STATUS_BADGES,
   formatMs,
+  previewGate,
 } from "@/components/shared/draft-ui";
 import type { DraftDetailView } from "@/components/proofread/types";
-
-/** 定稿 422 响应里的逐句问题（与 POST /api/drafts/[id]/publish 响应对应） */
-interface PublishIssue {
-  index: number | null;
-  problem: string;
-}
 
 export default function DraftDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params?.id;
   const [draft, setDraft] = useState<DraftDetailView | null>(null);
   const [failed, setFailed] = useState(false);
-  // V0.2 整改：定稿发布的进行中/结果反馈
-  const [publishing, setPublishing] = useState(false);
-  const [publishError, setPublishError] = useState<string | null>(null);
-  const [publishIssues, setPublishIssues] = useState<PublishIssue[] | null>(null);
-  const [justPublished, setJustPublished] = useState(false);
   // V0.2 整改：转写失败重试的进行中/结果反馈
   const [retrying, setRetrying] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
@@ -112,35 +102,6 @@ export default function DraftDetailPage() {
       setUnpublishError("网络开小差了，请重试");
     } finally {
       setUnpublishing(false);
-    }
-  }
-
-  /** V0.2 整改：定稿发布（票 09 端点）。422 时逐句问题就地展示，
-   * 成功后状态就地置 published 并提示可去练习。 */
-  async function handlePublish() {
-    if (!id || publishing) return;
-    if (!window.confirm(`确定把「${draft?.title ?? ""}」定稿发布吗？定稿后就可以开始跟读了。`)) {
-      return;
-    }
-    setPublishing(true);
-    setPublishError(null);
-    setPublishIssues(null);
-    try {
-      const res = await fetch(`/api/drafts/${id}/publish`, { method: "POST" });
-      if (res.ok) {
-        setDraft((prev) => (prev ? { ...prev, status: "published" } : prev));
-        setJustPublished(true);
-        return;
-      }
-      const body = (await res.json().catch(() => null)) as {
-        error?: { message?: string; issues?: PublishIssue[] };
-      } | null;
-      setPublishError(body?.error?.message ?? "定稿失败，请重试");
-      setPublishIssues(body?.error?.issues ?? null);
-    } catch {
-      setPublishError("网络开小差了，请重试");
-    } finally {
-      setPublishing(false);
     }
   }
 
@@ -236,68 +197,39 @@ export default function DraftDetailPage() {
         </a>
       )}
 
-      {/* V0.2 整改：家长定稿入口（票 09 端点；422 逐句问题就地展示）。
-       * V0.2.1 发布门槛：全部句子确认后才亮起（服务端 422 双保险）。 */}
-      {draft.status === "proofreading" && (
-        <>
-          {publishError && (
-            <div
-              role="alert"
-              className="mt-4 rounded-2xl bg-red-50 px-5 py-4 text-lg text-red-600"
-            >
-              <p>{publishError}</p>
-              {publishIssues && publishIssues.length > 0 && (
-                <ul className="mt-2 list-disc space-y-1 pl-6">
-                  {publishIssues.map((issue, i) => (
-                    <li key={i}>
-                      {issue.index === null ? issue.problem : `第 ${issue.index + 1} 句：${issue.problem}`}
-                    </li>
-                  ))}
-                </ul>
+      {/* V0.3 票 09 / ADR 0005：定稿发布只从预览页发起，此入口改为「去预览」。
+       * 未全部确认时禁用（与校对页同一把尺 previewGate），由提示文案说明。 */}
+      {draft.status === "proofreading" &&
+        (() => {
+          const gate = previewGate(
+            draft.sentences.length,
+            draft.sentences.filter((s) => s.proofread === "confirmed").length
+          );
+          return (
+            <>
+              {!gate.canPreview && (
+                <p role="status" className="mt-3 text-lg text-slate-400">
+                  还有 {gate.unconfirmedCount} 句未确认，确认完才能定稿。
+                </p>
               )}
-            </div>
-          )}
-          {(() => {
-            const unconfirmed = draft.sentences.filter(
-              (s) => s.proofread !== "confirmed"
-            ).length;
-            const allConfirmed = draft.sentences.length > 0 && unconfirmed === 0;
-            return (
-              <>
-                {!allConfirmed && (
-                  <p role="status" className="mt-3 text-lg text-slate-400">
-                    还有 {unconfirmed} 句未确认，确认完才能定稿。
-                  </p>
-                )}
-                <button
-                  type="button"
-                  onClick={() => void handlePublish()}
-                  disabled={publishing || !allConfirmed}
-                  className="mt-3 w-full rounded-2xl bg-white py-4 text-center text-xl font-bold text-emerald-700 shadow-md ring-1 ring-emerald-200 active:bg-emerald-50 disabled:opacity-40"
-                >
-                  {publishing ? "定稿中…" : "定稿发布"}
-                </button>
-              </>
-            );
-          })()}
-        </>
-      )}
-      {draft.status === "published" && justPublished && (
-        <>
-          <p
-            role="status"
-            className="mt-6 rounded-2xl bg-emerald-50 px-5 py-4 text-lg text-emerald-700"
-          >
-            已定稿发布！现在可以开始跟读了。
-          </p>
-          <a
-            href={`/units/${draft.id}`}
-            className="mt-3 block rounded-2xl bg-emerald-500 py-4 text-center text-xl font-bold text-white shadow-md active:bg-emerald-600"
-          >
-            去练习 →
-          </a>
-        </>
-      )}
+              <button
+                type="button"
+                onClick={() => {
+                  window.location.href = `/drafts/${draft.id}/preview`;
+                }}
+                disabled={!gate.canPreview}
+                title={
+                  gate.canPreview
+                    ? undefined
+                    : `还有 ${gate.unconfirmedCount} 句未确认`
+                }
+                className="mt-3 w-full rounded-2xl bg-white py-4 text-center text-xl font-bold text-emerald-700 shadow-md ring-1 ring-emerald-200 active:bg-emerald-50 disabled:opacity-40"
+              >
+                去预览
+              </button>
+            </>
+          );
+        })()}
 
       {/* V0.2.4 票 04：发布者可退回校对（清空该内容所有家庭的练习记录），
        * 改错句后重新确认、定稿，不必整个重新上传校对 */}
