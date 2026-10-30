@@ -12,6 +12,7 @@ import {
 import { mapScoreToStars } from "@/lib/domain/stars";
 import { sourceLabel } from "@/lib/content/source-label";
 import type { ContentDetail } from "@/lib/content/view";
+import { cellStars, replayControl } from "./practice-panel";
 
 // 录音最长秒数：超时自动提交，防止孩子忘按"读好了"一直录
 const MAX_RECORD_SECONDS = 15;
@@ -403,6 +404,8 @@ export default function PracticeFlow({ unit }: { unit: ContentDetail }) {
   };
 
   const result = state.step === "scored" ? state.result : null;
+  // 播放控制排中间按钮的文案与色调（票 11）：录音态重播示范改叫「再播一遍」＝高亮黄
+  const replay = replayControl(state.step, isPaused);
 
   return (
     <>
@@ -436,15 +439,192 @@ export default function PracticeFlow({ unit }: { unit: ContentDetail }) {
           </p>
         </div>
 
-        {/* 句子导航 */}
+        {/* 当前句 / 录音 / 出分 主卡（票 11：上移到标题行下，当前句文本常驻） */}
+        {current && (
+          <section className="shrink-0 rounded-3xl bg-white p-4 shadow-md ring-1 ring-slate-100">
+            <p className="text-2xl leading-relaxed font-semibold">
+              {current.index + 1}. {current.text}
+            </p>
+
+            {state.step === "playing" && (
+              <p className="mt-3 text-lg text-slate-500">
+                {isPaused ? "⏸ 已暂停，点「继续」接着听" : "🔊 示范播放中，仔细听…"}
+              </p>
+            )}
+
+            {state.step === "recording" && (
+              <div className="mt-3">
+                {micNotice ? (
+                  <p className="text-lg text-amber-600">{micNotice}</p>
+                ) : submitError ? (
+                  <p className="text-lg text-red-500">{submitError}</p>
+                ) : recorderActive ? (
+                  <p className="text-lg text-red-500">🎤 轮到你读了！（已录 {recordSeconds} 秒）</p>
+                ) : hasBlob ? (
+                  <p className="text-lg text-slate-500">录音已就绪</p>
+                ) : null}
+                <div className="mt-3 grid grid-cols-2 gap-3 text-xl font-bold">
+                  {recorderActive ? (
+                    <button
+                      onClick={() => stopRecording("rerecord")}
+                      className="rounded-xl bg-slate-100 py-4 active:bg-slate-200"
+                    >
+                      ↺ 重读
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setMicNotice(null);
+                        void startRecording();
+                      }}
+                      className="rounded-xl bg-slate-100 py-4 active:bg-slate-200"
+                    >
+                      🎙 开始读
+                    </button>
+                  )}
+                  {hasBlob ? (
+                    <button
+                      onClick={() => void submitRecording()}
+                      className="rounded-xl bg-emerald-500 py-4 text-white active:bg-emerald-600"
+                    >
+                      ↻ {submitError ? "重新提交" : "提交这段"}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => stopRecording("submit")}
+                      disabled={!recorderActive}
+                      className="rounded-xl bg-emerald-500 py-4 text-white active:bg-emerald-600 disabled:opacity-40"
+                    >
+                      ✓ 读好了
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {state.step === "submitting" && (
+              <p className="mt-3 text-lg text-slate-500">正在评分…</p>
+            )}
+
+            {state.step === "scored" && result && (
+              <div className="mt-3">
+                {praiseText && (
+                  <p className="text-2xl font-bold text-emerald-600">{praiseText}</p>
+                )}
+                <p className="text-5xl font-bold tabular-nums">
+                  {Math.round(result.score)}
+                  <span className="ml-2 text-5xl text-amber-500">
+                    {"★".repeat(result.stars)}
+                    <span className="text-slate-200">{"☆".repeat(3 - result.stars)}</span>
+                  </span>
+                </p>
+                <p className="mt-2 text-lg">
+                  {result.isNewBest && <span className="font-bold text-emerald-600">🏅 新纪录！</span>}
+                  <span className="ml-2 text-slate-500">
+                    最好成绩 {localBest[state.index] ?? Math.round(result.score)} 分
+                    {!state.held && (
+                      <span className="ml-2 text-slate-400">{state.secondsLeft} 秒后下一句</span>
+                    )}
+                  </span>
+                </p>
+                <div className="mt-3 grid grid-cols-2 gap-3 text-lg font-bold">
+                  <button
+                    onClick={toggleMine}
+                    className="rounded-xl bg-slate-100 py-4 text-slate-700 active:bg-slate-200"
+                  >
+                    {minePlaying ? "⏹ 停止播放" : "🎧 听我读的"}
+                  </button>
+                  <button
+                    onClick={retrySentence}
+                    className="rounded-xl bg-emerald-500 py-4 text-white active:bg-emerald-600"
+                  >
+                    ↺ 再练一次这句
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {(state.step === "idle" || state.step === "finished") && (
+              <p className="mt-3 text-lg text-slate-500">
+                {state.step === "idle" ? "准备好就开始吧！" : "整个单元练完啦！"}
+              </p>
+            )}
+          </section>
+        )}
+
+        {/* 播放控制排：上一句 / 暂停·继续·再播一遍 / 下一句（票 11：中间按钮改名与配色） */}
+        <div className="grid shrink-0 grid-cols-3 gap-3">
+          <button
+            onClick={prevSentence}
+            disabled={state.step === "idle"}
+            className="rounded-2xl bg-white py-4 text-xl font-bold text-slate-700 shadow-md ring-1 ring-slate-200 active:bg-slate-100 disabled:opacity-40"
+          >
+            ⏮ 上一句
+          </button>
+          <button
+            onClick={state.step === "recording" ? replaySentence : togglePlay}
+            disabled={state.step !== "playing" && state.step !== "recording"}
+            className={`rounded-2xl py-4 text-xl font-bold text-white shadow-md disabled:opacity-40 ${
+              replay.highlight
+                ? "bg-amber-400 active:bg-amber-500"
+                : "bg-slate-700 active:bg-slate-800"
+            }`}
+          >
+            {replay.label}
+          </button>
+          <button
+            onClick={nextSentence}
+            disabled={state.step === "idle" || state.step === "finished" || (state.step === "playing" && state.index + 1 >= total)}
+            className="rounded-2xl bg-white py-4 text-xl font-bold text-slate-700 shadow-md ring-1 ring-slate-200 active:bg-slate-100 disabled:opacity-40"
+          >
+            下一句 ⏭
+          </button>
+        </div>
+
+        {/* 主操作排（票 11）：开始练习 + 听我读（本句尚无录音时置灰，读完一句后可回放） */}
+        {state.step === "idle" && (
+          <div className="grid shrink-0 grid-cols-[2fr_1fr] gap-3">
+            <button
+              onClick={() => dispatch({ type: "begin" })}
+              className="rounded-2xl bg-emerald-500 py-4 text-2xl font-bold text-white shadow-md active:bg-emerald-600"
+            >
+              ▶ 开始练习
+            </button>
+            <button
+              onClick={toggleMine}
+              disabled={!hasBlob}
+              title={hasBlob ? undefined : "读完一句后可回放录音"}
+              className="rounded-2xl bg-white py-4 text-base font-bold text-slate-400 shadow-md ring-1 ring-slate-100 disabled:opacity-60"
+            >
+              🎧 听我读
+            </button>
+          </div>
+        )}
+
+        {/* 会话过期：覆盖普通提交错误提示，引导去重新登录（回来后本页重新加载即恢复） */}
+        {sessionExpired && (
+          <section className="shrink-0 rounded-3xl bg-amber-50 p-4 text-center ring-1 ring-amber-100">
+            <p className="text-lg font-semibold text-amber-700">
+              登录已过期，请重新登录
+            </p>
+            <a
+              href="/login"
+              className="mt-3 block rounded-2xl bg-emerald-500 py-3 text-xl font-bold text-white active:bg-emerald-600"
+            >
+              去登录
+            </a>
+          </section>
+        )}
+
+        {/* 编号句格（票 11：mt-auto 沉底）：序号 + 下方最佳星级 ★×n（amber-500 加粗）/「未练」 */}
         <nav
-          className="grid shrink-0 gap-2"
+          className="mt-auto grid shrink-0 gap-2 pt-2"
           style={{ gridTemplateColumns: `repeat(${Math.min(total, 7)}, minmax(0, 1fr))` }}
         >
           {unit.sentences.map((s) => {
             const isCurrent = state.step !== "finished" && state.index === s.index;
             const best = localBest[s.index];
-            const stars = best != null ? mapScoreToStars(best) : null;
+            const cell = cellStars(best != null ? mapScoreToStars(best) : null);
             return (
               <button
                 key={s.index}
@@ -456,205 +636,48 @@ export default function PracticeFlow({ unit }: { unit: ContentDetail }) {
                 }`}
               >
                 {s.index + 1}
-                <span className="block text-xs font-normal text-amber-400">
-                  {stars != null ? "★".repeat(stars) : "未练"}
+                <span
+                  className={`mt-0.5 block text-xs ${
+                    cell.learned ? "font-bold text-amber-500" : "font-normal text-slate-400"
+                  }`}
+                >
+                  {cell.text}
                 </span>
               </button>
             );
           })}
         </nav>
 
-        {/* 三大控制按钮：上一句 / 暂停·继续 / 下一句 */}
-        <div className="grid shrink-0 grid-cols-3 gap-3">
-        <button
-          onClick={prevSentence}
-          disabled={state.step === "idle"}
-          className="rounded-2xl bg-white py-4 text-xl font-bold text-slate-700 shadow-md ring-1 ring-slate-200 active:bg-slate-100 disabled:opacity-40"
-        >
-          ⏮ 上一句
-        </button>
-        <button
-          onClick={state.step === "recording" ? replaySentence : togglePlay}
-          disabled={state.step !== "playing" && state.step !== "recording"}
-          className="rounded-2xl bg-slate-700 py-4 text-xl font-bold text-white shadow-md active:bg-slate-800 disabled:opacity-40"
-        >
-          {state.step === "recording" ? "🔁 再读一遍" : isPaused ? "▶ 继续" : "⏸ 暂停"}
-        </button>
-        <button
-          onClick={nextSentence}
-          disabled={state.step === "idle" || state.step === "finished" || (state.step === "playing" && state.index + 1 >= total)}
-          className="rounded-2xl bg-white py-4 text-xl font-bold text-slate-700 shadow-md ring-1 ring-slate-200 active:bg-slate-100 disabled:opacity-40"
-        >
-          下一句 ⏭
-        </button>
-      </div>
-
-      {/* 会话过期：覆盖普通提交错误提示，引导去重新登录（回来后本页重新加载即恢复） */}
-      {sessionExpired && (
-        <section className="mt-3 shrink-0 rounded-3xl bg-amber-50 p-4 text-center ring-1 ring-amber-100">
-          <p className="text-lg font-semibold text-amber-700">
-            登录已过期，请重新登录
-          </p>
-          <a
-            href="/login"
-            className="mt-3 block rounded-2xl bg-emerald-500 py-3 text-xl font-bold text-white active:bg-emerald-600"
-          >
-            去登录
-          </a>
-        </section>
-      )}
-
-      {/* 当前句 / 录音 / 出分 主卡 */}
-      {current && (
-        <section className="mt-3 shrink-0 rounded-3xl bg-white p-4 shadow-md ring-1 ring-slate-100">
-          <p className="text-2xl leading-relaxed font-semibold">
-            {current.index + 1}. {current.text}
-          </p>
-
-          {state.step === "playing" && (
-            <p className="mt-3 text-lg text-slate-500">
-              {isPaused ? "⏸ 已暂停，点「继续」接着听" : "🔊 示范播放中，仔细听…"}
-            </p>
-          )}
-
-          {state.step === "recording" && (
-            <div className="mt-3">
-              {micNotice ? (
-                <p className="text-lg text-amber-600">{micNotice}</p>
-              ) : submitError ? (
-                <p className="text-lg text-red-500">{submitError}</p>
-              ) : recorderActive ? (
-                <p className="text-lg text-red-500">🎤 轮到你读了！（已录 {recordSeconds} 秒）</p>
-              ) : hasBlob ? (
-                <p className="text-lg text-slate-500">录音已就绪</p>
-              ) : null}
-              <div className="mt-3 grid grid-cols-2 gap-3 text-xl font-bold">
-                {recorderActive ? (
-                  <button
-                    onClick={() => stopRecording("rerecord")}
-                    className="rounded-xl bg-slate-100 py-4 active:bg-slate-200"
-                  >
-                    ↺ 重读
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => {
-                      setMicNotice(null);
-                      void startRecording();
-                    }}
-                    className="rounded-xl bg-slate-100 py-4 active:bg-slate-200"
-                  >
-                    🎙 开始读
-                  </button>
-                )}
-                {hasBlob ? (
-                  <button
-                    onClick={() => void submitRecording()}
-                    className="rounded-xl bg-emerald-500 py-4 text-white active:bg-emerald-600"
-                  >
-                    ↻ {submitError ? "重新提交" : "提交这段"}
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => stopRecording("submit")}
-                    disabled={!recorderActive}
-                    className="rounded-xl bg-emerald-500 py-4 text-white active:bg-emerald-600 disabled:opacity-40"
-                  >
-                    ✓ 读好了
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-
-          {state.step === "submitting" && (
-            <p className="mt-3 text-lg text-slate-500">正在评分…</p>
-          )}
-
-          {state.step === "scored" && result && (
-            <div className="mt-3">
-              {praiseText && (
-                <p className="text-2xl font-bold text-emerald-600">{praiseText}</p>
-              )}
-              <p className="text-5xl font-bold tabular-nums">
-                {Math.round(result.score)}
-                <span className="ml-2 text-5xl text-amber-500">
-                  {"★".repeat(result.stars)}
-                  <span className="text-slate-200">{"☆".repeat(3 - result.stars)}</span>
-                </span>
+        {/* 收尾总结（票 11：保持在句格之后）；「再练一遍」整体重开换新 runId（票 04） */}
+        {state.step === "finished" && (() => {
+          const earned = unit.sentences.reduce((sum, s) => {
+            if (!sessionPracticed.has(s.index) || localBest[s.index] == null) return sum;
+            return sum + mapScoreToStars(localBest[s.index]);
+          }, 0);
+          const practiced = sessionPracticed.size;
+          return (
+            <section className="mt-5 rounded-3xl bg-emerald-50 p-6 text-center ring-1 ring-emerald-100">
+              <p className="text-2xl font-bold text-emerald-700">
+                🎉 整个单元练完啦！
               </p>
-              <p className="mt-2 text-lg">
-                {result.isNewBest && <span className="font-bold text-emerald-600">🏅 新纪录！</span>}
-                <span className="ml-2 text-slate-500">
-                  最好成绩 {localBest[state.index] ?? Math.round(result.score)} 分
-                  {!state.held && (
-                    <span className="ml-2 text-slate-400">{state.secondsLeft} 秒后下一句</span>
-                  )}
-                </span>
-              </p>
-              <div className="mt-3 grid grid-cols-2 gap-3 text-lg font-bold">
-                <button
-                  onClick={toggleMine}
-                  className="rounded-xl bg-slate-100 py-4 text-slate-700 active:bg-slate-200"
-                >
-                  {minePlaying ? "⏹ 停止播放" : "🎧 听我读的"}
-                </button>
-                <button
-                  onClick={retrySentence}
-                  className="rounded-xl bg-emerald-500 py-4 text-white active:bg-emerald-600"
-                >
-                  ↺ 再练一次这句
-                </button>
-              </div>
-            </div>
-          )}
-
-          {(state.step === "idle" || state.step === "finished") && (
-            <p className="mt-3 text-lg text-slate-500">
-              {state.step === "idle" ? "准备好就开始吧！" : "整个单元练完啦！"}
-            </p>
-          )}
-        </section>
-      )}
-
-      {state.step === "idle" && (
-        <button
-          onClick={() => dispatch({ type: "begin" })}
-          className="mt-3 w-full rounded-2xl bg-emerald-500 py-4 text-2xl font-bold text-white shadow-md active:bg-emerald-600"
-        >
-          ▶ 开始练这一单元
-        </button>
-      )}
-          {state.step === "finished" && (() => {
-            const earned = unit.sentences.reduce((sum, s) => {
-              if (!sessionPracticed.has(s.index) || localBest[s.index] == null) return sum;
-              return sum + mapScoreToStars(localBest[s.index]);
-            }, 0);
-            const practiced = sessionPracticed.size;
-            return (
-              <section className="mt-5 rounded-3xl bg-emerald-50 p-6 text-center ring-1 ring-emerald-100">
-                <p className="text-2xl font-bold text-emerald-700">
-                  🎉 整个单元练完啦！
+              {practiced > 0 && (
+                <p className="mt-3 text-3xl font-bold text-amber-500">
+                  本次练习共收获 {earned} 颗星
+                  <span className="ml-2 text-lg font-normal text-slate-500">
+                    （练了 {practiced} 句，满 {practiced * 3} 颗）
+                  </span>
                 </p>
-                {practiced > 0 && (
-                  <p className="mt-3 text-3xl font-bold text-amber-500">
-                    本次练习共收获 {earned} 颗星
-                    <span className="ml-2 text-lg font-normal text-slate-500">
-                      （练了 {practiced} 句，满 {practiced * 3} 颗）
-                    </span>
-                  </p>
-                )}
-                <button
-                  onClick={restartRun}
-                  className="mt-4 w-full rounded-2xl bg-emerald-500 py-4 text-xl font-bold text-white active:bg-emerald-600"
-                >
-                  ↺ 再练一遍
-                </button>
-              </section>
-            );
-          })()}
-
-    </aside>
+              )}
+              <button
+                onClick={restartRun}
+                className="mt-4 w-full rounded-2xl bg-emerald-500 py-4 text-xl font-bold text-white active:bg-emerald-600"
+              >
+                ↺ 再练一遍
+              </button>
+            </section>
+          );
+        })()}
+      </aside>
     </>
   );
 }
