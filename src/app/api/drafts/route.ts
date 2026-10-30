@@ -7,6 +7,7 @@ import { requireAccount } from "@/lib/auth/guard";
 import { openDb, dbPath } from "@/lib/db";
 import { listDraftsByAccount, sentenceCountsByDraft, confirmedCountsByDraft } from "@/lib/drafts/repo";
 import { draftModuleMapByAccount } from "@/lib/drafts/standard-drafts";
+import { latestRunStars } from "@/lib/domain/stats";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +34,10 @@ export async function GET(req: Request) {
       db,
       drafts.map((d) => d.id)
     );
+    // 最近一次练习的总星数（票 06）：仅 published 行携带。定稿后内容包 id 即草稿 id
+    // （finalize.packFromDraft），口径与 owned-content 的 latestRunStars 同源（spec 决策 25）。
+    // 每账号 published 自定义内容个位数，逐条复用同一函数而非再造批量口径，
+    // 避免两处实现漂移；非 published / 没练过为 null（前端不显示星块）。
     return NextResponse.json({
       drafts: drafts.map((d) => {
         const module = modules.get(d.id);
@@ -47,6 +52,10 @@ export async function GET(req: Request) {
           confirmedCount: confirmed.get(d.id) ?? 0,
           // 封面（票 01）：抽帧完成才有，转写期间列表对缺失容忍（null → 占位）
           posterUrl: d.posterPath ? `/api/media/${d.posterPath}` : null,
+          latestRunStars:
+            d.status === "published"
+              ? latestRunStars(db, d.id, { owner: auth.account.id })
+              : null,
           createdAt: d.createdAt,
         };
       }),
