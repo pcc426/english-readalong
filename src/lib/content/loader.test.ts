@@ -144,6 +144,37 @@ describe("内容包校验", () => {
       expect(() => listContent({ accountId: "acc-1" })).toThrow(new RegExp(name.replace(".", "\\.")));
     }
   });
+
+  it("教材归属字段（票 03）：全字段通过校验且原样读出，缺省也合法（老包无需修改）", () => {
+    const attributed = {
+      ...validPack,
+      seriesCode: "sh-jiaoban-new",
+      bookId: "grade5a",
+      unitNo: 2,
+      moduleKind: "Story time",
+      lessonTitle: "The dragon dance",
+    };
+    setupContentEnv({ "u2.json": JSON.stringify(attributed) });
+    const pack = getContent("u2-dragon-dance");
+    expect(pack).toMatchObject({
+      seriesCode: "sh-jiaoban-new",
+      bookId: "grade5a",
+      unitNo: 2,
+      moduleKind: "Story time",
+      lessonTitle: "The dragon dance",
+    });
+    setupContentEnv({ "u2.json": JSON.stringify(validPack) });
+    expect(getContent("u2-dragon-dance")?.seriesCode).toBeUndefined();
+  });
+
+  it("unitNo 必须是正整数（0/负数/小数都报错）", () => {
+    for (const unitNo of [0, -1, 2.5]) {
+      setupContentEnv({
+        "u2.json": JSON.stringify({ ...validPack, unitNo }),
+      });
+      expect(() => listContent()).toThrow(/u2\.json/);
+    }
+  });
 });
 
 describe("内容加载", () => {
@@ -228,6 +259,76 @@ describe("标准目录 + 自定义目录合并读取", () => {
   it("自定义目录里的坏包同样报明确错误（含文件名）", () => {
     setupContentEnv({}, { "acc-a": { "broken.json": "{ not json" } });
     expect(() => listContent({ accountId: "acc-a" })).toThrow(/broken\.json/);
+  });
+});
+
+describe("教材列表默认排序（票 03）", () => {
+  function attributedPack(id: string, unitNo: number, moduleKind: string): string {
+    return JSON.stringify({
+      ...validPack,
+      id,
+      seriesCode: "sh-jiaoban-new",
+      bookId: "grade5a",
+      unitNo,
+      moduleKind,
+    });
+  }
+
+  it("标准包按 单元序号 → 模块在教材 JSON 中的顺序 排，不按文件名字典序", () => {
+    // 文件名序（a→e）故意与教材序完全相反/交错
+    setupContentEnv({
+      "a.json": attributedPack("p-u3-reading", 3, "Reading time"),
+      "b.json": attributedPack("p-u1-story", 1, "Story time"),
+      "c.json": attributedPack("p-u3-chant", 3, "Chant time"),
+      "d.json": attributedPack("p-u2", 2, "Talking time"),
+      "e.json": attributedPack("p-u1-talking", 1, "Talking time"),
+    });
+    expect(listContent().map((p) => p.id)).toEqual([
+      "p-u1-talking",
+      "p-u1-story",
+      "p-u2",
+      "p-u3-chant",
+      "p-u3-reading",
+    ]);
+  });
+
+  it("未迁移老包（无归属字段）沉底，自定义内容仍排在标准之后", () => {
+    setupContentEnv(
+      {
+        "a.json": JSON.stringify(validPack),
+        "b.json": attributedPack("p-u2", 2, "Talking time"),
+      },
+      {
+        "acc-1": {
+          "c1.json": JSON.stringify({
+            ...validPack,
+            id: "custom-a1",
+            type: "custom",
+            owner: "acc-1",
+          }),
+        },
+      }
+    );
+    expect(listContent({ accountId: "acc-1" }).map((p) => p.id)).toEqual([
+      "p-u2",
+      "u2-dragon-dance",
+      "custom-a1",
+    ]);
+  });
+
+  it("运行时标准包参与同一排序（合并后统一按教材序）", () => {
+    setupContentEnv({
+      "a.json": attributedPack("p-u1-talking", 1, "Talking time"),
+    });
+    // 与「标准双目录合并」用例同口径：运行时标准目录在 <CONTENT_DATA_DIR>/standard
+    const runtimeDir = path.join(process.env.CONTENT_DATA_DIR!, "standard");
+    mkdirSync(runtimeDir, { recursive: true });
+    writeFileSync(
+      path.join(runtimeDir, "r.json"),
+      attributedPack("p-u1-story", 1, "Story time"),
+      "utf8"
+    );
+    expect(listContent().map((p) => p.id)).toEqual(["p-u1-talking", "p-u1-story"]);
   });
 });
 
