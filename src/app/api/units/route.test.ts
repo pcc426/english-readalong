@@ -82,13 +82,19 @@ function seedPublishedCustom(accountId: string) {
   }
 }
 
-function insertAttempt(unitId: string, owner: string | null, sentenceIndex: number, score: number) {
+function insertAttempt(
+  unitId: string,
+  owner: string | null,
+  sentenceIndex: number,
+  score: number,
+  runId: string | null = null
+) {
   const db = openDb(process.env.DB_PATH!);
   try {
     // stars 列是落库快照（列表接口不读它），占位即可
     db.prepare(
-      "INSERT INTO practice_attempts (unit_id, sentence_index, score, stars, owner) VALUES (?, ?, ?, ?, ?)"
-    ).run(unitId, sentenceIndex, score, 1, owner);
+      "INSERT INTO practice_attempts (unit_id, sentence_index, score, stars, owner, run_id) VALUES (?, ?, ?, ?, ?, ?)"
+    ).run(unitId, sentenceIndex, score, 1, owner, runId);
   } finally {
     db.close();
   }
@@ -139,6 +145,40 @@ describe("GET /api/units", () => {
     const body = await res.json();
     expect(body.units[0].percentages.threeStar).toBe(100);
     expect(body.units[0].encouragement).toContain("满星");
+  });
+
+  describe("最近一次练习总星数 latestRunStars（票 04）", () => {
+    it("未练过为 null", async () => {
+      setupEnv();
+      const res = await GET(authedGet("http://x/api/units"));
+      const body = await res.json();
+      expect(body.units[0].latestRunStars).toBeNull();
+    });
+
+    it("只有老数据（run_id NULL）回退为每句最佳星之和；有 run 后按最近 run 口径", async () => {
+      setupEnv();
+      const owner = accountIdOf("parent@test.com");
+      // 老数据两句各 3 星（95 分）→ 回退 3 + 3 = 6
+      insertAttempt("u2-dragon-dance", owner, 0, 95);
+      insertAttempt("u2-dragon-dance", owner, 1, 95);
+      let res = await GET(authedGet("http://x/api/units"));
+      let body = await res.json();
+      expect(body.units[0].latestRunStars).toBe(6);
+
+      // 之后一轮新 run 只练 1 句 1 星 → 最近 run 口径，不叠加老数据
+      insertAttempt("u2-dragon-dance", owner, 2, 60, "run-new");
+      res = await GET(authedGet("http://x/api/units"));
+      body = await res.json();
+      expect(body.units[0].latestRunStars).toBe(1);
+    });
+
+    it("按账号隔离：他人的 run 不计入本账号", async () => {
+      setupEnv();
+      insertAttempt("u2-dragon-dance", "acct-other", 0, 95, "run-other");
+      const res = await GET(authedGet("http://x/api/units"));
+      const body = await res.json();
+      expect(body.units[0].latestRunStars).toBeNull();
+    });
   });
 
   describe("账号隔离与自定义内容（票 10 接线）", () => {

@@ -15,6 +15,10 @@ export interface ContentOverview {
     unpracticed: number;
   };
   encouragement: string;
+  /** 最近一次练习获得的总星数（票 04 / spec 决策 23–25）；从未练过为 null。
+   * 本视图是全量口径、没有账号维度，这里恒为 null；
+   * 按账号的值由 owned-content 在覆盖 percentages 时一并写入。 */
+  latestRunStars: number | null;
 }
 
 export interface SentenceDetail {
@@ -85,6 +89,7 @@ export function getContentOverview(query: ContentQuery = {}): ContentOverview[] 
         sentenceCount: pack.sentences.length,
         percentages: dist.percentages,
         encouragement: encouragementFor(dist),
+        latestRunStars: null,
       };
     });
   } finally {

@@ -110,6 +110,76 @@ describe("openDb 的 content_drafts 迁移（12 号票）", () => {
   });
 });
 
+describe("openDb 的 practice_attempts 迁移（V0.3 run_id，票 04）", () => {
+  /** V0.2 库：practice_attempts 已有 owner、还没有 run_id */
+  function createV02AttemptsTable(dbPath: string): void {
+    const db = new Database(dbPath);
+    db.exec(`
+      CREATE TABLE practice_attempts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        unit_id TEXT NOT NULL,
+        sentence_index INTEGER NOT NULL,
+        score INTEGER NOT NULL,
+        stars INTEGER NOT NULL,
+        owner TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+    db.prepare(
+      `INSERT INTO practice_attempts (unit_id, sentence_index, score, stars, owner)
+       VALUES ('u2-dragon-dance', 0, 92, 3, 'acc-1')`
+    ).run();
+    db.close();
+  }
+
+  it("旧库补 run_id 列，旧记录保留且 run_id 为 NULL", () => {
+    const p = path.join(makeDbDir("ra-migrate-run-"), "readalong.db");
+    createV02AttemptsTable(p);
+
+    const db = openDb(p);
+    try {
+      expect(columnNames(db, "practice_attempts")).toContain("run_id");
+      const row = db
+        .prepare("SELECT unit_id, score, owner, run_id FROM practice_attempts")
+        .get() as {
+        unit_id: string;
+        score: number;
+        owner: string;
+        run_id: string | null;
+      };
+      expect(row).toEqual({
+        unit_id: "u2-dragon-dance",
+        score: 92,
+        owner: "acc-1",
+        run_id: null,
+      });
+
+      // 补列后新行可带 run_id
+      db.prepare(
+        `INSERT INTO practice_attempts (unit_id, sentence_index, score, stars, owner, run_id)
+         VALUES ('u2-dragon-dance', 1, 88, 2, 'acc-1', 'run-1')`
+      ).run();
+      const inserted = db
+        .prepare("SELECT run_id FROM practice_attempts WHERE sentence_index = 1")
+        .get() as { run_id: string };
+      expect(inserted.run_id).toBe("run-1");
+    } finally {
+      db.close();
+    }
+  });
+
+  it("新库直接建出 run_id，重复 openDb 幂等不报错", () => {
+    const p = path.join(makeDbDir("ra-fresh-run-"), "readalong.db");
+    const db = openDb(p);
+    expect(columnNames(db, "practice_attempts")).toContain("run_id");
+    db.close();
+
+    const again = openDb(p);
+    expect(columnNames(again, "practice_attempts")).toContain("run_id");
+    again.close();
+  });
+});
+
 describe("openDb 的 practice_attempts 迁移（V0.2 owner）", () => {
   /** V0.1 早期库：practice_attempts 没有 owner 列 */
   function createLegacyAttemptsTable(dbPath: string): void {
