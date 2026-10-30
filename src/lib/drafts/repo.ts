@@ -16,6 +16,8 @@ export interface Draft {
   status: DraftStatus;
   /** 视频相对 uploads 根的路径（<accountId>/<uuid>.<ext>） */
   videoPath: string;
+  /** 封面相对 uploads 根的路径（<accountId>/<uuid>.poster.jpg）；抽帧失败/未抽为 null（票 01） */
+  posterPath: string | null;
   transcribeTaskId: string | null;
   transcribeError: string | null;
   createdAt: string;
@@ -38,6 +40,7 @@ interface DraftRow {
   type: string;
   status: string;
   video_path: string;
+  poster_path: string | null;
   transcribe_task_id: string | null;
   transcribe_error: string | null;
   created_at: string;
@@ -52,6 +55,7 @@ function toDraft(row: DraftRow): Draft {
     type: row.type as Draft["type"],
     status: row.status as DraftStatus,
     videoPath: row.video_path,
+    posterPath: row.poster_path,
     transcribeTaskId: row.transcribe_task_id,
     transcribeError: row.transcribe_error,
     createdAt: row.created_at,
@@ -109,6 +113,14 @@ export function setDraftVideo(db: Db, id: string, videoPath: string): void {
     `UPDATE content_drafts SET video_path = ?, updated_at = datetime('now')
      WHERE id = ?`
   ).run(videoPath, id);
+}
+
+/** 记封面引用（票 01）：抽帧成功才落；失败保持 null（列表/详情对缺失容忍） */
+export function setDraftPoster(db: Db, id: string, posterPath: string): void {
+  db.prepare(
+    `UPDATE content_drafts SET poster_path = ?, updated_at = datetime('now')
+     WHERE id = ?`
+  ).run(posterPath, id);
 }
 
 /** 记下转写任务引用（poll 凭它续查；06 号票的退避轮询也用它） */

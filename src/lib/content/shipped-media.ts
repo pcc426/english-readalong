@@ -21,3 +21,8 @@ export function isShippedVideoName(name: string | undefined): name is string {
 export function shippedMediaAbsPath(name: string): string {
   return path.join(shippedMediaRoot(), name);
 }
+
+/** 随代码封面目录（票 01）：content/media/posters/，与视频目录同根、部署不分家 */
+export function shippedPosterAbsPath(name: string): string {
+  return path.join(shippedMediaRoot(), "posters", name);
+}

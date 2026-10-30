@@ -35,6 +35,9 @@ export async function GET(req: Request, ctx: Ctx) {
         status: draft.status,
         videoPath: draft.videoPath,
         videoUrl: `/api/media/${draft.videoPath}`,
+        // 封面（票 01）：与视频同形相对引用 + 鉴权媒体路由 URL；未抽成时为 null
+        posterPath: draft.posterPath,
+        posterUrl: draft.posterPath ? `/api/media/${draft.posterPath}` : null,
         transcribeError: draft.transcribeError,
         createdAt: draft.createdAt,
         sentences: listDraftSentences(db, draft.id),

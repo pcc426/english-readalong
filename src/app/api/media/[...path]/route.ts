@@ -6,17 +6,26 @@
 // 例外（票 12）：已被公开标准内容引用的上传视频（data/content/standard/
 // 里包的 video 字段）对任何登录账号放行——标准内容全账号可见可练，
 // 视频必须能跟着播；未被引用的文件（含他人的自定义视频）照旧 404。
+// 封面（票 01）：jpg 与视频同规则——本人目录放行；上传封面被公开标准包
+// poster 字段引用时全账号放行；随代码封面（content/media/posters/）
+// 与随代码视频同校验（被标准包 poster 字段引用才放行）。
 import { createReadStream, statSync } from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { NextResponse } from "next/server";
 import { requireAccount } from "@/lib/auth/guard";
 import { errorResponse } from "@/lib/http";
-import { parseMediaRelPath, videoAbsPath, VIDEO_CONTENT_TYPES } from "@/lib/drafts/storage";
+import {
+  parseMediaRelPath,
+  POSTER_CONTENT_TYPES,
+  videoAbsPath,
+  VIDEO_CONTENT_TYPES,
+} from "@/lib/drafts/storage";
 import { listContent } from "@/lib/content/loader";
 import {
   isShippedVideoName,
   shippedMediaAbsPath,
+  shippedPosterAbsPath,
 } from "@/lib/content/shipped-media";
 
 export const dynamic = "force-dynamic";
@@ -26,9 +35,24 @@ function isStandardPackVideo(relPath: string): boolean {
   return listContent().some((pack) => pack.video === relPath);
 }
 
+/** 被公开标准内容包 poster 字段引用的上传封面（票 01，与视频引用同规则） */
+function isStandardPackPoster(relPath: string): boolean {
+  return listContent().some((pack) => pack.poster === relPath);
+}
+
 /** 随代码标准内容包是否引用了该视频文件名（上传类包引用的是账号目录路径，不会命中） */
 function isShippedPackVideo(name: string): boolean {
   return listContent().some((pack) => pack.video === name);
+}
+
+/** 随代码标准内容包是否引用了该封面文件名（poster 与 video 同形，裸文件名） */
+function isShippedPackPoster(name: string): boolean {
+  return listContent().some((pack) => pack.poster === name);
+}
+
+function contentTypeFor(name: string): string {
+  const ext = path.extname(name).slice(1).toLowerCase();
+  return VIDEO_CONTENT_TYPES[ext] ?? POSTER_CONTENT_TYPES[ext] ?? "application/octet-stream";
 }
 
 export async function GET(
@@ -42,15 +66,22 @@ export async function GET(
   let abs: string;
   if (segments?.[0] === "shipped") {
     const name = segments[1];
-    if (segments.length !== 2 || !isShippedVideoName(name) || !isShippedPackVideo(name)) {
+    if (segments.length !== 2 || !isShippedVideoName(name)) {
       return notFound();
     }
-    abs = shippedMediaAbsPath(name);
+    const isPoster = path.extname(name).slice(1).toLowerCase() in POSTER_CONTENT_TYPES;
+    // 封面只认 content/media/posters/ 子目录；引用校验与视频同规则
+    if (isPoster ? !isShippedPackPoster(name) : !isShippedPackVideo(name)) {
+      return notFound();
+    }
+    abs = isPoster ? shippedPosterAbsPath(name) : shippedMediaAbsPath(name);
   } else {
     const relPath = parseMediaRelPath(segments ?? []);
     if (
       !relPath ||
-      (!relPath.startsWith(`${auth.account.id}/`) && !isStandardPackVideo(relPath))
+      (!relPath.startsWith(`${auth.account.id}/`) &&
+        !isStandardPackVideo(relPath) &&
+        !isStandardPackPoster(relPath))
     ) {
       return notFound();
     }
@@ -63,10 +94,9 @@ export async function GET(
     return notFound();
   }
 
-  const ext = path.extname(abs).slice(1).toLowerCase();
   const headers = new Headers({
     // ext→mime 单一来源在 storage.ts（与上传格式校验同一处维护）
-    "content-type": VIDEO_CONTENT_TYPES[ext] ?? "application/octet-stream",
+    "content-type": contentTypeFor(path.basename(abs)),
     "accept-ranges": "bytes",
   });
 

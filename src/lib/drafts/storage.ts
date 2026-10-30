@@ -18,6 +18,12 @@ export const VIDEO_CONTENT_TYPES: Record<string, string> = {
   mov: "video/quicktime",
 };
 
+/** 封面扩展名 → content-type（票 01：/api/media 对 jpg 回图片类型，同一处维护） */
+export const POSTER_CONTENT_TYPES: Record<string, string> = {
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+};
+
 /**
  * 扩展名 → 允许的 content-type（格式校验按扩展名 + content-type 双查）。
  * 与 VIDEO_CONTENT_TYPES 同一扩展名集合；m4v 额外收 video/mp4

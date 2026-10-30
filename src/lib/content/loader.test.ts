@@ -66,6 +66,23 @@ describe("内容包校验", () => {
     expect(() => listContent()).toThrow(/broken\.json/);
   });
 
+  it("poster 缺省合法（既有内容包无需修改），带 poster 的包原样读出（票 01）", () => {
+    setupContentEnv({
+      "u2.json": JSON.stringify({ ...validPack, poster: "五上_U2.jpg" }),
+    });
+    const pack = getContent("u2-dragon-dance");
+    expect(pack?.poster).toBe("五上_U2.jpg");
+    setupContentEnv({ "u3.json": JSON.stringify(validPack) });
+    expect(getContent("u2-dragon-dance")?.poster).toBeUndefined();
+  });
+
+  it("poster 空串非法（与 video 同形：非空相对引用）", () => {
+    setupContentEnv({
+      "u2.json": JSON.stringify({ ...validPack, poster: "" }),
+    });
+    expect(() => listContent()).toThrow(/u2\.json/);
+  });
+
   it("时间倒置（start ≥ end）报明确错误", () => {
     const inverted = {
       ...validPack,
