@@ -6,6 +6,7 @@ import {
   getTextbookModule,
   parseTextbook,
   registeredBooks,
+  registeredUnits,
   series,
   textbookPackAttribution,
 } from "./textbook";
@@ -274,5 +275,15 @@ describe("parseTextbook 坏数据报错", () => {
     const data = validData();
     data.units[0].modules.push({ ...data.units[0].modules[0] });
     expect(() => parseTextbook(data)).toThrow(/moduleKind 重复/);
+  });
+});
+
+describe("registeredUnits（首页单元下拉数据，票 05）", () => {
+  it("列出注册教材的全部单元：单元序号＋英文标题，按教材目录序", () => {
+    const units = registeredUnits();
+    expect(units).toHaveLength(10);
+    expect(units[0]).toEqual({ no: 1, title: "Clubs in our school" });
+    expect(units[9]).toEqual({ no: 10, title: "A greener life" });
+    expect(units.map((u) => u.no)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
   });
 });
