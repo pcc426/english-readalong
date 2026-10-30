@@ -10,6 +10,7 @@ function makeDraft(overrides: Partial<Draft> = {}): Draft {
     type: "custom",
     status: "proofreading",
     videoPath: "acc-1/video.mp4",
+    posterPath: null,
     transcribeTaskId: null,
     transcribeError: null,
     createdAt: "2026-01-01 00:00:00",
@@ -36,6 +37,15 @@ describe("buildPreviewDetail（票 08：草稿组装不落盘的预览内容）"
     expect(unit.title).toBe("Unit test draft");
     expect(unit.source).toBe("custom-upload");
     expect(unit.video).toBe("/api/media/acc-1/video.mp4");
+  });
+
+  it("封面沿用草稿抽帧引用（票 01）；没抽到为 null", () => {
+    const withPoster = buildPreviewDetail(
+      makeDraft({ posterPath: "acc-1/video.poster.jpg" }),
+      [sentence()]
+    ).unit;
+    expect(withPoster.poster).toBe("/api/media/acc-1/video.poster.jpg");
+    expect(buildPreviewDetail(makeDraft(), [sentence()]).unit.poster).toBeNull();
   });
 
   it("standard 草稿：source=standard-upload", () => {

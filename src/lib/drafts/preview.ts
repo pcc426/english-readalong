@@ -31,6 +31,8 @@ export function buildPreviewDetail(
     source: draft.type === "standard" ? "standard-upload" : "custom-upload",
     // 草稿视频引用与已发布内容一致（<accountId>/<file>），播放走鉴权媒体路由
     video: `/api/media/${draft.videoPath}`,
+    // 封面沿用草稿上传链路抽的帧（票 01）；没抽到为 null，与草稿 API 同一 URL 口径
+    poster: draft.posterPath ? `/api/media/${draft.posterPath}` : null,
     sentences: sentences.map((s) => ({
       index: s.index,
       text: s.text,
