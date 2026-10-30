@@ -88,6 +88,9 @@ export default function PracticeFlow({ unit }: { unit: ContentDetail }) {
   );
   // 本次会话练过（出过分）的句子，用于收尾时统计"本次练习"总星级
   const [sessionPracticed, setSessionPracticed] = useState<Set<number>>(new Set());
+  // 练习 run 归属（票 04）：一次 mount（或「再练一遍」整体重开）为新一轮，
+  // 轮内所有评分提交共享同一 runId，服务端据此统计「最近一次练习」总星数
+  const [runId, setRunId] = useState(() => crypto.randomUUID());
 
   const current = state.step === "finished" ? null : unit.sentences[state.index];
   // 依赖 key：只在"进入某个句子的某个步骤"时触发相关 effect（tick/held 等细节变化不触发）
@@ -155,6 +158,7 @@ export default function PracticeFlow({ unit }: { unit: ContentDetail }) {
       const form = new FormData();
       form.append("audio", blob, "recording");
       form.append("sentenceIndex", String(sentenceIndex));
+      form.append("runId", runId);
       const res = await fetch(`/api/units/${unit.id}/practice`, {
         method: "POST",
         body: form,
@@ -390,6 +394,12 @@ export default function PracticeFlow({ unit }: { unit: ContentDetail }) {
     if (canSkip(state)) dispatch({ type: "skip" });
     else if (state.step === "playing" && state.index + 1 < total)
       dispatch({ type: "select", index: state.index + 1 });
+  };
+
+  /** 收尾页「再练一遍」：整体重开＝新一轮练习，换新 runId（票 04） */
+  const restartRun = () => {
+    setRunId(crypto.randomUUID());
+    dispatch({ type: "select", index: 0 });
   };
 
   const result = state.step === "scored" ? state.result : null;
@@ -635,7 +645,7 @@ export default function PracticeFlow({ unit }: { unit: ContentDetail }) {
                   </p>
                 )}
                 <button
-                  onClick={() => dispatch({ type: "select", index: 0 })}
+                  onClick={restartRun}
                   className="mt-4 w-full rounded-2xl bg-emerald-500 py-4 text-xl font-bold text-white active:bg-emerald-600"
                 >
                   ↺ 再练一遍
