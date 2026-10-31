@@ -1,15 +1,16 @@
 "use client";
 
-// 校对/切点两页共享的「单句保存」hook（V0.2 整改）。
-// 两页的 commitSave 骨架完全同构：saving/saved/error 三态 + 已保存提示
-// 定时清除 + 「没变不发请求」（服务端基线比对）+ 防抖自动保存；
-// 差异只在比对键（文本 vs 起止毫秒）与请求体，经 keyOf/bodyFor 注入。
-// 行为约束（与抽取前逐条对应）：
+// 校对页的「单句保存」hook（V0.2 整改抽取；V0.3 票 10 起唯一使用方是校对页）。
+// commitSave 骨架：saving/saved/error + needs-reconfirm 四态 + 「没变不发请求」
+// （服务端基线比对）+ 防抖自动保存；比对键与请求体经 keyOf/bodyFor 注入。
+// 行为约束（与抽取前逐条对应，V0.3 票 10 调整处注明）：
 // - 没变不发请求，但要把该句的残留提示清掉；
 // - 带 overrides（确认/采用教材原文）时跳过比对直接发；
 // - 成功后以服务端返回的句子为准更新基线与页面状态；
-// - saved 提示 SAVED_HINT_MS 后清除（期间若变回 saving/saved 之外的
-//   状态则不动）；失败置 error，等下一次操作覆盖。
+// - saved/needs-reconfirm 均**常驻**（V0.3 票 10 删除 SAVED_HINT_MS 定时消失），
+//   下一次编辑开始时被 saving 替换；失败置 error，等下一次操作覆盖。
+// - PUT 成功后的落定态由 settleStateAfterSave 决定：服务端确认 → saved；
+//   打回 edited（未确认）→ needs-reconfirm（调用方据此渲染「句子已修改，请重新确认」）。
 import { useCallback, useRef, useState } from "react";
 import type {
   DraftSentenceView,
@@ -17,9 +18,70 @@ import type {
 } from "@/components/proofread/types";
 
 export const DEBOUNCE_MS = 800;
-export const SAVED_HINT_MS = 1500;
 
-export type SentenceSaveState = "saving" | "saved" | "error";
+export type SentenceSaveState = "saving" | "saved" | "needs-reconfirm" | "error";
+
+/**
+ * 防抖保存器（V0.3 票 10）：把「编辑发生」与「网络请求」拆开——
+ * - schedule() 立即回调 onEditStart（状态条马上显示「保存中…」，不等防抖）；
+ * - 只有延迟到期才回调 onFlush（发请求）；期间再次 schedule 重置计时。
+ * 纯控制器、可注入计时函数，单测用假定时器验证时序。
+ */
+export interface DebouncedSaveOptions {
+  delayMs?: number;
+  /** 编辑一发生就回调（同步）：置 saving，替换此前的 saved/needs-reconfirm */
+  onEditStart: (index: number) => void;
+  /** 防抖到期：发起保存请求 */
+  onFlush: (index: number) => void;
+  setTimer?: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>;
+  clearTimer?: (timer: ReturnType<typeof setTimeout>) => void;
+}
+
+export interface DebouncedSave {
+  schedule(index: number): void;
+  cancel(index: number): void;
+  cancelAll(): void;
+}
+
+export function createDebouncedSave(options: DebouncedSaveOptions): DebouncedSave {
+  const delay = options.delayMs ?? DEBOUNCE_MS;
+  const setTimer = options.setTimer ?? setTimeout;
+  const clearTimer = options.clearTimer ?? clearTimeout;
+  const timers = new Map<number, ReturnType<typeof setTimeout>>();
+  return {
+    schedule(index) {
+      options.onEditStart(index);
+      const pending = timers.get(index);
+      if (pending) clearTimer(pending);
+      timers.set(
+        index,
+        setTimer(() => {
+          timers.delete(index);
+          options.onFlush(index);
+        }, delay)
+      );
+    },
+    cancel(index) {
+      const pending = timers.get(index);
+      if (pending) {
+        clearTimer(pending);
+        timers.delete(index);
+      }
+    },
+    cancelAll() {
+      for (const pending of timers.values()) clearTimer(pending);
+      timers.clear();
+    },
+  };
+}
+
+/** V0.3 票 10：PUT 成功后的常驻落定态——服务端确认 → saved；
+ * 打回 edited（该句有改动未被确认）→ needs-reconfirm。均不做定时消失。 */
+export function settleStateAfterSave(
+  sentence: DraftSentenceView
+): Exclude<SentenceSaveState, "saving" | "error"> {
+  return sentence.proofread === "confirmed" ? "saved" : "needs-reconfirm";
+}
 
 export interface SentenceSaveOverrides {
   /** 跳过「没变不发请求」（确认/采用等带指定内容的保存） */
@@ -44,8 +106,8 @@ export function useSentenceSave(options: SentenceSaveOptions) {
   const [saveStates, setSaveStates] = useState<Record<number, SentenceSaveState>>({});
   /** 每句最近一次服务端确认的比对键 */
   const serverKeys = useRef<Record<number, string>>({});
-  /** 每句的防抖保存定时器 */
-  const timers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+  /** 防抖保存器（编辑即置 saving，延迟到期才发请求） */
+  const debouncerRef = useRef<DebouncedSave | null>(null);
   // 函数型 options 每次渲染都是新引用，经 ref 转发保持 commitSave 等稳定
   const optionsRef = useRef(options);
   optionsRef.current = options;
@@ -68,14 +130,12 @@ export function useSentenceSave(options: SentenceSaveOptions) {
 
   /** 清掉全部未触发的防抖定时器（换血、整页确认前） */
   const clearTimers = useCallback(() => {
-    for (const t of Object.values(timers.current)) clearTimeout(t);
-    timers.current = {};
+    debouncerRef.current?.cancelAll();
   }, []);
 
   /** 清单句的未触发定时器（失焦立即保存、切句补存前） */
   const cancelTimer = useCallback((index: number) => {
-    clearTimeout(timers.current[index]);
-    delete timers.current[index];
+    debouncerRef.current?.cancel(index);
   }, []);
 
   /** 清空全部保存态提示（换血后现场重置） */
@@ -103,15 +163,11 @@ export function useSentenceSave(options: SentenceSaveOptions) {
         const body = (await res.json()) as SentenceUpdateResponse;
         serverKeys.current[index] = keyOf(body.sentence);
         applySentence(body.sentence);
-        setSaveStates((prev) => ({ ...prev, [index]: "saved" }));
-        setTimeout(() => {
-          setSaveStates((prev) => {
-            if (prev[index] !== "saved") return prev;
-            const next = { ...prev };
-            delete next[index];
-            return next;
-          });
-        }, SAVED_HINT_MS);
+        // V0.3 票 10：saved / needs-reconfirm 都常驻，不再定时清除
+        setSaveStates((prev) => ({
+          ...prev,
+          [index]: settleStateAfterSave(body.sentence),
+        }));
       } catch {
         setSaveStates((prev) => ({ ...prev, [index]: "error" }));
       }
@@ -119,17 +175,22 @@ export function useSentenceSave(options: SentenceSaveOptions) {
     []
   );
 
-  /** 防抖自动保存（文本改动 / 起止微调共用） */
-  const scheduleSave = useCallback(
-    (index: number) => {
-      clearTimeout(timers.current[index]);
-      timers.current[index] = setTimeout(
-        () => void commitSave(index),
-        DEBOUNCE_MS
-      );
-    },
-    [commitSave]
-  );
+  // 防抖器只建一次；onFlush 经 ref 转发到最新的 commitSave（commitSave 本身稳定）
+  const flushRef = useRef(commitSave);
+  flushRef.current = commitSave;
+  if (debouncerRef.current === null) {
+    debouncerRef.current = createDebouncedSave({
+      // V0.3 票 10：编辑一发生就置 saving（不等 800ms 防抖），替换旧的 saved
+      onEditStart: (index) =>
+        setSaveStates((prev) => ({ ...prev, [index]: "saving" })),
+      onFlush: (index) => void flushRef.current(index),
+    });
+  }
+
+  /** 防抖自动保存（文本改动 / 起止微调共用）：立即置 saving，请求延迟发出 */
+  const scheduleSave = useCallback((index: number) => {
+    debouncerRef.current?.schedule(index);
+  }, []);
 
   /** 整页确认等绕过 commitSave 的路径：记录服务端基线并应用返回句子 */
   const noteServerSentence = useCallback((sentence: DraftSentenceView) => {

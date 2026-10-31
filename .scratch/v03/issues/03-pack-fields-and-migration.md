@@ -32,3 +32,8 @@
 - [ ] 教材列表默认顺序按单元与模块教材序（U1 Talking, U1 Story, U2 Talking…），不是文件名字典序
 - [ ] 退回校对再重新定稿后字段仍正确（unpublish 不删草稿归属）
 - [ ] npm test / typecheck / build 全绿；迁移脚本有单测或用 testdata 目录验证
+
+## Comments
+
+- 2026-10-30 实施：commit 13d82ff（合入 813d5e9）；浏览器实测（v03，1024×768）：迁移脚本 dry-run 后 --apply：u2-dragon-dance→五上-U2/Story time，u3-amazing-plants→五上-U3/Chant time，运行时包 f5fcec05→五上-U3/Reading time，三包同时补 poster；重跑全部 skipped（幂等）。首页三张卡副标题为 Unit2-Story time-7句 / Unit3-Chant time-5句 / Unit3-Reading time-11句。
+- 2026-10-30 code-review 修复：commit 234c27c（迁移/补抽实跑、预览副标题接线、预览门槛三处统一、saving 即时、文案与术语、注册表查找与媒体 URL 收敛、GLOSSARY 补 run 词条）。

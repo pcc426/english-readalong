@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { GET } from "./route";
@@ -129,6 +129,62 @@ describe("GET /api/units/[id]", () => {
       end: 2,
       bestScore: null,
       bestAt: null,
+    });
+  });
+
+  describe("封面 URL 改写（票 01）", () => {
+    it("随代码包带 poster：改写为 shipped 鉴权媒体路由；无 poster 为 null", async () => {
+      setupEnv();
+      // 同目录补一个带 poster 的包（不改动公共种子的其他断言）
+      writeFileSync(
+        path.join(process.env.CONTENT_DIR!, "u3.json"),
+        JSON.stringify({
+          id: "u3-poster",
+          title: "Amazing plants",
+          source: "沪教版五上 Unit 3 · Chant time",
+          video: "五上_U3.mp4",
+          poster: "五上_U3.jpg",
+          sentences: [{ text: "x", start: 0, end: 1 }],
+        }),
+        "utf8"
+      );
+
+      const res = await GET(authedGet(), ctx("u3-poster"));
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.unit.poster).toBe(
+        `/api/media/shipped/${encodeURIComponent("五上_U3.jpg")}`
+      );
+
+      const bare = await GET(authedGet(), ctx("u2-dragon-dance"));
+      expect((await bare.json()).unit.poster).toBeNull();
+    });
+
+    it("上传类（custom）包带 poster：改写为本人鉴权媒体路由", async () => {
+      setupEnv();
+      const owner = accountIdOf("parent@test.com");
+      const dir = path.join(process.env.CONTENT_DATA_DIR!, owner);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(
+        path.join(dir, "my-pack.json"),
+        JSON.stringify({
+          id: "my-pack",
+          title: "家里的英语",
+          source: "custom-upload",
+          video: `${owner}/demo.mp4`,
+          poster: `${owner}/demo.poster.jpg`,
+          type: "custom",
+          owner,
+          sentences: [{ text: "hello", start: 0, end: 0.9 }],
+        }),
+        "utf8"
+      );
+
+      const res = await GET(authedGet(), ctx("my-pack"));
+      expect(res.status).toBe(200);
+      expect((await res.json()).unit.poster).toBe(
+        `/api/media/${owner}/demo.poster.jpg`
+      );
     });
   });
 

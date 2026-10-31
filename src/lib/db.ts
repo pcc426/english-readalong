@@ -25,6 +25,9 @@ export function openDb(dbPath: string): Database.Database {
       stars INTEGER NOT NULL,
       -- 归属字段：MVP 单孩子恒为 NULL，公网化时启用（ADR-0002 的预留）
       owner TEXT,
+      -- 练习 run 归属（票 04）：一次 PracticeFlow 从 begin 到结束/中途退出为一轮，
+      -- 轮内所有 attempt 共享一个 runId；老数据为 NULL（统计口径见 stats.latestRunStars）
+      run_id TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_attempts_unit_sentence
@@ -56,6 +59,8 @@ export function openDb(dbPath: string): Database.Database {
         CHECK (status IN ('transcribing', 'proofreading', 'published')),
       -- 视频相对 uploads 根目录的路径（<accountId>/<uuid>.<ext>），删草稿时一并清理
       video_path TEXT NOT NULL,
+      -- 封面相对 uploads 根目录的路径（<accountId>/<uuid>.poster.jpg）；抽帧失败/未抽为 NULL（票 01）
+      poster_path TEXT,
       -- 转写任务引用：按它向 TranscriptionService 轮询；失败信息可存、草稿保持
       -- transcribing 可重试（转写缝 ADR-0004）
       transcribe_task_id TEXT,
@@ -87,8 +92,12 @@ export function openDb(dbPath: string): Database.Database {
   // SQLite 的 ALTER TABLE 无 IF NOT EXISTS，按 table_info 逐列判断；新库建表已含列则空操作。
   addColumnIfMissing(db, "content_drafts", "unit_id", "unit_id TEXT");
   addColumnIfMissing(db, "content_drafts", "module_kind", "module_kind TEXT");
+  // 封面引用列（票 01）：旧库 ALTER 补上
+  addColumnIfMissing(db, "content_drafts", "poster_path", "poster_path TEXT");
   // V0.1 早期建出的库可能没有 owner 列（多家庭归属，票 10）
   addColumnIfMissing(db, "practice_attempts", "owner", "owner TEXT");
+  // V0.2 建出的库没有 run_id 列（练习 run 归属，票 04）
+  addColumnIfMissing(db, "practice_attempts", "run_id", "run_id TEXT");
   return db;
 }
 

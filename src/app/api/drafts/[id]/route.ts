@@ -8,6 +8,7 @@ import { errorResponse } from "@/lib/http";
 import { deleteDraft, getDraft, listDraftSentences, setDraftTitle } from "@/lib/drafts/repo";
 import { getDraftModule } from "@/lib/drafts/standard-drafts";
 import { deleteUploadVideo } from "@/lib/drafts/storage";
+import { mediaUrl } from "@/lib/media-url";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +35,10 @@ export async function GET(req: Request, ctx: Ctx) {
         moduleKind: module?.moduleKind ?? null,
         status: draft.status,
         videoPath: draft.videoPath,
-        videoUrl: `/api/media/${draft.videoPath}`,
+        videoUrl: mediaUrl(draft.videoPath),
+        // 封面（票 01）：与视频同形相对引用 + 鉴权媒体路由 URL；未抽成时为 null
+        posterPath: draft.posterPath,
+        posterUrl: draft.posterPath ? mediaUrl(draft.posterPath) : null,
         transcribeError: draft.transcribeError,
         createdAt: draft.createdAt,
         sentences: listDraftSentences(db, draft.id),

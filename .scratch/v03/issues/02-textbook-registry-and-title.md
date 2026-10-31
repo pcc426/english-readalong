@@ -36,3 +36,8 @@
 - [ ] 注册表只有五上时 UI 不出现其他学期；以后加书只需注册 + 加 JSON
 - [ ] 枚举外模块名构建期报错信息明确指向 MODULE_KINDS
 - [ ] npm test / typecheck / build 全绿
+
+## Comments
+
+- 2026-10-30 实施：commit 1a45654（合入 dbf00b9）；浏览器实测（v03，1024×768）：制作页版本固定「沪教版（上教新版）」不可选、学期只有「五年级上册」、单元 10 项、模块随单元联动（U1→Talking/Story）；无自由标题输入框；标题预览显示「沪教版五上-Unit1-Talking time-19句」。
+- 2026-10-30 code-review 修复：commit 234c27c（迁移/补抽实跑、预览副标题接线、预览门槛三处统一、saving 即时、文案与术语、注册表查找与媒体 URL 收敛、GLOSSARY 补 run 词条）。

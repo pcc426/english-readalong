@@ -30,3 +30,8 @@
 - [ ] runId 缺省请求评分 200 成功
 - [ ] 单元测试覆盖 latestRunStars：多个 run、未完成 run、同句重复、NULL 回退
 - [ ] npm test / typecheck / build 全绿
+
+## Comments
+
+- 2026-10-30 实施：commit 3e66545（合入 08a1064）；浏览器实测（v03，1024×768）：插入一轮 3 句（3+2+3 星）后首页卡片显示 🌟8（24px）与「上次练习获得」；未练内容显示「还没练过」。多 run / 同句最高 / NULL 回退均有单测。
+- 2026-10-30 code-review 修复：commit 234c27c（迁移/补抽实跑、预览副标题接线、预览门槛三处统一、saving 即时、文案与术语、注册表查找与媒体 URL 收敛、GLOSSARY 补 run 词条）。

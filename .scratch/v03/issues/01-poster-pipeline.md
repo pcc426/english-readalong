@@ -31,3 +31,8 @@
 - [ ] 补抽脚本对仓库 2 个 shipped 视频 + 3 个上传视频全部生成封面，再跑一次幂等跳过
 - [ ] 浏览器中封面 9:16 不变形（object-cover 容器）
 - [ ] npm test / typecheck / build 全绿（基线 410 只增不减）
+
+## Comments
+
+- 2026-10-30 实施：commit 6a5d58b（合入 442830a）；浏览器实测（v03，1024×768）：shipped 2 个视频抽出 content/media/posters/五上_U2.jpg、五上_U3.jpg（360×640），上传 4 个视频各自生成 .poster.jpg 并回填草稿 poster_path；/api/media 对封面按与视频同规则鉴权（本人/被标准包引用放行，其余 404）；ffmpeg 缺失时 fail-open 不阻断上传。
+- 2026-10-30 code-review 修复：commit 234c27c（迁移/补抽实跑、预览副标题接线、预览门槛三处统一、saving 即时、文案与术语、注册表查找与媒体 URL 收敛、GLOSSARY 补 run 词条）。

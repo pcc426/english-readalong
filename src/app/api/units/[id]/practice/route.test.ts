@@ -64,11 +64,13 @@ async function post(
   sentenceIndex: number,
   audio: Blob | null,
   cookie?: string,
-  contentId = "u2-dragon-dance"
+  contentId = "u2-dragon-dance",
+  runId?: string
 ) {
   const form = new FormData();
   if (audio) form.append("audio", audio, "rec.wav");
   form.append("sentenceIndex", String(sentenceIndex));
+  if (runId != null) form.append("runId", runId);
   const req = new Request(`http://x/api/units/${contentId}/practice`, {
     method: "POST",
     headers: { cookie: cookie ?? sessionCookieFor("parent@test.com") },
@@ -111,8 +113,8 @@ function attemptRows() {
   const db = openDb(process.env.DB_PATH!);
   try {
     return db
-      .prepare("SELECT owner, score FROM practice_attempts")
-      .all() as Array<{ owner: string | null; score: number }>;
+      .prepare("SELECT owner, score, run_id FROM practice_attempts")
+      .all() as Array<{ owner: string | null; score: number; run_id: string | null }>;
   } finally {
     db.close();
   }
@@ -209,6 +211,32 @@ describe("POST /api/units/[id]/practice", () => {
     expect(rows[0].owner).toBe(accountIdOf("parent@test.com"));
   });
 
+  describe("练习 run 归属（票 04）", () => {
+    it("带 runId 的提交落库 run_id", async () => {
+      setupEnv();
+      setScoringService(new FakeScoringService(90));
+      const res = await post(0, fakeWav(), undefined, "u2-dragon-dance", "run-abc");
+      expect(res.status).toBe(200);
+      expect(attemptRows()[0].run_id).toBe("run-abc");
+    });
+
+    it("runId 缺省请求评分 200 成功，run_id 落库为 NULL（兼容旧客户端/测试）", async () => {
+      setupEnv();
+      setScoringService(new FakeScoringService(90));
+      const res = await post(0, fakeWav());
+      expect(res.status).toBe(200);
+      expect(attemptRows()[0].run_id).toBeNull();
+    });
+
+    it("空串 runId 按 NULL 处理", async () => {
+      setupEnv();
+      setScoringService(new FakeScoringService(90));
+      const res = await post(0, fakeWav(), undefined, "u2-dragon-dance", "");
+      expect(res.status).toBe(200);
+      expect(attemptRows()[0].run_id).toBeNull();
+    });
+  });
+
   describe("账号隔离（票 10）", () => {
     it("两个账号在同一标准内容上互不干扰：新纪录与最好成绩各自独立", async () => {
       setupEnv();
@@ -227,7 +255,7 @@ describe("POST /api/units/[id]/practice", () => {
       const rows = attemptRows();
       expect(rows).toHaveLength(3);
       expect(rows.filter((r) => r.owner === accountIdOf("parent@test.com"))).toEqual([
-        { owner: accountIdOf("parent@test.com"), score: 90 },
+        { owner: accountIdOf("parent@test.com"), score: 90, run_id: null },
       ]);
       expect(
         rows.filter((r) => r.owner === accountIdOf("other@test.com")).map((r) => r.score)
@@ -245,7 +273,9 @@ describe("POST /api/units/[id]/practice", () => {
       expect(res.status).toBe(200);
       expect(await res.json()).toMatchObject({ score: 93, stars: 3, isNewBest: true });
       const rows = attemptRows();
-      expect(rows).toEqual([{ owner: accountId, score: 93 }]);
+      expect(rows).toEqual([
+        { owner: accountId, score: 93, run_id: null },
+      ]);
     });
 
     it("他人的自定义内容（已发布）404：练习接口不暴露其存在", async () => {

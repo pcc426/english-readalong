@@ -19,10 +19,26 @@ export const contentPackSchema = z
     title: z.string().min(1),
     source: z.string().min(1),
     video: z.string().min(1),
+    /** 竖版封面（9:16 JPEG）相对引用：上传类为 <accountId>/<uuid>.poster.jpg（posterRelPathFor 输出），随代码包为文件名；缺省 = 无封面 */
+    poster: z.string().min(1).optional(),
     /** 内容类型：缺省视为 standard（既有内容包无需修改即合法） */
     type: z.enum(["standard", "custom"]).optional(),
     /** 归属账号 id：standard 必须为空；custom 必须为非空账号 id */
     owner: z.string().min(1).nullable().optional(),
+    /**
+     * 教材归属（票 03，仅标准包写；custom 包不写；可由 bookId+unitNo 推导
+     * unitId，故不冗余存）。全字段可选：V0.3 前的老包未迁移时仍合法。
+     */
+    /** 教材版本机器码（textbook/registry.ts series.code，如 sh-jiaoban-new） */
+    seriesCode: z.string().min(1).optional(),
+    /** 书目注册 id（textbook/registry.ts，如 grade5a） */
+    bookId: z.string().min(1).optional(),
+    /** 教材单元号（1..10，与 unitId「五上-U2」的序号一致） */
+    unitNo: z.number().int().min(1).optional(),
+    /** 教材印刷栏目原名（如 Story time） */
+    moduleKind: z.string().min(1).optional(),
+    /** 课文名（教材 JSON 的 module.title），枚举副标题的课文名来源 */
+    lessonTitle: z.string().min(1).optional(),
     sentences: z.array(sentenceSchema),
   })
   .superRefine((pack, ctx) => {

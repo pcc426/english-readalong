@@ -7,8 +7,10 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { customContentRoot, standardRuntimeDir } from "@/lib/content/loader";
 import type { ContentPack } from "@/lib/content/schema";
+import { textbookPackAttribution } from "@/lib/textbook/textbook";
 import type { Db } from "../db";
 import { listDraftSentences, type Draft, type DraftSentence } from "./repo";
+import { getDraftModule } from "./standard-drafts";
 
 /** 定稿校验的逐句问题：index 为句子序号（与 practice_attempts.sentence_index 同口径）；
  * 草稿级问题（如"没有句子"）index 为 null。 */
@@ -36,8 +38,9 @@ export function standardPackPathFor(packId: string): string {
   return path.join(standardRuntimeDir(), `${packId}.json`);
 }
 
-/** 内容包句子时间以秒为单位（内容模型 schema 约定），草稿内部按毫秒存 */
-function msToSeconds(ms: number): number {
+/** 内容包句子时间以秒为单位（内容模型 schema 约定），草稿内部按毫秒存。
+ * 导出共用（票 08 预览页组装同一换算），保持全站唯一的 ms→0.1s 口径。 */
+export function msToSeconds(ms: number): number {
   return Math.round(ms / 100) / 10;
 }
 
@@ -68,19 +71,39 @@ export function validateDraftSentences(sentences: DraftSentence[]): FinalizeIssu
 
 /** 草稿 → 内容包：id 即草稿 id；title 取草稿标题；video 沿用草稿的视频引用
  * （<accountId>/<file>，播放端经鉴权媒体路由取流）。
- * custom：type/owner 标记归属；standard（12 号票）：公开内容，owner 置空。 */
+ * custom：type/owner 标记归属；standard（12 号票）：公开内容，owner 置空。
+ * 封面（票 01）：草稿抽帧成功时带 poster（两类包都写，缺失不写）。
+ * 教材归属（票 03）：standard 传模块引用时反查注册表写全归属字段 + 课文名；
+ * 引用缺失或查不到都显式抛错——归属静默丢失正是本票要修的 bug，不允许带病落包。 */
 export function buildContentPack(
   draft: Draft,
-  sentences: DraftSentence[]
+  sentences: DraftSentence[],
+  moduleRef?: { unitId: string; moduleKind: string } | null
 ): ContentPack {
   const standard = draft.type === "standard";
+  let attribution: ReturnType<typeof textbookPackAttribution>;
+  if (standard) {
+    if (!moduleRef) {
+      throw new Error(
+        `标准草稿 ${draft.id} 缺 unit_id/module_kind，无法写教材归属（数据损坏，请检查 content_drafts 行）`
+      );
+    }
+    attribution = textbookPackAttribution(moduleRef.unitId, moduleRef.moduleKind);
+    if (!attribution) {
+      throw new Error(
+        `标准草稿 ${draft.id} 的教材引用（${moduleRef.unitId} / ${moduleRef.moduleKind}）在教材注册表里找不到，无法定稿`
+      );
+    }
+  }
   return {
     id: draft.id,
     title: draft.title,
     source: standard ? "standard-upload" : "custom-upload",
     video: draft.videoPath,
+    ...(draft.posterPath ? { poster: draft.posterPath } : {}),
     type: draft.type,
     owner: standard ? null : draft.accountId,
+    ...(attribution ?? {}),
     sentences: sentences.map((s) => ({
       text: s.text,
       start: msToSeconds(s.startMs),
@@ -107,7 +130,8 @@ export function finalizeDraft(db: Db, draft: Draft): ContentPack {
   const issues = validateDraftSentences(sentences);
   if (issues.length > 0) throw new FinalizeValidationError(issues);
 
-  const pack = buildContentPack(draft, sentences);
+  const moduleRef = draft.type === "standard" ? getDraftModule(db, draft.id) : null;
+  const pack = buildContentPack(draft, sentences, moduleRef);
   const abs =
     draft.type === "standard"
       ? standardPackPathFor(pack.id)

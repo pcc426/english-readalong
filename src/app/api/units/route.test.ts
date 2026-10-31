@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { GET } from "./route";
@@ -82,13 +82,19 @@ function seedPublishedCustom(accountId: string) {
   }
 }
 
-function insertAttempt(unitId: string, owner: string | null, sentenceIndex: number, score: number) {
+function insertAttempt(
+  unitId: string,
+  owner: string | null,
+  sentenceIndex: number,
+  score: number,
+  runId: string | null = null
+) {
   const db = openDb(process.env.DB_PATH!);
   try {
     // stars 列是落库快照（列表接口不读它），占位即可
     db.prepare(
-      "INSERT INTO practice_attempts (unit_id, sentence_index, score, stars, owner) VALUES (?, ?, ?, ?, ?)"
-    ).run(unitId, sentenceIndex, score, 1, owner);
+      "INSERT INTO practice_attempts (unit_id, sentence_index, score, stars, owner, run_id) VALUES (?, ?, ?, ?, ?, ?)"
+    ).run(unitId, sentenceIndex, score, 1, owner, runId);
   } finally {
     db.close();
   }
@@ -141,6 +147,40 @@ describe("GET /api/units", () => {
     expect(body.units[0].encouragement).toContain("满星");
   });
 
+  describe("最近一次练习总星数 latestRunStars（票 04）", () => {
+    it("未练过为 null", async () => {
+      setupEnv();
+      const res = await GET(authedGet("http://x/api/units"));
+      const body = await res.json();
+      expect(body.units[0].latestRunStars).toBeNull();
+    });
+
+    it("只有老数据（run_id NULL）回退为每句最佳星之和；有 run 后按最近 run 口径", async () => {
+      setupEnv();
+      const owner = accountIdOf("parent@test.com");
+      // 老数据两句各 3 星（95 分）→ 回退 3 + 3 = 6
+      insertAttempt("u2-dragon-dance", owner, 0, 95);
+      insertAttempt("u2-dragon-dance", owner, 1, 95);
+      let res = await GET(authedGet("http://x/api/units"));
+      let body = await res.json();
+      expect(body.units[0].latestRunStars).toBe(6);
+
+      // 之后一轮新 run 只练 1 句 1 星 → 最近 run 口径，不叠加老数据
+      insertAttempt("u2-dragon-dance", owner, 2, 60, "run-new");
+      res = await GET(authedGet("http://x/api/units"));
+      body = await res.json();
+      expect(body.units[0].latestRunStars).toBe(1);
+    });
+
+    it("按账号隔离：他人的 run 不计入本账号", async () => {
+      setupEnv();
+      insertAttempt("u2-dragon-dance", "acct-other", 0, 95, "run-other");
+      const res = await GET(authedGet("http://x/api/units"));
+      const body = await res.json();
+      expect(body.units[0].latestRunStars).toBeNull();
+    });
+  });
+
   describe("账号隔离与自定义内容（票 10 接线）", () => {
     it("他人的练习记录不计入本账号的完成度", async () => {
       setupEnv();
@@ -172,6 +212,66 @@ describe("GET /api/units", () => {
       expect(body.units.map((u: { id: string }) => u.id)).not.toContain(otherDraft.id);
       // 标准内容照常返回
       expect(body.units.map((u: { id: string }) => u.id)).toContain("u2-dragon-dance");
+    });
+  });
+
+  describe("列表卡新字段（票 05：封面改写 + 单元下拉数据）", () => {
+    it("随代码包带 poster：列表行同样改写为 shipped 鉴权媒体路由；无 poster 为 null", async () => {
+      setupEnv();
+      writeFileSync(
+        path.join(process.env.CONTENT_DIR!, "u3.json"),
+        JSON.stringify({
+          id: "u3-poster",
+          title: "Amazing plants",
+          source: "沪教版五上 Unit 3 · Chant time",
+          video: "五上_U3.mp4",
+          poster: "五上_U3.jpg",
+          sentences: [{ text: "x", start: 0, end: 1 }],
+        }),
+        "utf8"
+      );
+
+      const res = await GET(authedGet("http://x/api/units"));
+      const body = await res.json();
+      const byId = (id: string) =>
+        body.units.find((u: { id: string }) => u.id === id);
+      expect(byId("u3-poster").poster).toBe(
+        `/api/media/shipped/${encodeURIComponent("五上_U3.jpg")}`
+      );
+      expect(byId("u2-dragon-dance").poster).toBeNull();
+    });
+
+    it("运行时标准上传包带 poster：改写为鉴权媒体路由", async () => {
+      setupEnv();
+      const owner = accountIdOf("parent@test.com");
+      const stdDir = path.join(process.env.CONTENT_DATA_DIR!, "standard");
+      mkdirSync(stdDir, { recursive: true });
+      writeFileSync(
+        path.join(stdDir, "up.json"),
+        JSON.stringify({
+          id: "up-pack",
+          title: "Unit 5 Rhyme",
+          source: "standard-upload",
+          video: `${owner}/u5.mp4`,
+          poster: `${owner}/u5.jpg`,
+          sentences: [{ text: "hi", start: 0, end: 1 }],
+        }),
+        "utf8"
+      );
+
+      const res = await GET(authedGet("http://x/api/units"));
+      const row = (await res.json()).units.find(
+        (u: { id: string }) => u.id === "up-pack"
+      );
+      expect(row.poster).toBe(`/api/media/${owner}/u5.jpg`);
+    });
+
+    it("textbookUnits：注册教材全部单元（序号＋英文标题）随响应下发，供单元下拉", async () => {
+      setupEnv();
+      const res = await GET(authedGet("http://x/api/units"));
+      const body = await res.json();
+      expect(body.textbookUnits[0]).toEqual({ no: 1, title: "Clubs in our school" });
+      expect(body.textbookUnits).toHaveLength(10);
     });
   });
 });

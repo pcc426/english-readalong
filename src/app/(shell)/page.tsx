@@ -1,11 +1,18 @@
 "use client";
 
-// 「教材内容」页（票 03）：原首页的单元列表迁入壳内，数据改走 HTTP。
-// V0.2 整改：本页只显示平台公开的沪教版标准内容（spec 界面布局），
-// GET /api/units 已按 onlyStandard 过滤；本账号自定义内容在「自定义内容」页。
+// 「教材内容」首页（票 05，原型变体 A）：顶部工具条（单元/模块筛选）+ 紧凑自适应网格。
+// 数据走 GET /api/units：行含教材归属（票 03）、最近一次练习总星数（票 04）、
+// 鉴权封面地址（票 01/05），默认序＝教材序（loader 排好，页面不重排）；
+// 另返回 textbookUnits（注册教材全部单元）供单元下拉。筛选全在客户端（home-grid.ts）。
 // 未登录时 GET /api/units 返回 401，由壳层统一重定向兜底，这里只标加载失败。
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { sourceLabel } from "@/lib/content/source-label";
+import {
+  filterStandardContent,
+  moduleOptionsFor,
+  type ModuleFilter,
+  type UnitFilter,
+} from "./home-grid";
 
 // 与 GET /api/units 响应对应（壳只走 HTTP，不从 src/lib 引类型）
 interface UnitOverview {
@@ -13,27 +20,30 @@ interface UnitOverview {
   title: string;
   source: string;
   sentenceCount: number;
-  percentages: {
-    threeStar: number;
-    twoStar: number;
-    oneStar: number;
-    unpracticed: number;
-  };
+  /** 教材归属（票 03）；未迁移老包为 null */
+  unitNo: number | null;
+  moduleKind: string | null;
+  /** 枚举串副标题（票 03）；无归属时为 null，回退 sourceLabel 文案 */
+  subtitle: string | null;
+  /** 竖版封面（票 01）；无封面为 null，卡片显示占位 */
+  poster: string | null;
+  /** 最近一次练习获得的总星数（票 04）；从未练过为 null */
+  latestRunStars: number | null;
   encouragement: string;
 }
 
-type Percentages = UnitOverview["percentages"];
-
-const STAR_LABELS: Array<[keyof Percentages, string, string]> = [
-  ["threeStar", "三星", "text-amber-500"],
-  ["twoStar", "两星", "text-orange-400"],
-  ["oneStar", "一星", "text-slate-400"],
-  ["unpracticed", "未练", "text-slate-300"],
-];
+/** 注册教材的单元（响应 textbookUnits 行，票 05） */
+interface TextbookUnit {
+  no: number;
+  title: string;
+}
 
 export default function StandardContentPage() {
   const [units, setUnits] = useState<UnitOverview[] | null>(null);
+  const [textbookUnits, setTextbookUnits] = useState<TextbookUnit[]>([]);
   const [failed, setFailed] = useState(false);
+  const [unitFilter, setUnitFilter] = useState<UnitFilter>("all");
+  const [moduleFilter, setModuleFilter] = useState<ModuleFilter>("all");
 
   useEffect(() => {
     let cancelled = false;
@@ -45,8 +55,14 @@ export default function StandardContentPage() {
           setFailed(true);
           return;
         }
-        const body = (await res.json()) as { units?: UnitOverview[] };
-        if (!cancelled) setUnits(body.units ?? []);
+        const body = (await res.json()) as {
+          units?: UnitOverview[];
+          textbookUnits?: TextbookUnit[];
+        };
+        if (!cancelled) {
+          setUnits(body.units ?? []);
+          setTextbookUnits(body.textbookUnits ?? []);
+        }
       } catch {
         if (!cancelled) setFailed(true);
       }
@@ -56,10 +72,25 @@ export default function StandardContentPage() {
     };
   }, []);
 
+  // 换单元后原模块选择在该单元可能不存在，重置为「全部模块」（原型 A 联动行为）
+  function onUnitChange(raw: string) {
+    setUnitFilter(raw === "all" ? "all" : Number(raw));
+    setModuleFilter("all");
+  }
+
+  const filtered = useMemo(
+    () => (units ? filterStandardContent(units, unitFilter, moduleFilter) : []),
+    [units, unitFilter, moduleFilter]
+  );
+  const moduleOptions = useMemo(
+    () => (units ? moduleOptionsFor(units, unitFilter) : []),
+    [units, unitFilter]
+  );
+
   if (failed) {
     return (
-      <div className="mx-auto max-w-xl px-5 py-8">
-        <h1 className="text-3xl font-bold tracking-tight">教材内容</h1>
+      <div className="mx-auto max-w-7xl px-6 py-8">
+        <h1 className="text-2xl font-bold">教材内容</h1>
         <p className="mt-8 text-lg text-slate-400" role="alert">
           加载失败，请刷新重试
         </p>
@@ -68,51 +99,108 @@ export default function StandardContentPage() {
   }
 
   return (
-    <div className="mx-auto max-w-xl px-5 py-8">
-      <h1 className="text-3xl font-bold tracking-tight">教材内容</h1>
-      <p className="mt-2 text-xl text-slate-500">选一个单元开始练习吧</p>
+    <div className="mx-auto max-w-7xl px-6 py-8">
+      <h1 className="text-2xl font-bold">教材内容</h1>
 
-      {units === null ? (
-        <p className="mt-8 text-lg text-slate-400" role="status">
-          加载中…
-        </p>
+      <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl bg-white p-3 shadow-sm ring-1 ring-slate-100">
+        <select
+          aria-label="按单元筛选"
+          value={unitFilter}
+          onChange={(e) => onUnitChange(e.target.value)}
+          className="rounded-2xl border-0 bg-white px-4 py-2.5 text-base font-medium text-slate-700 ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+        >
+          <option value="all">全部单元</option>
+          {textbookUnits.map((u) => (
+            <option key={u.no} value={u.no}>
+              Unit {u.no} · {u.title}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="按模块筛选"
+          value={moduleFilter}
+          onChange={(e) =>
+            setModuleFilter(e.target.value === "all" ? "all" : e.target.value)
+          }
+          className="rounded-2xl border-0 bg-white px-4 py-2.5 text-base font-medium text-slate-700 ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+        >
+          <option value="all">全部模块</option>
+          {moduleOptions.map((kind) => (
+            <option key={kind} value={kind}>
+              {kind}
+            </option>
+          ))}
+        </select>
+        <span className="ml-auto text-sm text-slate-500" role="status">
+          {units === null ? "加载中…" : `${filtered.length} 个内容`}
+        </span>
+      </div>
+
+      {units !== null && filtered.length === 0 ? (
+        <div className="mt-10 rounded-3xl bg-white p-12 text-center text-slate-500 shadow-sm ring-1 ring-slate-100">
+          这个筛选条件下还没有内容
+        </div>
       ) : (
-        <div className="mt-8 space-y-6">
-          {units.map((unit) => (
-            <a
-              key={unit.id}
-              href={`/units/${unit.id}`}
-              className="block rounded-3xl bg-white p-7 shadow-md ring-1 ring-slate-100 active:bg-slate-50"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <h2 className="text-2xl font-bold">{unit.title}</h2>
-                {/* spec 界面布局：内容列表卡片带「标准 / 自定义」标签；本页全是标准内容 */}
-                <span className="shrink-0 rounded-full bg-sky-100 px-4 py-1 text-lg font-bold text-sky-700">
-                  标准
-                </span>
-              </div>
-              <p className="mt-1 text-lg text-slate-500">
-                {sourceLabel(unit.source)} · {unit.sentenceCount} 句
-              </p>
-
-              <div className="mt-4 flex flex-wrap gap-2 text-lg font-semibold">
-                {STAR_LABELS.map(([key, label, color]) => (
-                  <span
-                    key={key}
-                    className={`rounded-full px-3 py-1 ${color} bg-slate-50`}
-                  >
-                    {label} {unit.percentages[key]}%
-                  </span>
-                ))}
-              </div>
-
-              <p className="mt-4 text-xl leading-relaxed text-emerald-700">
-                {unit.encouragement}
-              </p>
-            </a>
+        <div className="mt-6 grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(168px,1fr))]">
+          {filtered.map((unit) => (
+            <ContentCard key={unit.id} unit={unit} />
           ))}
         </div>
       )}
     </div>
+  );
+}
+
+/** 网格卡（票 05，参照原型 ContentCard 重写）：9:16 封面 + 课文名 + 枚举串 + 总星数 */
+function ContentCard({ unit }: { unit: UnitOverview }) {
+  return (
+    <a
+      href={`/units/${unit.id}`}
+      className="flex flex-col overflow-hidden rounded-3xl bg-white shadow-md ring-1 ring-slate-100 transition hover:-translate-y-0.5 hover:shadow-lg"
+    >
+      {/* 9:16 封面（票 01）；无封面显示占位不裂图 */}
+      {unit.poster ? (
+        // eslint-disable-next-line @next/next/no-img-element -- 鉴权媒体路由的动态路径，未配 next/image 域
+        <img
+          src={unit.poster}
+          alt=""
+          className="aspect-[9/16] w-full object-cover"
+        />
+      ) : (
+        <div className="aspect-[9/16] w-full bg-slate-100" />
+      )}
+      <div className="flex flex-1 flex-col p-3">
+        <div className="flex items-start justify-between gap-2">
+          {/* 主标题＝课文名（票 03 迁移后的包标题） */}
+          <h3 className="text-base font-bold leading-snug">{unit.title}</h3>
+          {/* spec 界面布局：内容卡带「标准」标签；本页全是标准内容。
+              shrink-0 + whitespace-nowrap 防止被长标题挤成竖排（票 05 评审） */}
+          <span className="shrink-0 whitespace-nowrap rounded-full bg-sky-100 px-2.5 py-1 text-xs font-bold text-sky-700">
+            标准
+          </span>
+        </div>
+        {/* 副标题＝枚举串（票 03，服务端拼好下发）；无归属老包回退 sourceLabel 文案 */}
+        <p className="mt-0.5 text-xs leading-snug text-slate-500">
+          {unit.subtitle ??
+            `${sourceLabel(unit.source)} · ${unit.sentenceCount} 句`}
+        </p>
+        <div className="mt-2 flex items-end justify-between gap-2 border-t border-slate-100 pt-2">
+          {unit.latestRunStars != null ? (
+            // 最近一次练习总星数（票 04，spec 决策 23）：🌟N 无空格
+            <span className="text-2xl font-extrabold leading-none text-amber-500">
+              🌟{unit.latestRunStars}
+            </span>
+          ) : (
+            <span className="text-xs font-medium text-slate-400">还没练过</span>
+          )}
+          <span className="text-xs font-bold text-emerald-600">
+            {unit.encouragement}
+          </span>
+        </div>
+        {unit.latestRunStars != null && (
+          <p className="mt-0.5 text-[11px] text-slate-400">上次练习获得</p>
+        )}
+      </div>
+    </a>
   );
 }

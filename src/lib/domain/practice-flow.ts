@@ -8,6 +8,7 @@
 export type FlowState =
   | { step: "idle"; index: number } // 页面打开、还没按"开始"
   | { step: "playing"; index: number } // 正在播放该句示范
+  | { step: "clipDone"; index: number } // 示范播完停在该句（仅 preview 模式，无录音环节）
   | { step: "recording"; index: number } // 示范播完，孩子跟读中
   | { step: "submitting"; index: number } // 录音已提交，评分中
   | {
@@ -55,12 +56,20 @@ export function initialFlow(): FlowState {
   return { step: "idle", index: 0 };
 }
 
+/** 流转模式：practice 正式练习（录音+评分）；preview 预览（V0.3 票 08，播完停住不录音） */
+export type FlowMode = "practice" | "preview";
+
 /** 从 index 的展示态推进到下一句；没有下一句则收尾 */
 function advanceFrom(index: number, total: number): FlowState {
   return index + 1 < total ? { step: "playing", index: index + 1 } : { step: "finished" };
 }
 
-export function reduceFlow(state: FlowState, event: FlowEvent, total: number): FlowState {
+export function reduceFlow(
+  state: FlowState,
+  event: FlowEvent,
+  total: number,
+  mode: FlowMode = "practice"
+): FlowState {
   switch (event.type) {
     case "begin": {
       if (total === 0) return { step: "finished" };
@@ -68,7 +77,11 @@ export function reduceFlow(state: FlowState, event: FlowEvent, total: number): F
       return { step: "playing", index: Math.min(from, total - 1) };
     }
     case "clipEnded":
-      return state.step === "playing" ? { step: "recording", index: state.index } : state;
+      if (state.step !== "playing") return state;
+      // preview：示范播完停在该句等操作（重播/换句），不进录音态
+      return mode === "preview"
+        ? { step: "clipDone", index: state.index }
+        : { step: "recording", index: state.index };
     case "submitting":
       return state.step === "recording" ? { step: "submitting", index: state.index } : state;
     case "submitFailed":
@@ -90,8 +103,10 @@ export function reduceFlow(state: FlowState, event: FlowEvent, total: number): F
       // 出分后"再练一次"：回录音态重录本句
       return state.step === "scored" ? { step: "recording", index: state.index } : state;
     case "replay":
-      // 录音态点"再读一遍"：中断录音，重播本句示范
-      return state.step === "recording" ? { step: "playing", index: state.index } : state;
+      // 录音态（practice）或播完停住态（preview）点"再播一遍"：重播本句示范
+      return state.step === "recording" || state.step === "clipDone"
+        ? { step: "playing", index: state.index }
+        : state;
     case "tick": {
       if (state.step !== "scored" || state.held) return state;
       return state.secondsLeft > 1
@@ -99,7 +114,8 @@ export function reduceFlow(state: FlowState, event: FlowEvent, total: number): F
         : advanceFrom(state.index, total);
     }
     case "skip":
-      if (canSkip(state)) return advanceFrom(state.index, total);
+      // clipDone（preview 播完停住）同样可跳：句句听完后不必录音即可推进
+      if (canSkip(state) || state.step === "clipDone") return advanceFrom(state.index, total);
       return state;
     case "select":
       if (event.index < 0 || event.index >= total) return state;
