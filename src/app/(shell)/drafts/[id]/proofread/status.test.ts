@@ -6,7 +6,6 @@ const base: ProofreadStatusInput = {
   titleSave: "saved",
   sentenceSave: "saved",
   textbookFailed: false,
-  textbookMisaligned: false,
 };
 
 describe("校对页唯一状态条", () => {
@@ -26,38 +25,25 @@ describe("校对页唯一状态条", () => {
     expect(s.tone).toBe("idle");
   });
 
-  it("句子已增删：单条 amber 提示（不再额外渲染第二条）", () => {
-    const s = resolveProofreadStatus({ ...base, textbookMisaligned: true });
-    expect(s.tone).toBe("warn");
-    expect(s.text).toBe("句子已增删，请手动对照复制");
+  it("保存中优先于已保存", () => {
+    expect(resolveProofreadStatus({ ...base, sentenceSave: "saving" })).toEqual({
+      tone: "saving",
+      text: "保存中…",
+    });
   });
 
-  it("保存中压过教材增删提示：编辑时先看到保存态", () => {
-    const s = resolveProofreadStatus({
-      ...base,
-      sentenceSave: "saving",
-      textbookMisaligned: true,
-    });
-    expect(s).toEqual({ tone: "saving", text: "保存中…" });
-  });
-
-  it("保存失败压过教材增删提示", () => {
-    const s = resolveProofreadStatus({
-      ...base,
-      sentenceSave: "error",
-      textbookMisaligned: true,
-    });
+  it("保存失败", () => {
+    const s = resolveProofreadStatus({ ...base, sentenceSave: "error" });
     expect(s.tone).toBe("error");
     expect(s.text).toBe("保存失败，请重试");
   });
 
-  it("待重新确认压过教材增删提示", () => {
+  it("待重新确认：句子被服务端打回 edited", () => {
     const s = resolveProofreadStatus({
       ...base,
       sentenceSave: "needs-reconfirm",
-      textbookMisaligned: true,
     });
-    expect(s.text).toBe("句子已修改，请重新确认");
+    expect(s).toEqual({ tone: "warn", text: "句子已修改，请重新确认" });
   });
 
   it("教材原文加载失败：error 色，优先于保存态", () => {
@@ -75,7 +61,7 @@ describe("校对页唯一状态条", () => {
       ...base,
       actionError: "删除失败",
       sentenceSave: "error",
-      textbookMisaligned: true,
+      textbookFailed: true,
     });
     expect(s.text).toBe("删除失败");
   });

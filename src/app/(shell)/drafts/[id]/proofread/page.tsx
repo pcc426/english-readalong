@@ -12,10 +12,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { adjustBoundsMs, CALIBRATE_STEP_MS, MIN_CLIP_MS } from "@/lib/domain/calibrate";
 import { formatMs, previewGate } from "@/components/shared/draft-ui";
-import {
-  useSentenceSave,
-} from "@/components/shared/use-draft-save";
-import { textbookAligns } from "@/components/proofread/textbook";
+import { useSentenceSave } from "@/components/shared/use-draft-save";
 import {
   resolveProofreadStatus,
   type StatusTone,
@@ -351,17 +348,6 @@ export default function ProofreadPage() {
     }
   }
 
-  /** 票 12：一键采用本句的教材原文（仅 1:1 对齐时可达） */
-  function handleAdopt() {
-    if (!current || !textbookSentences || current.index >= textbookSentences.length)
-      return;
-    cancelTimer(current.index);
-    void commitSave(current.index, {
-      force: true,
-      body: { text: textbookSentences[current.index] },
-    });
-  }
-
   /** 设为播放位（V0.2.3）：把起点/终点设为视频当前播放位置，钳制后防抖保存。
    * ASR 切点偏差可达 10s+，±0.25s 步进不现实——自由播放/拖到想要的位置一键落点。 */
   function setToPlayhead(field: "start" | "end") {
@@ -425,28 +411,20 @@ export default function ProofreadPage() {
       ? "← 返回标准内容制作"
       : "← 返回自定义内容";
 
-  // V0.2 整改：句子被增删后与教材模块不再 1:1 对齐，采用按钮整体隐藏
-  const textbookAligned = textbookAligns(textbookSentences, sentences.length);
+  // V0.3.2：不再比较草稿句子与教材模块是否 1:1 对齐——讯飞断句与教材断句
+  // 天然不同，家长本来就要重切，对齐与否不构成有效信息。教材原文只作参照显示。
   const textbookText =
     current && textbookSentences && current.index < textbookSentences.length
       ? textbookSentences[current.index]
       : null;
 
-  // V0.3 票 10：常驻状态条（互斥单条）。优先级：结构操作错误 > 保存失败 >
-  // 保存中 > 待重新确认（服务端把已确认句打回 edited）> 已保存 > 初始空闲。
-  // 标题保存沿用同一状态集合、同一文案；saved/needs-reconfirm 均常驻，
-  // 下一次编辑开始时被 saving 替换。调用方只渲染、不计时。
-  // V0.3.1 票 04：保存态与教材提示并入唯一的常驻状态条（见 ./status）。
+  // V0.3 票 10 / V0.3.1 票 04：唯一的常驻状态条（见 ./status）。
   // 标题保存沿用同一状态集合、同一文案；调用方只渲染、不计时。
   const status = resolveProofreadStatus({
     actionError,
     titleSave: titleSave ?? "idle",
     sentenceSave: currentSaveState ?? "idle",
     textbookFailed,
-    textbookMisaligned:
-      draft?.type === "standard" &&
-      textbookSentences !== null &&
-      !textbookAligned,
   });
 
   if (notFound || failed || draft === null) {
@@ -595,7 +573,8 @@ export default function ProofreadPage() {
               className="mt-2 w-full resize-none rounded-2xl bg-slate-50 px-4 py-3 text-xl leading-relaxed ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-400"
             />
 
-            {/* 票 12（仅 standard 草稿）：教材原文参照；ASR 文本与时点保留作对照 */}
+            {/* 票 12（仅 standard 草稿）：教材原文参照；V0.3.2 起不再做 1:1 对齐
+                比较，也不提供「采用教材原文」一键替换（断句本就要人工重切） */}
             {textbookText !== null && (
               <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl bg-sky-50 px-3 py-2">
                 <span className="shrink-0 text-sm font-semibold text-sky-700">
@@ -604,16 +583,6 @@ export default function ProofreadPage() {
                 <span className="min-w-0 flex-1 text-sm text-slate-600">
                   {textbookText}
                 </span>
-                {textbookAligned && current.text !== textbookText && (
-                  <button
-                    type="button"
-                    onClick={handleAdopt}
-                    disabled={mutating}
-                    className="shrink-0 rounded-xl bg-sky-100 px-3 py-1.5 text-sm font-semibold text-sky-700 active:bg-sky-200 disabled:opacity-40"
-                  >
-                    采用教材原文
-                  </button>
-                )}
               </div>
             )}
 
