@@ -48,6 +48,8 @@ export interface SentenceDetail {
 export interface ContentDetail {
   id: string;
   title: string;
+  /** 内容类型：custom 仅创建者账号可见，standard 所有账号可见（决定发布提示文案） */
+  type: "standard" | "custom";
   source: string;
   video: string;
   /** 竖版封面（9:16）；无封面为 null。这里是内部 /media/ 地址，owned-content 会改写为鉴权路由 */
@@ -83,6 +85,7 @@ export function getContentDetail(
     return {
       id: pack.id,
       title: pack.title,
+      type: pack.type ?? "standard",
       source: pack.source,
       // 内部的 /media/ 地址不是最终 URL：owned-content 会改写为鉴权媒体路由
       // （随代码内容 → /api/media/shipped/…；上传类 → /api/media/<accountId>/…）

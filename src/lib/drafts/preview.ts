@@ -32,6 +32,7 @@ export function buildPreviewDetail(
   const unit: ContentDetail = {
     id: draft.id,
     title: draft.title,
+    type: draft.type,
     source: draft.type === "standard" ? "standard-upload" : "custom-upload",
     // 草稿视频引用与已发布内容一致（<accountId>/<file>），播放走鉴权媒体路由
     video: mediaUrl(draft.videoPath),

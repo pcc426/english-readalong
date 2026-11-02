@@ -158,27 +158,27 @@ function ContentCard({ unit }: { unit: UnitOverview }) {
       href={`/units/${unit.id}`}
       className="flex flex-col overflow-hidden rounded-3xl bg-white shadow-md ring-1 ring-slate-100 transition hover:-translate-y-0.5 hover:shadow-lg"
     >
-      {/* 9:16 封面（票 01）；无封面显示占位不裂图 */}
-      {unit.poster ? (
-        // eslint-disable-next-line @next/next/no-img-element -- 鉴权媒体路由的动态路径，未配 next/image 域
-        <img
-          src={unit.poster}
-          alt=""
-          className="aspect-[9/16] w-full object-cover"
-        />
-      ) : (
-        <div className="aspect-[9/16] w-full bg-slate-100" />
-      )}
+      {/* 9:16 封面（票 01）；无封面显示占位不裂图。
+          V0.3.1 票 03：「标准」徽标移到封面右上角（与自定义卡片一致），
+          把整行宽度让给标题 */}
+      <div className="relative">
+        {unit.poster ? (
+          // eslint-disable-next-line @next/next/no-img-element -- 鉴权媒体路由的动态路径，未配 next/image 域
+          <img
+            src={unit.poster}
+            alt=""
+            className="aspect-[9/16] w-full object-cover"
+          />
+        ) : (
+          <div className="aspect-[9/16] w-full bg-slate-100" />
+        )}
+        <span className="absolute right-3 top-3 whitespace-nowrap rounded-full bg-sky-100 px-2.5 py-1 text-xs font-bold text-sky-700">
+          标准
+        </span>
+      </div>
       <div className="flex flex-1 flex-col p-3">
-        <div className="flex items-start justify-between gap-2">
-          {/* 主标题＝课文名（票 03 迁移后的包标题） */}
-          <h3 className="text-base font-bold leading-snug">{unit.title}</h3>
-          {/* spec 界面布局：内容卡带「标准」标签；本页全是标准内容。
-              shrink-0 + whitespace-nowrap 防止被长标题挤成竖排（票 05 评审） */}
-          <span className="shrink-0 whitespace-nowrap rounded-full bg-sky-100 px-2.5 py-1 text-xs font-bold text-sky-700">
-            标准
-          </span>
-        </div>
+        {/* 主标题＝课文名（票 03 迁移后的包标题）；独占整行 */}
+        <h3 className="text-base font-bold leading-snug">{unit.title}</h3>
         {/* 副标题＝枚举串（票 03，服务端拼好下发）；无归属老包回退 sourceLabel 文案 */}
         <p className="mt-0.5 text-xs leading-snug text-slate-500">
           {unit.subtitle ??
@@ -193,13 +193,14 @@ function ContentCard({ unit }: { unit: UnitOverview }) {
           ) : (
             <span className="text-xs font-medium text-slate-400">还没练过</span>
           )}
-          <span className="text-xs font-bold text-emerald-600">
-            {unit.encouragement}
-          </span>
         </div>
         {unit.latestRunStars != null && (
           <p className="mt-0.5 text-[11px] text-slate-400">上次练习获得</p>
         )}
+        {/* V0.3.1 票 03：鼓励语 ≤10 字、不与星数并排，独占卡片最下一行 */}
+        <p className="mt-auto pt-1 text-xs font-bold text-emerald-600">
+          {unit.encouragement}
+        </p>
       </div>
     </a>
   );

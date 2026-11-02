@@ -133,8 +133,8 @@ describe("GET /api/units", () => {
     const body = await res.json();
     expect(body.units[0].percentages.threeStar).toBe(33);
     expect(body.units[0].percentages.unpracticed).toBe(67);
-    // 鼓励语随完成状态切换（部分进步 → 鼓励继续档）
-    expect(body.units[0].encouragement).toContain("三星");
+    // 鼓励语随完成状态切换（部分进步 → 鼓励继续档）；V0.3.1 起不再提星级
+    expect(body.units[0].encouragement).toContain("继续");
   });
 
   it("全部句子拿到三星时鼓励语切换为通关档", async () => {

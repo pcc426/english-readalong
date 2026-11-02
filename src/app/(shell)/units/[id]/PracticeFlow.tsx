@@ -14,6 +14,7 @@ import { mapScoreToStars } from "@/lib/domain/stars";
 import { sourceLabel } from "@/lib/content/source-label";
 import type { ContentDetail } from "@/lib/content/view";
 import { cellStars, replayControl } from "./practice-panel";
+import { publishConfirmText } from "./publish-confirm";
 
 // 录音最长秒数：超时自动提交，防止孩子忘按"读好了"一直录
 const MAX_RECORD_SECONDS = 15;
@@ -435,9 +436,7 @@ export default function PracticeFlow({
   async function publishDraft() {
     if (publishing) return;
     if (
-      !window.confirm(
-        `确定把「${unit.title}」定稿发布吗？发布后所有账号可见、可跟读。`
-      )
+      !window.confirm(publishConfirmText(unit.type, unit.title))
     ) {
       return;
     }

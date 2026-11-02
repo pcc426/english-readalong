@@ -15,10 +15,11 @@ import { formatMs, previewGate } from "@/components/shared/draft-ui";
 import {
   useSentenceSave,
 } from "@/components/shared/use-draft-save";
+import { textbookAligns } from "@/components/proofread/textbook";
 import {
-  TEXTBOOK_MISALIGNED_HINT,
-  textbookAligns,
-} from "@/components/proofread/textbook";
+  resolveProofreadStatus,
+  type StatusTone,
+} from "./status";
 import type {
   DraftDetailView,
   DraftSentenceView,
@@ -31,9 +32,8 @@ const ACTION_BTNS =
 const ADJUST_BTNS =
   "rounded-xl bg-slate-100 py-3 text-lg font-bold active:bg-slate-200 disabled:opacity-40";
 
-// V0.3 票 10：常驻状态条四态 + 初始空闲的配色（只切类名，容器始终渲染不塌）。
+// V0.3 票 10 / V0.3.1 票 04：唯一的常驻状态条配色（只切类名，容器始终渲染不塌）。
 // saving 用 animate-pulse 给忙碌感，不引入 spinner 库；idle 为淡色占位。
-type StatusTone = "error" | "saving" | "warn" | "success" | "idle";
 const STATUS_TONE: Record<StatusTone, string> = {
   error: "bg-red-50 text-red-600",
   saving: "bg-slate-100 text-slate-600 animate-pulse",
@@ -412,18 +412,18 @@ export default function ProofreadPage() {
 
   // 票 12 + V0.2 整改：standard 草稿从管理端进入，回「标准内容制作」；
   // custom 草稿回详情页；draft 未加载时退回自定义内容列表兜底
+  // V0.3.1 票 02：自定义草稿返回 V0.3 的新列表（制作中 tab），不再回 V0.2 的
+  // /custom/<id> 单列详情页。
   const backHref =
     draft?.type === "standard"
       ? "/admin/standard"
       : draft
-        ? `/custom/${draft.id}`
+        ? "/custom?tab=making"
         : "/custom";
   const backLabel =
     draft?.type === "standard"
       ? "← 返回标准内容制作"
-      : draft
-        ? "← 返回内容详情"
-        : "← 返回自定义内容";
+      : "← 返回自定义内容";
 
   // V0.2 整改：句子被增删后与教材模块不再 1:1 对齐，采用按钮整体隐藏
   const textbookAligned = textbookAligns(textbookSentences, sentences.length);
@@ -436,40 +436,18 @@ export default function ProofreadPage() {
   // 保存中 > 待重新确认（服务端把已确认句打回 edited）> 已保存 > 初始空闲。
   // 标题保存沿用同一状态集合、同一文案；saved/needs-reconfirm 均常驻，
   // 下一次编辑开始时被 saving 替换。调用方只渲染、不计时。
-  const status: { tone: StatusTone; text: string } = (() => {
-    if (actionError) return { tone: "error" as const, text: actionError };
-    if (titleSave === "error" || currentSaveState === "error")
-      return { tone: "error" as const, text: "保存失败，请重试" };
-    if (titleSave === "saving" || currentSaveState === "saving")
-      return { tone: "saving" as const, text: "保存中…" };
-    if (currentSaveState === "needs-reconfirm")
-      return { tone: "warn" as const, text: "句子已修改，请重新确认" };
-    if (currentSaveState === "saved" || titleSave === "saved")
-      return { tone: "success" as const, text: "所有修改已保存" };
-    // 初始空闲（页面刚加载、无任何修改）：淡色占位，高度不塌
-    return { tone: "idle" as const, text: "所有修改已保存" };
-  })();
-
-  // V0.3 票 10：教材原文提示是另一种常驻信息，不混进保存状态条——
-  // 保持原样条件渲染在状态条下方，不参与保存态切换与跳动问题。
-  const textbookHint:
-    | { role: "alert" | "status"; className: string; text: string }
-    | null =
-    draft?.type === "standard" && textbookFailed
-      ? {
-          role: "alert",
-          className: "bg-red-50 text-red-600",
-          text: "教材原文加载失败，可直接手工校对",
-        }
-      : draft?.type === "standard" &&
-          textbookSentences !== null &&
-          !textbookAligned
-        ? {
-            role: "status",
-            className: "bg-amber-50 text-amber-700",
-            text: TEXTBOOK_MISALIGNED_HINT,
-          }
-        : null;
+  // V0.3.1 票 04：保存态与教材提示并入唯一的常驻状态条（见 ./status）。
+  // 标题保存沿用同一状态集合、同一文案；调用方只渲染、不计时。
+  const status = resolveProofreadStatus({
+    actionError,
+    titleSave: titleSave ?? "idle",
+    sentenceSave: currentSaveState ?? "idle",
+    textbookFailed,
+    textbookMisaligned:
+      draft?.type === "standard" &&
+      textbookSentences !== null &&
+      !textbookAligned,
+  });
 
   if (notFound || failed || draft === null) {
     return (
@@ -569,23 +547,15 @@ export default function ProofreadPage() {
           </span>
         </div>
 
-        {/* V0.3 票 10：固定高度常驻状态条——min-h 与单行文案等高（text-sm
-            行高 1.25rem + py-1.5 = 2rem），始终渲染只切文案/配色，右栏不跳动 */}
+        {/* V0.3 票 10 / V0.3.1 票 04：唯一状态条——min-h 与单行文案等高
+            （text-sm 行高 1.25rem + py-1.5 = 2rem），始终渲染只切文案/配色，
+            右栏不跳动；教材相关提示也并入这里，不再单独占一行 */}
         <p
           role={status.tone === "error" ? "alert" : "status"}
           className={`flex min-h-8 items-center rounded-xl px-3 py-1.5 text-sm ${STATUS_TONE[status.tone]}`}
         >
           {status.text}
         </p>
-
-        {textbookHint && (
-          <p
-            role={textbookHint.role}
-            className={`rounded-xl px-3 py-1.5 text-sm ${textbookHint.className}`}
-          >
-            {textbookHint.text}
-          </p>
-        )}
 
         {current && (
           <section className="rounded-3xl bg-white p-4 shadow-md ring-1 ring-slate-100">

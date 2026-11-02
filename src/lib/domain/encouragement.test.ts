@@ -22,7 +22,7 @@ describe("鼓励语选择", () => {
     const line = encouragementFor(
       dist({ threeStar: 25, twoStar: 25, oneStar: 25, unpracticed: 25 })
     );
-    expect(line).toContain("三星");
+    expect(line).toContain("继续");
   });
 
   it("全部三星：庆祝通关", () => {
@@ -30,5 +30,17 @@ describe("鼓励语选择", () => {
       dist({ threeStar: 100, twoStar: 0, oneStar: 0, unpracticed: 0 })
     );
     expect(line).toContain("满星");
+  });
+
+  it("三档文案都不超过 10 字（含标点），且不提「三星」", () => {
+    const lines = [
+      encouragementFor(dist({ threeStar: 0, twoStar: 0, oneStar: 0, unpracticed: 100 })),
+      encouragementFor(dist({ threeStar: 25, twoStar: 25, oneStar: 25, unpracticed: 25 })),
+      encouragementFor(dist({ threeStar: 100, twoStar: 0, oneStar: 0, unpracticed: 0 })),
+    ];
+    for (const line of lines) {
+      expect([...line].length).toBeLessThanOrEqual(10);
+      expect(line).not.toContain("三星");
+    }
   });
 });
