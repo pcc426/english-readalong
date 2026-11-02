@@ -141,4 +141,51 @@ describe("parseLfasrSentences", () => {
       { text: "How are you?", startMs: 2390, endMs: 3640 },
     ]);
   });
+
+  it("V0.3.3 一帧多句：按词级 wb/we + 句末标点重切成多句", () => {
+    const frame = {
+      st: {
+        bg: "1000",
+        ed: "5000",
+        rt: [
+          {
+            ws: [
+              { wb: 0, we: 50, cw: [{ w: " Hello", wp: "n" }] },
+              { wb: 50, we: 120, cw: [{ w: " there.", wp: "p" }] },
+              { wb: 200, we: 260, cw: [{ w: " How", wp: "n" }] },
+              { wb: 260, we: 400, cw: [{ w: " are you?", wp: "p" }] },
+            ],
+          },
+        ],
+      },
+    };
+    expect(parseLfasrSentences({ data: [frame] })).toEqual([
+      { text: "Hello there.", startMs: 1000, endMs: 2200 },
+      { text: "How are you?", startMs: 3000, endMs: 5000 },
+    ]);
+  });
+
+  it("V0.3.3 无标点时按停顿阈值切开，阈值可传参", () => {
+    const frame = {
+      st: {
+        bg: "0",
+        ed: "4000",
+        rt: [
+          {
+            ws: [
+              { wb: 0, we: 40, cw: [{ w: " Hello", wp: "n" }] },
+              { wb: 40, we: 100, cw: [{ w: " everyone", wp: "n" }] },
+              { wb: 200, we: 240, cw: [{ w: " let's", wp: "n" }] },
+              { wb: 240, we: 300, cw: [{ w: " start", wp: "n" }] },
+            ],
+          },
+        ],
+      },
+    };
+    // 词间静默 1000ms（100→200 帧）
+    expect(parseLfasrSentences({ data: [frame] })).toHaveLength(2);
+    expect(
+      parseLfasrSentences({ data: [frame] }, { pauseMs: 5000 })
+    ).toHaveLength(1);
+  });
 });

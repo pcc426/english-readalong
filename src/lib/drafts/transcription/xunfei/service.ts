@@ -10,6 +10,7 @@ import {
   type UploadPayloadBuilder,
 } from "./payload";
 import { isRecord, parseLfasrSentences } from "./parse";
+import { lfasrPauseMs } from "../env";
 import { lfasrSigna } from "./signa";
 import type { DurationProbe } from "../../probe";
 
@@ -129,7 +130,10 @@ export class XunfeiTranscriptionService implements TranscriptionService {
       const inner = (decoded.orderInfo ?? {}) as Record<string, unknown>;
       return { state: "failed", error: failMessage(inner.failType) };
     }
-    const sentences = parseLfasrSentences(decoded);
+    // V0.3.3：帧内按句末标点/停顿重切，停顿阈值可由 LFASR_PAUSE_MS 调整
+    const sentences = parseLfasrSentences(decoded, {
+      pauseMs: lfasrPauseMs(),
+    });
     if (sentences.length === 0) {
       // 完成但没有句子：对跟读内容来说等于不可用，按失败保持可重试
       return { state: "failed", error: "讯飞转写完成但未识别到语音内容" };

@@ -1,4 +1,15 @@
 import type { TranscribedSentence } from "../types";
+import {
+  DEFAULT_PAUSE_MS,
+  splitWordsIntoSentences,
+  type LfasrWord,
+} from "./resplit";
+
+export interface ParseOptions {
+  /** 无句末标点时的停顿兜底阈值（毫秒），默认 700（V0.3.3） */
+  pauseMs?: number;
+}
+
 
 /**
  * LFASR 转写结果解析（纯函数）。
@@ -13,8 +24,11 @@ import type { TranscribedSentence } from "../types";
  * 非法时间（end ≤ start 或非数字）剔除；输出保持文档顺序（帧按时间序）。
  * 真实生产形态由 scripts/smoke-lfasr.ts 实机校验。
  */
-export function parseLfasrSentences(decoded: unknown): TranscribedSentence[] {
-  const candidates = collectCandidates(decoded, 0);
+export function parseLfasrSentences(
+  decoded: unknown,
+  options: ParseOptions = {}
+): TranscribedSentence[] {
+  const candidates = collectCandidates(decoded, 0, options);
   return collapseAndFilter(candidates);
 }
 
@@ -31,15 +45,19 @@ interface SentenceCandidate {
  * 字符串化两层）→ 帧 → rt → ws，最深约 8 层；上限取 10 防
  * 循环引用/恶意深度。
  */
-function collectCandidates(node: unknown, depth: number): SentenceCandidate[] {
+function collectCandidates(
+  node: unknown,
+  depth: number,
+  options: ParseOptions
+): SentenceCandidate[] {
   if (depth > 10 || node == null) return [];
   // 字符串：可能是 json_1best / data 字符串化 / onebest 条目，先解 JSON
   if (typeof node === "string") {
     const parsed = tryJsonParse(node);
-    return parsed === undefined ? [] : collectCandidates(parsed, depth + 1);
+    return parsed === undefined ? [] : collectCandidates(parsed, depth + 1, options);
   }
   if (Array.isArray(node)) {
-    return node.flatMap((child) => collectCandidates(child, depth + 1));
+    return node.flatMap((child) => collectCandidates(child, depth + 1, options));
   }
   if (!isRecord(node)) return [];
 
@@ -52,10 +70,24 @@ function collectCandidates(node: unknown, depth: number): SentenceCandidate[] {
     return [{ text: node.onebest, bg: node.bg, ed: node.ed }];
   }
 
-  // 帧：st 是对象且带句级 bg/ed → 一帧一句，文本从 rt 里拼
-  // （json_1best 里 rt 挂在 st 下；个别变体挂在帧级，一并兜住）
+  // 帧：st 是对象且带句级 bg/ed。V0.3.3：一帧可能含多句——用帧内词流
+  // （ws[].wb/we 词帧 + cw[].wp 词性）按句末标点/停顿重切，不再一帧一句。
   const st = node.st;
   if (isRecord(st) && typeof st.bg === "string" && typeof st.ed === "string") {
+    const frameStartMs = Number(st.bg);
+    const frameEndMs = Number(st.ed);
+    const words = collectFrameWords(st.rt ?? node.rt ?? node.ws, frameStartMs);
+    if (words.length > 0 && Number.isFinite(frameStartMs) && Number.isFinite(frameEndMs)) {
+      return splitWordsIntoSentences(words, {
+        pauseMs: options.pauseMs ?? DEFAULT_PAUSE_MS,
+        frameStartMs,
+        frameEndMs,
+      }).map((s) => ({
+        text: s.text,
+        bg: String(s.startMs),
+        ed: String(s.endMs),
+      }));
+    }
     return [
       {
         text: joinFrameWords(st.rt ?? node.rt ?? node.ws),
@@ -84,7 +116,48 @@ function collectCandidates(node: unknown, depth: number): SentenceCandidate[] {
     node.rt,
     node.ws,
   ];
-  return children.flatMap((child) => collectCandidates(child, depth + 1));
+  return children.flatMap((child) => collectCandidates(child, depth + 1, options));
+}
+
+/** 帧内词流（V0.3.3）：ws 项带 wb/we（帧，10ms，相对 st.bg）与 cw[].w/wp */
+function collectFrameWords(rt: unknown, frameStartMs: number): LfasrWord[] {
+  const out: LfasrWord[] = [];
+  visit(rt);
+  return out;
+
+  function visit(node: unknown): void {
+    if (Array.isArray(node)) {
+      node.forEach(visit);
+      return;
+    }
+    if (!isRecord(node)) return;
+    if (Array.isArray(node.cw)) {
+      const text = node.cw
+        .map((c) => (isRecord(c) && typeof c.w === "string" ? c.w : ""))
+        .join("");
+      if (!text.trim()) return;
+      const wb = Number(node.wb);
+      const we = Number(node.we);
+      const timed = Number.isFinite(wb) && Number.isFinite(we);
+      out.push({
+        text,
+        wp: lastWp(node.cw),
+        startMs: timed ? frameStartMs + wb * 10 : null,
+        endMs: timed ? frameStartMs + we * 10 : null,
+      });
+      return;
+    }
+    if (Array.isArray(node.ws)) visit(node.ws);
+  }
+}
+
+/** cw 里最后一个非空 wp（讯飞标点通常单独占一个 cw） */
+function lastWp(cw: unknown[]): string | undefined {
+  let wp: string | undefined;
+  for (const item of cw) {
+    if (isRecord(item) && typeof item.wp === "string" && item.wp) wp = item.wp;
+  }
+  return wp;
 }
 
 /** ws 级文本：优先第一条非空 rl（整句 onebest），否则 cw[].w 拼接 */

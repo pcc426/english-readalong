@@ -3,6 +3,8 @@
  * 凭据三件套：讯飞开放平台「录音文件转写」服务的 APPID / APIKey / APISecret，
  * 与语音评测（XFYUN_*）是两套凭据，不混用。
  */
+import { DEFAULT_PAUSE_MS } from "./xunfei/resplit";
+
 export const LFASR_CREDENTIAL_KEYS = [
   "LFASR_APP_ID",
   "LFASR_API_KEY",
@@ -61,4 +63,16 @@ export function extractAudioFromEnv(
 ): boolean {
   const v = env.LFASR_EXTRACT_AUDIO;
   return v === "1" || v === "true";
+}
+
+/**
+ * 无标点时的停顿兜底阈值（V0.3.3）：LFASR_PAUSE_MS，默认 700ms。
+ * 实测 430ms 会把正常连读误切成两句，故默认取 700；调参无需改代码。
+ */
+export function lfasrPauseMs(
+  env: Record<string, string | undefined> = process.env
+): number {
+  const raw = env.LFASR_PAUSE_MS;
+  const n = raw === undefined ? NaN : Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_PAUSE_MS;
 }
