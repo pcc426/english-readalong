@@ -477,8 +477,8 @@ export default function PracticeFlow({
 
   return (
     <>
-      {/* 左列：视频常驻（竖版占满高度，横版按宽适配），REC 角标叠加其上；
-          出分鼓励语渲染在右列，视频尺寸恒定不再被挤压 */}
+      {/* 左列：视频常驻（竖版占满高度，横版按宽适配）；录音时盖中央大麦克风蒙版
+          （V0.3.4 票 03，石墨灰低亮度配色），提醒孩子现在轮到自己读 */}
       <div className="relative flex min-w-0 flex-1 items-center justify-center bg-black">
         <video
           ref={videoRef}
@@ -488,9 +488,28 @@ export default function PracticeFlow({
           className="max-h-full max-w-full object-contain"
         />
         {state.step === "recording" && recorderActive && (
-          <div className="absolute left-3 top-3 flex items-center gap-2 rounded-full bg-red-600 px-3 py-1 text-lg font-bold text-white">
-            <span className="inline-block h-3 w-3 animate-pulse rounded-full bg-white" />
-            REC {recordSeconds}s
+          <div
+            role="status"
+            aria-live="polite"
+            className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center bg-black/55"
+          >
+            <div className="relative flex h-52 w-52 items-center justify-center">
+              <span
+                className="absolute inset-0 animate-ping rounded-full bg-white/5"
+                style={{ animationDuration: "2.6s" }}
+              />
+              <span
+                className="absolute inset-6 animate-ping rounded-full bg-slate-200/15"
+                style={{ animationDuration: "2.2s" }}
+              />
+              <span className="relative flex h-28 w-28 items-center justify-center rounded-full bg-slate-800/85 text-6xl shadow-lg ring-1 ring-white/20">
+                🎙️
+              </span>
+            </div>
+            <p className="mt-7 text-3xl font-extrabold text-white">该你读了</p>
+            <p className="mt-1 text-lg font-bold tabular-nums text-slate-300">
+              {recordSeconds} 秒
+            </p>
           </div>
         )}
       </div>

@@ -48,3 +48,7 @@
 - [ ] 改文本触发 autosave 后：按钮自动回到可点的「✓ 确认本句」，状态条显示「句子已修改，请重新确认」
 - [ ] 左侧/右侧其他元素不受影响；npm test / typecheck / build 全绿
 - [ ] 1024×768 浏览器实测，记录颜色与尺寸到 `## Comments`
+
+## Comments
+
+- 2026-11-02 实施并验收（v0.3.4）：已确认句渲染为独立 disabled 按钮：bg-slate-200 / text-slate-500 / 无阴影，文案「✓ 本句已确认」（✓ 单独翡翠绿）；未确认句保持 emerald-500 可点。实测（临时库副本 3003）：确认前 bg-emerald-500 可点 → 确认后 bg-slate-200 disabled:true 无阴影；改文本后自动回「✓ 确认本句」。 全量 603 测试通过（v0.3.3 基线 594 + 9），typecheck / build（停 dev 后）绿。

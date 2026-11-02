@@ -60,3 +60,7 @@
 - [ ] 蒙版不遮挡右栏，也不影响视频控件/其他点击（pointer-events 生效）
 - [ ] 1024×768 与手机宽度下都居中、不溢出
 - [ ] npm test / typecheck / build 全绿；实测数据写进 `## Comments`
+
+## Comments
+
+- 2026-11-02 实施并验收（v0.3.4）：删除左上角红色 REC 角标，改为视频容器内绝对定位蒙版：bg-black/55 + pointer-events-none + role=status/aria-live=polite；中央两道慢速脉冲（bg-white/5@2.6s、bg-slate-200/15@2.2s）+ 石墨灰圆盘（slate-800/85、ring-white/20、🎙️ text-6xl）+「该你读了」(30px) + 「N 秒」。实测（伪造静音音轨绕过无头浏览器麦克风限制）：蒙版 400×699 盖满视频列、不盖右栏；录音结束立即消失；recordSeconds 计时逻辑未动。 全量 603 测试通过（v0.3.3 基线 594 + 9），typecheck / build（停 dev 后）绿。

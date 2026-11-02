@@ -663,18 +663,26 @@ export default function ProofreadPage() {
               </button>
             </div>
 
-            <button
-              type="button"
-              onClick={confirmSentence}
-              disabled={mutating || currentSaveState === "saving"}
-              className={`mt-3 w-full rounded-2xl py-4 text-xl font-bold text-white shadow-md active:bg-emerald-600 disabled:opacity-40 ${
-                current.proofread === "confirmed" ? "bg-emerald-600" : "bg-emerald-500"
-              }`}
-            >
-              {current.proofread === "confirmed"
-                ? "本句已确认 ✓"
-                : "✓ 确认本句"}
-            </button>
+            {/* V0.3.4 票 02：已确认态置灰并真正禁用（避免与「确认本句」的可点态混淆）；
+                编辑后被服务端打回 edited 会自动回到可点的翡翠绿态 */}
+            {current.proofread === "confirmed" ? (
+              <button
+                type="button"
+                disabled
+                className="mt-3 w-full rounded-2xl bg-slate-200 py-4 text-xl font-bold text-slate-500 shadow-none"
+              >
+                <span className="text-emerald-600">✓</span> 本句已确认
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={confirmSentence}
+                disabled={mutating || currentSaveState === "saving"}
+                className="mt-3 w-full rounded-2xl bg-emerald-500 py-4 text-xl font-bold text-white shadow-md active:bg-emerald-600 disabled:opacity-40"
+              >
+                ✓ 确认本句
+              </button>
+            )}
           </section>
         )}
 

@@ -9,6 +9,7 @@ import { listDraftsByAccount, sentenceCountsByDraft, confirmedCountsByDraft } fr
 import { draftModuleMapByAccount } from "@/lib/drafts/standard-drafts";
 import { latestRunStars } from "@/lib/domain/stats";
 import { mediaUrl } from "@/lib/media-url";
+import { standardEnumSubtitleForModule } from "@/lib/textbook/enum-subtitle";
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +54,16 @@ export async function GET(req: Request) {
           confirmedCount: confirmed.get(d.id) ?? 0,
           // 封面（票 01）：抽帧完成才有，转写期间列表对缺失容忍（null → 占位）
           posterUrl: d.posterPath ? mediaUrl(d.posterPath) : null,
+          // 枚举串（V0.3.4 票 04）：标准草稿服务端生成（与首页同源）；
+          // custom / 注册表查不到为 null（卡片回退 unitId · moduleKind 文案）
+          subtitle:
+            d.type === "standard" && module
+              ? standardEnumSubtitleForModule(
+                  module.unitId,
+                  module.moduleKind,
+                  counts.get(d.id) ?? 0
+                )
+              : null,
           latestRunStars:
             d.status === "published"
               ? latestRunStars(db, d.id, { owner: auth.account.id })

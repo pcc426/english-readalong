@@ -104,3 +104,7 @@ src/app/(shell)/admin/standard/
 - [ ] `删除` 是小号灰字、hover 变红、无下划线，确认后删除并刷新
 - [ ] 非管理员访问两个页面都看到「无权限」卡；未登录跳登录页
 - [ ] npm test / typecheck / build 全绿（若改 `/api/drafts` 响应需补测试）；1024×768 实测并记录到 `## Comments`
+
+## Comments
+
+- 2026-11-02 实施并验收（v0.3.4）：拆分：page.tsx（列表，server）+ upload/page.tsx（上传，server）+ catalog.ts + types.tsx（catalog 类型 + useAdminAccess + AccessGate）+ StandardDraftList.tsx + StandardUploadForm.tsx；StandardAdminClient.tsx 删除。/api/drafts 标准草稿补 subtitle（服务端 standardEnumSubtitleForModule，与首页同源）。列表：max-w-6xl、tab 制作中/已定稿、auto-fill 180px 网格卡（封面+标准/状态徽标+课文名+枚举串+进度条）；主操作纵向无框带箭头（去校对琥珀 / 去预览翡翠绿 / 查看翡翠绿 / 退回校对红色）；删除＝小号灰字 hover 变红；未确认提示文字按用户要求删除。上传页字段样式与拆分前一致，跳转 /admin/standard。实测：空态文案、上传→3 秒倒计时回列表新内容第一位、全确认卡（去校对+去预览 30px 纵向 18px）、已定稿卡（查看+退回校对+删除）、非管理员/未登录门禁待用户真机复验（无头浏览器以临时管理员账号完成主链路）。 全量 603 测试通过（v0.3.3 基线 594 + 9），typecheck / build（停 dev 后）绿。

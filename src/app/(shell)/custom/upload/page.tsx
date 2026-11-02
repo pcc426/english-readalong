@@ -7,11 +7,19 @@
 // 文件选择复用 VideoFileField（预检 mp4/m4v/mov、200MB 内置；时长 5 分钟
 // 由服务端校验）。步骤流转/校验的纯函数见同目录 upload-wizard。
 // UI 不做自动化测试，走 iPad 真机手工验收清单（spec · Testing Decisions）。
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { MAX_MB } from "@/components/shared/upload-precheck";
 import { VideoFileField } from "@/components/shared/video-file-field";
+import {
+  uploadWithProgress,
+} from "@/components/shared/upload-with-progress";
+import {
+  useCountdown,
+  percentOf,
+  AUTO_NAVIGATE_SECONDS,
+} from "@/components/shared/upload-countdown";
 import {
   STEP_TITLES,
   canGoNext,
@@ -28,6 +36,17 @@ export default function CustomUploadPage() {
   const [title, setTitle] = useState("");
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // V0.3.4 票 01：上传进度（百分比）、取消句柄、完成后的 3 秒倒计时
+  const [percent, setPercent] = useState(0);
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const cancelRef = useRef<(() => void) | null>(null);
+  const navigatedRef = useRef(false);
+
+  function navigateToList() {
+    if (navigatedRef.current) return;
+    navigatedRef.current = true;
+    router.push("/custom?tab=making");
+  }
 
   async function handleUpload() {
     if (uploading) return;
@@ -39,25 +58,41 @@ export default function CustomUploadPage() {
     }
     setUploading(true);
     setError(null);
+    setPercent(0);
+    navigatedRef.current = false;
+    const form = new FormData();
+    form.set("title", title.trim());
+    form.set("file", file);
+    const handle = uploadWithProgress({
+      url: "/api/uploads",
+      body: form,
+      onProgress: (loaded, total) => setPercent(percentOf(loaded, total)),
+    });
+    cancelRef.current = handle.cancel;
     try {
-      const form = new FormData();
-      form.set("title", title.trim());
-      form.set("file", file);
-      const res = await fetch("/api/uploads", { method: "POST", body: form });
+      const res = await handle.promise;
       if (res.status === 201) {
-        // 成功不留在上传页：跳回列表「制作中」tab 看转写进度
-        router.push("/custom?tab=making");
+        // 成功不留在上传页：3 秒倒计时后跳回列表「制作中」tab（可提前点按钮前往）
+        setCountdown(AUTO_NAVIGATE_SECONDS);
         return;
       }
-      const body = (await res.json().catch(() => null)) as {
-        error?: { message?: string };
-      } | null;
+      if (res.status === 0) {
+        // 用户取消：回 idle 可重试，已选文件与标题保留
+        setError("已取消上传");
+        return;
+      }
+      const body = res.body as { error?: { message?: string } } | null;
       setError(body?.error?.message ?? "上传失败，请重试");
     } catch {
       setError("网络开小差了，请重试");
     } finally {
       setUploading(false);
+      cancelRef.current = null;
     }
+  }
+
+  function cancelUpload() {
+    cancelRef.current?.();
   }
 
   return (
@@ -129,7 +164,7 @@ export default function CustomUploadPage() {
         <div className="mt-6 flex justify-between gap-3">
           <button
             type="button"
-            disabled={step === 0 || uploading}
+            disabled={step === 0 || uploading || countdown !== null}
             onClick={() => {
               setError(null);
               setStep((s) => goPrev(s));
@@ -150,17 +185,65 @@ export default function CustomUploadPage() {
           ) : (
             <button
               type="button"
-              disabled={uploading}
+              disabled={uploading || countdown !== null}
               onClick={() => void handleUpload()}
               className="rounded-2xl bg-emerald-500 px-8 py-3 text-base font-bold text-white shadow-md hover:bg-emerald-600 disabled:opacity-40"
             >
-              {uploading ? "上传中…" : "上传并开始转写"}
+              {uploading
+                ? `上传中… ${percent}%`
+                : countdown !== null
+                  ? `上传完成 · ${countdown} 秒后自动前往`
+                  : "上传并开始转写"}
             </button>
           )}
         </div>
+
+        {/* V0.3.4 票 01：上传中的进度与取消；完成后的立即前往。
+            倒计时由挂载在完成态的 <AutoNavigate/> 驱动 */}
+        {uploading && (
+          <div className="mt-3">
+            <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+              <div
+                className="h-full rounded-full bg-emerald-400 transition-all"
+                style={{ width: `${percent}%` }}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={cancelUpload}
+              className="mt-3 w-full rounded-2xl py-2.5 text-base font-bold text-slate-500 ring-1 ring-slate-200 hover:bg-slate-50"
+            >
+              取消上传
+            </button>
+          </div>
+        )}
+        {countdown !== null && (
+          <>
+            <AutoNavigate onDone={navigateToList} onTick={setCountdown} />
+            <button
+              type="button"
+              onClick={navigateToList}
+              className="mt-3 w-full rounded-2xl py-2.5 text-base font-bold text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-50"
+            >
+              立即前往「制作中」
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
+}
+
+/** 挂载即开始 3-2-1，到 0 调 onDone（导航）；卸载即取消 */
+function AutoNavigate({
+  onDone,
+  onTick,
+}: {
+  onDone: () => void;
+  onTick: (n: number) => void;
+}) {
+  useCountdown({ onDone, onTick });
+  return null;
 }
 
 /** 顶部步骤指示条：编号圆点 + 标题 + 连线；已过态 ✓、当前与已过态 emerald（原型 C） */
