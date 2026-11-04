@@ -203,6 +203,126 @@ function ResetPasswordForm() {
   );
 }
 
+/** 教材内容可见性开关（v0.3.6）：默认关闭 = 仅管理员可见；打开 = 所有账号可见 */
+function ContentVisibilityCard() {
+  const [isPublic, setIsPublic] = useState<boolean | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/admin/content-visibility");
+        if (cancelled) return;
+        if (!res.ok) {
+          setLoading(false);
+          setError("读取可见性设置失败，请刷新重试");
+          return;
+        }
+        const body = (await res.json()) as { standardContentPublic?: boolean };
+        if (!cancelled) {
+          setIsPublic(body.standardContentPublic === true);
+          setLoading(false);
+        }
+      } catch {
+        if (!cancelled) {
+          setLoading(false);
+          setError("网络开小差了，请刷新重试");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function toggle() {
+    if (saving || isPublic === null) return;
+    const next = !isPublic;
+    setSaving(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await fetch("/api/admin/content-visibility", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ standardContentPublic: next }),
+      });
+      const body = (await res.json().catch(() => null)) as {
+        standardContentPublic?: boolean;
+        error?: { message?: string };
+      } | null;
+      if (!res.ok) {
+        setSaving(false);
+        setError(body?.error?.message ?? "保存失败，请重试");
+        return;
+      }
+      const actual = body?.standardContentPublic ?? next;
+      setIsPublic(actual);
+      setSaving(false);
+      setNotice(
+        actual ? "已对家庭账号开放教材内容" : "已收紧为仅管理员可见"
+      );
+    } catch {
+      setSaving(false);
+      setError("网络开小差了，请重试");
+    }
+  }
+
+  const on = isPublic === true;
+
+  return (
+    <section className="mt-6 rounded-3xl bg-white p-7 shadow-md ring-1 ring-slate-100">
+      <div className="flex items-start justify-between gap-6">
+        <div className="max-w-xl">
+          <h2 className="text-2xl font-bold tracking-tight">教材内容可见性</h2>
+          <p className="mt-2 text-base text-slate-500">
+            关闭时，家庭账号看不到「教材内容」入口，也无法播放标准教材视频；管理员不受影响。
+          </p>
+          <p
+            className={`mt-3 text-lg font-bold ${
+              loading ? "text-slate-400" : on ? "text-emerald-600" : "text-amber-600"
+            }`}
+            role="status"
+          >
+            {loading ? "读取中…" : on ? "对家庭账号开放" : "仅管理员可见"}
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={on}
+          aria-label="教材内容对家庭账号开放"
+          disabled={loading || saving || isPublic === null}
+          onClick={toggle}
+          className={`relative mt-1 h-9 w-16 shrink-0 rounded-full transition ${
+            on ? "bg-emerald-500" : "bg-slate-300"
+          } disabled:opacity-50`}
+        >
+          <span
+            className={`absolute top-1 h-7 w-7 rounded-full bg-white shadow transition-all ${
+              on ? "left-8" : "left-1"
+            }`}
+          />
+        </button>
+      </div>
+      {error && (
+        <p role="alert" className="mt-3 text-base text-red-600">
+          {error}
+        </p>
+      )}
+      {notice && (
+        <p role="status" className="mt-3 text-base text-emerald-600">
+          {notice}
+        </p>
+      )}
+    </section>
+  );
+}
+
 export default function AdminPage() {
   const [access, setAccess] = useState<AccessState>("loading");
 
@@ -252,7 +372,7 @@ export default function AdminPage() {
                 标准内容制作
               </h2>
               <p className="mt-2 text-lg text-emerald-800/80">
-                用同一条上传→校对→定稿管线制作沪教版教材内容，定稿后全账号可见。
+                用同一条上传→校对→定稿管线制作沪教版教材内容；定稿后按「教材内容可见性」开关决定是否对家庭账号开放。
               </p>
             </div>
             <a
@@ -262,6 +382,8 @@ export default function AdminPage() {
               进入标准内容制作 →
             </a>
           </section>
+
+          <ContentVisibilityCard />
 
           <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
             <section className="h-full rounded-3xl bg-white p-7 shadow-md ring-1 ring-slate-100">

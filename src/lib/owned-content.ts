@@ -34,14 +34,17 @@ function authMediaUrl(source: string, ref: string): string {
  * 单元详情（按账号）：句子最好成绩只取本人练习记录。
  * 自定义内容的视频引用是 <accountId>/<file>（票 09 定稿契约），
  * 统一改写为鉴权媒体路由地址；标准内容保持公开静态路径。
- * 内容不可见（不存在/他人的自定义内容）返回 null。
+ * 内容不可见（不存在/他人的自定义内容/关闭态下的标准内容）返回 null。
+ * allowStandard（v0.3.6）：标准内容可见性开关关闭时，非管理员按不存在处理。
  */
 export function ownedContentDetail(
   contentId: string,
-  accountId: string
+  accountId: string,
+  options: { allowStandard: boolean }
 ): ContentDetail | null {
   const unit = getContentDetail(contentId, { accountId });
   if (!unit) return null;
+  if (unit.type === "standard" && !options.allowStandard) return null;
 
   const db = openDb(dbPath());
   try {

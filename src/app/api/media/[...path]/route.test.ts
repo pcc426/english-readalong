@@ -8,6 +8,7 @@ import {
   setupDb,
   sessionCookieFor,
 } from "@/lib/testing/auth-test-utils";
+import { setStandardContentPublic } from "@/lib/settings/content-visibility";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
@@ -20,8 +21,11 @@ afterEach(() => {
   delete process.env.SHIPPED_MEDIA_DIR;
 });
 
-function setupEnv(): void {
-  setupDb("ra-media");
+function setupEnv(standardContentPublic = true): void {
+  const db = setupDb("ra-media");
+  // v0.3.6：既有用例按「开关开启」跑
+  setStandardContentPublic(db, standardContentPublic);
+  db.close();
   const uploadsDir = mkdtempSync(path.join(tmpdir(), "ra-uploads-"));
   process.env.UPLOADS_DIR = uploadsDir;
   cleanups.push(() => rmSync(uploadsDir, { recursive: true, force: true }));
@@ -87,6 +91,14 @@ describe("GET /api/media/*", () => {
     const res = await get([id, "clip.mp4"], "other@test.com");
     expect(res.status).toBe(404);
     expect((await res.json()).error.code).toBe("MEDIA_NOT_FOUND");
+  });
+
+  it("关闭态下本人自定义视频不受影响：200", async () => {
+    setupEnv(false);
+    const id = accountIdOf("parent@test.com");
+    seedVideo(id);
+    const res = await get([id, "clip.mp4"], "parent@test.com");
+    expect(res.status).toBe(200);
   });
 
   it("带 range 头（Safari <video>）回 206 与对应切片", async () => {
@@ -318,6 +330,19 @@ describe("GET /api/media/* · 标准内容视频（12 号票）", () => {
     );
   });
 
+  it("关闭态下非管理员不可播标准视频，管理员可以", async () => {
+    setupEnv(false);
+    const adminId = accountIdOf("admin@test.com", true);
+    seedVideo(adminId);
+    seedStandardPack(adminId);
+
+    const blocked = await get([adminId, "clip.mp4"], "parent@test.com");
+    expect(blocked.status).toBe(404);
+
+    const adminRes = await get([adminId, "clip.mp4"], "admin@test.com");
+    expect(adminRes.status).toBe(200);
+  });
+
   it("未被任何标准内容引用的他人文件仍然 404（自定义内容不因此泄露）", async () => {
     setupEnv();
     const adminId = accountIdOf("admin@test.com", true);
@@ -386,6 +411,20 @@ describe("GET /api/media/shipped/* · 随代码标准内容视频（统一鉴权
     expect(Buffer.from(await res.arrayBuffer())).toEqual(
       Buffer.from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
     );
+  });
+
+  it("关闭态下非管理员不可播随代码标准视频，管理员可以", async () => {
+    setupEnv(false);
+    accountIdOf("parent@test.com");
+    accountIdOf("admin@test.com", true);
+    const name = "五上_U2.mp4";
+    seedShipped(name);
+
+    const blocked = await get(["shipped", name], "parent@test.com");
+    expect(blocked.status).toBe(404);
+
+    const adminRes = await get(["shipped", name], "admin@test.com");
+    expect(adminRes.status).toBe(200);
   });
 
   it("未登录 401（不再有静态公开路径）", async () => {

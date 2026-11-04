@@ -48,6 +48,13 @@ export function openDb(dbPath: string): Database.Database {
       expires_at TEXT NOT NULL
     );
 
+    -- 全局设置（v0.3.6）：键值对；内容可见性开关存这里。
+    -- 键缺失一律按代码里的默认值处理（标准内容默认不对家庭账号开放）。
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+
     -- 内容草稿（校对中间态只存 SQLite，不进内容包文件；spec Implementation Decisions）
     -- type 预留 standard：管理员将来用同一条上传/校对管线制作教材内容
     CREATE TABLE IF NOT EXISTS content_drafts (

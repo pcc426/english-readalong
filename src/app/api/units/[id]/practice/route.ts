@@ -7,6 +7,7 @@ import { transcodeTo16kWav } from "@/lib/scoring/transcode";
 import { getScoringService } from "@/lib/scoring/current";
 import { requireAccount } from "@/lib/auth/guard";
 import { errorResponse } from "@/lib/http";
+import { standardContentVisibleForAccount } from "@/lib/settings/content-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,8 @@ export async function POST(
   const auth = requireAccount(req);
   if (!auth.ok) return auth.response;
   const { id } = await ctx.params;
+  // v0.3.6 可见性开关：关闭态下非管理员不能练标准内容，且不触发评测服务
+  const allowStandard = standardContentVisibleForAccount(auth.account);
 
   // 未发布门禁（票 09）：本人存在同 id 且未发布的草稿 → 拒绝练习。
   // 只查本人的草稿：他人的未发布草稿 id 不在此拦截，走下方 404 不暴露存在性；
@@ -62,6 +65,9 @@ export async function POST(
   const pack = getContent(id, { accountId: auth.account.id });
   const sentence = pack?.sentences[sentenceIndex];
   if (!pack || !sentence) {
+    return errorResponse(404, "UNIT_NOT_FOUND", "单元或句子不存在");
+  }
+  if ((pack.type ?? "standard") === "standard" && !allowStandard) {
     return errorResponse(404, "UNIT_NOT_FOUND", "单元或句子不存在");
   }
 

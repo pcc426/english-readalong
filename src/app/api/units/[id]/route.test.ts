@@ -13,6 +13,7 @@ import {
 } from "@/lib/drafts/repo";
 import { createStandardDraft } from "@/lib/drafts/standard-drafts";
 import { finalizeDraft } from "@/lib/drafts/finalize";
+import { setStandardContentPublic } from "@/lib/settings/content-visibility";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
@@ -23,7 +24,7 @@ afterEach(() => {
   delete process.env.DB_PATH;
 });
 
-function setupEnv() {
+function setupEnv(standardContentPublic = true) {
   const contentDir = mkdtempSync(path.join(tmpdir(), "ra-content-"));
   const dataDir = mkdtempSync(path.join(tmpdir(), "ra-data-"));
   const dbDir = mkdtempSync(path.join(tmpdir(), "ra-db-"));
@@ -44,6 +45,10 @@ function setupEnv() {
   process.env.CONTENT_DIR = contentDir;
   process.env.CONTENT_DATA_DIR = dataDir;
   process.env.DB_PATH = path.join(dbDir, "readalong.db");
+  // v0.3.6：既有用例按「开关开启」跑
+  const db = openDb(process.env.DB_PATH);
+  setStandardContentPublic(db, standardContentPublic);
+  db.close();
   cleanups.push(() => {
     rmSync(contentDir, { recursive: true, force: true });
     rmSync(dataDir, { recursive: true, force: true });
@@ -287,6 +292,34 @@ describe("GET /api/units/[id]", () => {
         text: "hello",
         bestScore: 90,
       });
+    });
+
+    it("关闭态下非管理员按不存在处理（404），管理员仍可查看", async () => {
+      setupEnv(false);
+      const adminId = accountIdOf("admin@test.com", true);
+      const contentId = seedPublishedStandard(adminId);
+
+      const blocked = await GET(authedGet(), ctx(contentId)); // parent 的 cookie
+      expect(blocked.status).toBe(404);
+      expect((await blocked.json()).error.code).toBe("UNIT_NOT_FOUND");
+
+      const adminRes = await GET(
+        new Request("http://x", {
+          headers: { cookie: sessionCookieFor("admin@test.com", true) },
+        }),
+        ctx(contentId)
+      );
+      expect(adminRes.status).toBe(200);
+    });
+
+    it("关闭态下自定义内容不受影响：归属账号照常可取", async () => {
+      setupEnv(false);
+      const owner = accountIdOf("parent@test.com");
+      const draft = seedPublishedCustom(owner);
+
+      const res = await GET(authedGet(), ctx(draft.id));
+      expect(res.status).toBe(200);
+      expect((await res.json()).unit.id).toBe(draft.id);
     });
   });
 });

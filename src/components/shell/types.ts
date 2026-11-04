@@ -4,4 +4,6 @@ export interface Account {
   id: string;
   email: string;
   isAdmin: boolean;
+  /** 能否看到「教材内容」（v0.3.6）：管理员恒为 true，其余账号看全局开关 */
+  standardContentVisible: boolean;
 }

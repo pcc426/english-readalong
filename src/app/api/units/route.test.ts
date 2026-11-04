@@ -12,6 +12,7 @@ import {
   setDraftVideo,
 } from "@/lib/drafts/repo";
 import { finalizeDraft } from "@/lib/drafts/finalize";
+import { setStandardContentPublic } from "@/lib/settings/content-visibility";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
@@ -22,7 +23,7 @@ afterEach(() => {
   delete process.env.DB_PATH;
 });
 
-function setupEnv() {
+function setupEnv(standardContentPublic = true) {
   const contentDir = mkdtempSync(path.join(tmpdir(), "ra-content-"));
   const dataDir = mkdtempSync(path.join(tmpdir(), "ra-data-"));
   const dbDir = mkdtempSync(path.join(tmpdir(), "ra-db-"));
@@ -44,6 +45,10 @@ function setupEnv() {
   process.env.CONTENT_DIR = contentDir;
   process.env.CONTENT_DATA_DIR = dataDir;
   process.env.DB_PATH = dbPath;
+  // v0.3.6：既有用例按「开关开启」跑（默认关闭的用例在单独 describe 里）
+  const db = openDb(dbPath);
+  setStandardContentPublic(db, standardContentPublic);
+  db.close();
   cleanups.push(() => {
     rmSync(contentDir, { recursive: true, force: true });
     rmSync(dataDir, { recursive: true, force: true });
@@ -272,6 +277,39 @@ describe("GET /api/units", () => {
       const body = await res.json();
       expect(body.textbookUnits[0]).toEqual({ no: 1, title: "Clubs in our school" });
       expect(body.textbookUnits).toHaveLength(10);
+    });
+  });
+
+  describe("教材内容可见性开关（v0.3.6）", () => {
+    function adminGet() {
+      return new Request("http://x/api/units", {
+        headers: { cookie: sessionCookieFor("admin@test.com", true) },
+      });
+    }
+
+    it("默认关闭：普通账号 403 STANDARD_CONTENT_DISABLED", async () => {
+      setupEnv(false);
+      const res = await GET(authedGet("http://x/api/units"));
+      expect(res.status).toBe(403);
+      expect((await res.json()).error.code).toBe("STANDARD_CONTENT_DISABLED");
+    });
+
+    it("关闭时管理员照常拿到标准内容", async () => {
+      setupEnv(false);
+      const res = await GET(adminGet());
+      expect(res.status).toBe(200);
+      expect((await res.json()).units).toHaveLength(1);
+    });
+
+    it("开关开启后普通账号恢复可见", async () => {
+      setupEnv(false);
+      const db = openDb(process.env.DB_PATH!);
+      setStandardContentPublic(db, true);
+      db.close();
+
+      const res = await GET(authedGet("http://x/api/units"));
+      expect(res.status).toBe(200);
+      expect((await res.json()).units).toHaveLength(1);
     });
   });
 });

@@ -15,6 +15,7 @@ import { Readable } from "node:stream";
 import { NextResponse } from "next/server";
 import { requireAccount } from "@/lib/auth/guard";
 import { errorResponse } from "@/lib/http";
+import { standardContentVisibleForAccount } from "@/lib/settings/content-visibility";
 import {
   parseMediaRelPath,
   POSTER_CONTENT_TYPES,
@@ -61,6 +62,9 @@ export async function GET(
 ) {
   const auth = requireAccount(req);
   if (!auth.ok) return auth.response;
+  // v0.3.6 可见性开关：关闭时标准内容的视频/封面对非管理员一律 404；
+  // 本人账号目录下的自定义内容不受影响（管理员恒可播标准素材）。
+  const allowStandard = standardContentVisibleForAccount(auth.account);
   const { path: segments } = await ctx.params;
 
   let abs: string;
@@ -74,16 +78,16 @@ export async function GET(
     if (isPoster ? !isShippedPackPoster(name) : !isShippedPackVideo(name)) {
       return notFound();
     }
+    if (!allowStandard) return notFound();
     abs = isPoster ? shippedPosterAbsPath(name) : shippedMediaAbsPath(name);
   } else {
     const relPath = parseMediaRelPath(segments ?? []);
-    if (
-      !relPath ||
-      (!relPath.startsWith(`${auth.account.id}/`) &&
-        !isStandardPackVideo(relPath) &&
-        !isStandardPackPoster(relPath))
-    ) {
-      return notFound();
+    if (!relPath) return notFound();
+    // 本人目录放行；他人目录只放行被标准内容包引用且当前账号可看标准内容的情况
+    if (!relPath.startsWith(`${auth.account.id}/`)) {
+      const standardRef =
+        isStandardPackVideo(relPath) || isStandardPackPoster(relPath);
+      if (!standardRef || !allowStandard) return notFound();
     }
     abs = videoAbsPath(relPath);
   }

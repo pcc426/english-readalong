@@ -15,6 +15,7 @@ import {
   setDraftVideo,
 } from "@/lib/drafts/repo";
 import { finalizeDraft } from "@/lib/drafts/finalize";
+import { setStandardContentPublic } from "@/lib/settings/content-visibility";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
@@ -26,7 +27,7 @@ afterEach(() => {
   setScoringService(null);
 });
 
-function setupEnv() {
+function setupEnv(standardContentPublic = true) {
   const contentDir = mkdtempSync(path.join(tmpdir(), "ra-content-"));
   const dataDir = mkdtempSync(path.join(tmpdir(), "ra-data-"));
   const dbDir = mkdtempSync(path.join(tmpdir(), "ra-db-"));
@@ -47,6 +48,10 @@ function setupEnv() {
   // 自定义内容根（票 04 seam）：定稿包与归属查询都落在这里
   process.env.CONTENT_DATA_DIR = dataDir;
   process.env.DB_PATH = path.join(dbDir, "readalong.db");
+  // v0.3.6：既有用例按「开关开启」跑
+  const db = openDb(process.env.DB_PATH);
+  setStandardContentPublic(db, standardContentPublic);
+  db.close();
   cleanups.push(() => {
     rmSync(contentDir, { recursive: true, force: true });
     rmSync(dataDir, { recursive: true, force: true });
@@ -359,6 +364,39 @@ describe("POST /api/units/[id]/practice", () => {
       const res = await post(0, fakeWav(), undefined, otherDraftId);
       expect(res.status).toBe(404);
       expect((await res.json()).error.code).toBe("UNIT_NOT_FOUND");
+    });
+  });
+
+  describe("教材内容可见性开关（v0.3.6）", () => {
+    it("关闭态下非管理员练标准内容 404，且不触发评测", async () => {
+      setupEnv(false);
+      // 空队列服务：只要被调用就会 502；得到 404 说明根本没调用评测
+      setScoringService(new FakeScoringService([]));
+      const res = await post(0, fakeWav());
+      expect(res.status).toBe(404);
+      expect((await res.json()).error.code).toBe("UNIT_NOT_FOUND");
+      expect(attemptRows()).toHaveLength(0);
+    });
+
+    it("关闭态下管理员仍可练标准内容", async () => {
+      setupEnv(false);
+      setScoringService(new FakeScoringService(90));
+      const res = await post(
+        0,
+        fakeWav(),
+        sessionCookieFor("admin@test.com", true)
+      );
+      expect(res.status).toBe(200);
+    });
+
+    it("关闭态下自定义内容不受影响：归属账号照常练习", async () => {
+      setupEnv(false);
+      setScoringService(new FakeScoringService(91));
+      const accountId = accountIdOf("parent@test.com");
+      const draft = seedPublishedCustom(accountId);
+      const res = await post(0, fakeWav(), undefined, draft.id);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ score: 91, stars: 3 });
     });
   });
 });

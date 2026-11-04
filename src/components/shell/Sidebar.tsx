@@ -2,6 +2,7 @@
 
 // 左侧边栏（票 03）：教材内容 / 自定义内容两个主入口，管理员额外可见「管理」。
 // /admin 页面本身由票 02 提供，这里只放链接。
+// v0.3.6：standardContentVisible 为假时不渲染「教材内容」（关闭态只有管理员可见）。
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -12,16 +13,23 @@ interface NavItem {
   exact: boolean;
 }
 
-const BASE_ITEMS: NavItem[] = [
-  { href: "/", label: "教材内容", exact: true },
-  { href: "/custom", label: "自定义内容", exact: false },
-];
-
+const STANDARD_ITEM: NavItem = { href: "/", label: "教材内容", exact: true };
+const CUSTOM_ITEM: NavItem = { href: "/custom", label: "自定义内容", exact: false };
 const ADMIN_ITEM: NavItem = { href: "/admin", label: "管理", exact: false };
 
-export default function Sidebar({ isAdmin }: { isAdmin: boolean }) {
+export default function Sidebar({
+  isAdmin,
+  showStandard,
+}: {
+  isAdmin: boolean;
+  showStandard: boolean;
+}) {
   const pathname = usePathname();
-  const items = isAdmin ? [...BASE_ITEMS, ADMIN_ITEM] : BASE_ITEMS;
+  const items = [
+    ...(showStandard ? [STANDARD_ITEM] : []),
+    CUSTOM_ITEM,
+    ...(isAdmin ? [ADMIN_ITEM] : []),
+  ];
 
   return (
     <aside className="flex w-52 shrink-0 flex-col border-r border-slate-100 bg-white px-4 py-6">

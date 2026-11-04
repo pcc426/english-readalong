@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { GET } from "./route";
 import { setupDb, sessionCookieFor } from "@/lib/testing/auth-test-utils";
 import { registeredBooks } from "@/lib/textbook/textbook";
+import { setStandardContentPublic } from "@/lib/settings/content-visibility";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
@@ -10,10 +11,12 @@ afterEach(() => {
   delete process.env.DB_PATH;
 });
 
-function setupEnv() {
+function setupEnv(standardContentPublic = true) {
   const db = setupDb("ra-tb-module");
   // 外键要求登录账号真实存在（sessionCookieFor 惰性建号即可）
   void db;
+  // v0.3.6：既有用例按「开关开启」跑
+  setStandardContentPublic(db, standardContentPublic);
 }
 
 function get(query: string, cookie?: string): Promise<Response> {
@@ -75,5 +78,29 @@ describe("GET /api/textbook/module（12 号票教材原文预填）", () => {
     );
     expect(res2.status).toBe(404);
     expect((await res2.json()).error.code).toBe("UNKNOWN_MODULE");
+  });
+
+  describe("教材内容可见性开关（v0.3.6）", () => {
+    it("关闭态下非管理员 403 STANDARD_CONTENT_DISABLED", async () => {
+      setupEnv(false);
+      const cookie = sessionCookieFor("parent@test.com");
+      const res = await get(
+        "?unitId=五上-U2&moduleKind=Story%20time",
+        cookie
+      );
+      expect(res.status).toBe(403);
+      expect((await res.json()).error.code).toBe("STANDARD_CONTENT_DISABLED");
+    });
+
+    it("关闭态下管理员仍可读教材原文", async () => {
+      setupEnv(false);
+      const unit = registeredBooks.find((b) => b.book.id === "grade5a")!.data.units[0];
+      const mod = unit.modules[0];
+      const res = await get(
+        `?unitId=${encodeURIComponent(unit.unitId)}&moduleKind=${encodeURIComponent(mod.moduleKind)}`,
+        sessionCookieFor("admin@test.com", true)
+      );
+      expect(res.status).toBe(200);
+    });
   });
 });

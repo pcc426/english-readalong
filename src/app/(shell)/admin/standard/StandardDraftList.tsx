@@ -21,6 +21,8 @@ export default function StandardDraftList() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   // V0.2.4 票 04：退回校对的进行中反馈
   const [unpublishingId, setUnpublishingId] = useState<string | null>(null);
+  // v0.3.6：标准内容当前是否对家庭账号开放（只用于状态提示）
+  const [standardPublic, setStandardPublic] = useState<boolean | null>(null);
 
   const loadDrafts = useCallback(async () => {
     try {
@@ -41,6 +43,27 @@ export default function StandardDraftList() {
   useEffect(() => {
     if (access === "allowed") void loadDrafts();
   }, [access, loadDrafts]);
+
+  useEffect(() => {
+    if (access !== "allowed") return;
+    let cancelled = false;
+    fetch("/api/admin/content-visibility")
+      .then(async (res) => {
+        if (!res.ok) return null;
+        return (await res.json()) as { standardContentPublic?: boolean } | null;
+      })
+      .then((body) => {
+        if (!cancelled && body) {
+          setStandardPublic(body.standardContentPublic === true);
+        }
+      })
+      .catch(() => {
+        // 状态提示失败不阻断制作流程
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [access]);
 
   async function handleUnpublish(draft: StandardDraftOverview) {
     if (unpublishingId) return;
@@ -110,8 +133,18 @@ export default function StandardDraftList() {
               教材内容制作
             </h1>
             <p className="mt-1 text-base text-slate-500">
-              校对时对照教材原文，定稿后全账号可见
+              校对时对照教材原文，定稿后按可见性开关对家庭账号开放
             </p>
+            {standardPublic !== null && (
+              <p
+                className={`mt-1 text-sm font-semibold ${
+                  standardPublic ? "text-emerald-600" : "text-amber-600"
+                }`}
+                role="status"
+              >
+                {standardPublic ? "当前：已对家庭账号开放" : "当前：仅管理员可见"}
+              </p>
+            )}
           </div>
           <a
             href="/admin/standard/upload"
