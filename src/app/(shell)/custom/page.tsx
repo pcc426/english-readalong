@@ -99,7 +99,7 @@ function CustomListInner() {
 
   if (failed) {
     return (
-      <div className="mx-auto max-w-7xl px-6 py-8">
+      <div className="mx-auto max-w-6xl px-6 py-8">
         <h1 className="text-2xl font-bold">自定义内容</h1>
         <p className="mt-8 text-lg text-slate-400" role="alert">
           加载失败，请刷新重试
@@ -109,7 +109,7 @@ function CustomListInner() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-6 py-8">
+    <div className="mx-auto max-w-6xl px-6 py-8">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">自定义内容</h1>
         {/* 票 07：上传分步向导页（本页不再内联上传表单） */}
@@ -156,7 +156,7 @@ function CustomListInner() {
           这里还没有内容
         </div>
       ) : (
-        <div className="mt-6 grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(168px,1fr))]">
+        <div className="mt-6 grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(180px,1fr))]">
           {list.map((draft) =>
             draft.status === "transcribing" ? (
               // 转写中不可点、不裂图（无封面显示占位）
@@ -253,10 +253,10 @@ function CustomListInner() {
           <img
             src={draft.posterUrl}
             alt=""
-            className={`aspect-[9/16] w-full object-cover${dim}`}
+            className={`aspect-[3/4] w-full object-cover${dim}`}
           />
         ) : (
-          <div className={`aspect-[9/16] w-full bg-slate-100${dim}`} />
+          <div className={`aspect-[3/4] w-full bg-slate-100${dim}`} />
         )}
         <span className="absolute left-3 top-3 rounded-full bg-violet-100 px-2.5 py-1 text-xs font-bold text-violet-700">
           自定义

@@ -89,7 +89,7 @@ export default function StandardContentPage() {
 
   if (failed) {
     return (
-      <div className="mx-auto max-w-7xl px-6 py-8">
+      <div className="mx-auto max-w-6xl px-6 py-8">
         <h1 className="text-2xl font-bold">教材内容</h1>
         <p className="mt-8 text-lg text-slate-400" role="alert">
           加载失败，请刷新重试
@@ -99,7 +99,7 @@ export default function StandardContentPage() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-6 py-8">
+    <div className="mx-auto max-w-6xl px-6 py-8">
       <h1 className="text-2xl font-bold">教材内容</h1>
 
       <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl bg-white p-3 shadow-sm ring-1 ring-slate-100">
@@ -141,7 +141,7 @@ export default function StandardContentPage() {
           这个筛选条件下还没有内容
         </div>
       ) : (
-        <div className="mt-6 grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(168px,1fr))]">
+        <div className="mt-6 grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(180px,1fr))]">
           {filtered.map((unit) => (
             <ContentCard key={unit.id} unit={unit} />
           ))}
@@ -167,10 +167,10 @@ function ContentCard({ unit }: { unit: UnitOverview }) {
           <img
             src={unit.poster}
             alt=""
-            className="aspect-[9/16] w-full object-cover"
+            className="aspect-[3/4] w-full object-cover"
           />
         ) : (
-          <div className="aspect-[9/16] w-full bg-slate-100" />
+          <div className="aspect-[3/4] w-full bg-slate-100" />
         )}
         <span className="absolute right-3 top-3 whitespace-nowrap rounded-full bg-sky-100 px-2.5 py-1 text-xs font-bold text-sky-700">
           标准

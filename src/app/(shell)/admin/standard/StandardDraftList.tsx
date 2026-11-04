@@ -213,7 +213,7 @@ function DraftCard({
 
   return (
     <div className="flex flex-col overflow-hidden rounded-3xl bg-white shadow-md ring-1 ring-slate-100">
-      <div className="relative aspect-[9/16] w-full bg-slate-200">
+      <div className="relative aspect-[3/4] w-full bg-slate-200">
         {draft.posterUrl ? (
           // eslint-disable-next-line @next/next/no-img-element -- 鉴权媒体路由的动态路径，未配 next/image 域
           <img
