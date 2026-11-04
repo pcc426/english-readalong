@@ -25,6 +25,7 @@ rsync -az --delete \
   --exclude research \
   --exclude docs \
   --exclude .claude \
+  --exclude scripts/reset-password.ts \
   ./ "$HOST:$APP_DIR/"
 
 echo "==> 传输 .env（讯飞密钥，不进 git）"
