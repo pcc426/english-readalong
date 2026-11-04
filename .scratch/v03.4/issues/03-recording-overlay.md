@@ -64,3 +64,5 @@
 ## Comments
 
 - 2026-11-02 实施并验收（v0.3.4）：删除左上角红色 REC 角标，改为视频容器内绝对定位蒙版：bg-black/55 + pointer-events-none + role=status/aria-live=polite；中央两道慢速脉冲（bg-white/5@2.6s、bg-slate-200/15@2.2s）+ 石墨灰圆盘（slate-800/85、ring-white/20、🎙️ text-6xl）+「该你读了」(30px) + 「N 秒」。实测（伪造静音音轨绕过无头浏览器麦克风限制）：蒙版 400×699 盖满视频列、不盖右栏；录音结束立即消失；recordSeconds 计时逻辑未动。 全量 603 测试通过（v0.3.3 基线 594 + 9），typecheck / build（停 dev 后）绿。
+
+- 2026-11-03 用户验收通过 v0.3.4 全部四项。验收中追加一处微调（已实现）：自定义列表卡片底部改为「CTA 与删除同排、底部对齐」（items-end，实测两者 bottom 像素一致），三种状态统一；✓ 603 测试全绿。

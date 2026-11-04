@@ -221,20 +221,23 @@ function CustomListInner() {
               视频转写中，完成后可校对…
             </p>
           )}
-          <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-2">
+          <div className="mt-2 border-t border-slate-100 pt-2">
             {draft.status === "published" && draft.latestRunStars != null ? (
-              <span className="text-2xl font-extrabold leading-none text-amber-500">
-                🌟{draft.latestRunStars}
-              </span>
+              <>
+                <span className="block text-2xl font-extrabold leading-none text-amber-500">
+                  🌟{draft.latestRunStars}
+                </span>
+                <p className="mt-0.5 text-[11px] text-slate-400">上次练习获得</p>
+              </>
             ) : (
               <span />
             )}
-            <span className="text-lg font-extrabold">{cta(draft)}</span>
           </div>
-          {draft.status === "published" && draft.latestRunStars != null && (
-            <p className="text-[11px] text-slate-400">上次练习获得</p>
-          )}
-          {deleteRow(draft)}
+          {/* V0.3.4 验收调整：CTA 与删除同排、底部对齐（一大一小） */}
+          <div className="mt-auto flex items-end justify-between gap-2 pt-2">
+            <span className="text-lg font-extrabold">{cta(draft)}</span>
+            {deleteButton(draft)}
+          </div>
         </div>
       </>
     );
@@ -284,22 +287,20 @@ function CustomListInner() {
   }
 
   /** 删除（transcribing/proofreading/published 都能删）；卡是 <a>，阻断冒泡防误跳 */
-  function deleteRow(draft: DraftOverview) {
+  function deleteButton(draft: DraftOverview) {
     return (
-      <div className="mt-1 flex justify-end">
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            void handleDelete(draft);
-          }}
-          disabled={deletingId === draft.id}
-          className="rounded-lg px-2 py-1 text-xs font-semibold text-slate-400 hover:bg-slate-50 hover:text-red-500 active:bg-slate-100 disabled:opacity-40"
-        >
-          {deletingId === draft.id ? "删除中…" : "删除"}
-        </button>
-      </div>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          void handleDelete(draft);
+        }}
+        disabled={deletingId === draft.id}
+        className="shrink-0 rounded-lg px-2 py-1 text-xs font-semibold text-slate-400 hover:bg-slate-50 hover:text-red-500 active:bg-slate-100 disabled:opacity-40"
+      >
+        {deletingId === draft.id ? "删除中…" : "删除"}
+      </button>
     );
   }
 }

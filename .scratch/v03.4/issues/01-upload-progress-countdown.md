@@ -82,3 +82,5 @@ idle ──点击──> uploading(pct) ──201──> done(3s 倒计时) ─�
 ## Comments
 
 - 2026-11-02 实施并验收（v0.3.4）：新增 upload-with-progress.ts（XHR + onprogress + abort→status 0，xhrFactory 注入，5 例单测）与 upload-countdown.ts（createCountdown 纯函数 + useCountdown hook，4 例单测，挂载即显满秒）。custom/upload/page.tsx 与 StandardUploadForm.tsx 均接入：上传中＝主按钮「上传中… N%」+ 进度条 + 【取消上传】；完成＝「上传完成 · N 秒后自动前往」+【立即前往】；取消/失败回 idle 保留文件与标题。表单其余区域零改动（对照截图确认）。 全量 603 测试通过（v0.3.3 基线 594 + 9），typecheck / build（停 dev 后）绿。
+
+- 2026-11-03 用户验收通过 v0.3.4 全部四项。验收中追加一处微调（已实现）：自定义列表卡片底部改为「CTA 与删除同排、底部对齐」（items-end，实测两者 bottom 像素一致），三种状态统一；✓ 603 测试全绿。
