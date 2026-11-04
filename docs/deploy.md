@@ -157,6 +157,23 @@ data/
 **之后的每次发版**：本地执行 `./scripts/deploy.sh <user@VPS> <你的域名>`——
 rsync 代码（不覆盖 `data/`）→ 传 `.env` → 远程 `npm ci && npm run build` → `pm2 reload`。
 
+### 从 V0.2.x 升级到 V0.3.x（发版后一次性步骤）
+
+V0.3 起列表卡带封面与教材归属字段，`data/` 里的历史数据需要补一次：
+
+```bash
+ssh <user@VPS>
+cd /opt/english-readalong
+npx tsx --env-file=.env scripts/backfill-posters.ts            # 给服务器上的视频补抽封面并回填草稿
+npx tsx --env-file=.env scripts/migrate-v03-standard-packs.ts  # 默认 dry-run，先核对 before/after
+npx tsx --env-file=.env scripts/migrate-v03-standard-packs.ts --apply
+pm2 reload english-readalong
+```
+
+- `practice_attempts` 的 `run_id`、`content_drafts` 的 `poster_path` 列由启动时 `addColumnIfMissing` 自动补，无需手工迁移
+- 新增可选环境变量 `LFASR_PAUSE_MS`（断句停顿阈值，默认 700ms），不配即可
+- 随代码封面 `content/media/posters/*.jpg` 随 rsync 自动同步，无需手工处理
+
 常用命令：
 
 ```bash
