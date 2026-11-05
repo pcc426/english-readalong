@@ -129,6 +129,12 @@ export function openDb(dbPath: string): Database.Database {
   addColumnIfMissing(db, "practice_attempts", "owner", "owner TEXT");
   // V0.2 建出的库没有 run_id 列（练习 run 归属，票 04）
   addColumnIfMissing(db, "practice_attempts", "run_id", "run_id TEXT");
+  // 成长页按账号 + 北京时间范围查「练过但未完成」的日子（V0.4）。
+  // 必须放在补 owner 列之后：V0.1 旧库在 exec 时还没有 owner 列。
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_attempts_owner_created
+      ON practice_attempts (owner, created_at);
+  `);
   return db;
 }
 

@@ -6,6 +6,7 @@ import {
   daysInMonth,
   monthDates,
   shiftDate,
+  shiftMonth,
 } from "./beijing-date";
 import { totalStars } from "./star-ledger";
 
@@ -67,13 +68,16 @@ export function growthSnapshot(
   }>;
   const runDayMap = new Map(runRows.map((row) => [row.date, row.stars]));
 
+  const nextMonthStart = `${shiftMonth(month, 1)}-01`;
   const attemptRows = db
     .prepare(
       `SELECT DISTINCT date(created_at, '+8 hours') AS date
        FROM practice_attempts
-       WHERE owner = ? AND date(created_at, '+8 hours') BETWEEN ? AND ?`
+       WHERE owner = ?
+         AND created_at >= datetime(?, '-8 hours')
+         AND created_at < datetime(?, '-8 hours')`
     )
-    .all(accountId, monthStart, monthEnd) as Array<{ date: string }>;
+    .all(accountId, monthStart, nextMonthStart) as Array<{ date: string }>;
   const attemptDays = new Set(attemptRows.map((row) => row.date));
 
   const days = monthDates(month).map((date) => {

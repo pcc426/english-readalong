@@ -5,9 +5,11 @@ import { growthSnapshot } from "./growth";
 // star_ledger.account_id has a real FK to accounts; better-sqlite3 enforces it.
 function setupGrowthDb() {
   const db = setupDb("ra-growth");
-  db.prepare(
-    "INSERT INTO accounts (id, email, password_hash) VALUES ('acct-a', 'acct-a@test.com', 'x')"
-  ).run();
+  const insert = db.prepare(
+    "INSERT INTO accounts (id, email, password_hash) VALUES (?, ?, 'x')"
+  );
+  insert.run("acct-a", "acct-a@test.com");
+  insert.run("acct-b", "acct-b@test.com");
   return db;
 }
 
@@ -32,7 +34,10 @@ function ledger(
     input.accountId ?? "acct-a",
     input.kind ?? "run",
     input.unitId ?? "u1",
-    input.runId ?? null,
+    input.runId ??
+      (input.kind === "baseline"
+        ? null
+        : `run-${input.occurredOn}-${input.stars}`),
     input.stars,
     input.stars,
     input.occurredOn,
@@ -189,5 +194,86 @@ describe("growthSnapshot", () => {
     expect(snapshot.launchMonth).toBe("2026-11");
     expect(snapshot.preLaunch).toBe(false);
     expect(snapshot.balances).toHaveLength(5);
+  });
+
+  it("上线前的练习不显示未完成点，上线当天及以后才显示", () => {
+    const db = setupGrowthDb();
+    ledger(db, {
+      kind: "baseline",
+      stars: 95,
+      occurredOn: "2026-11-01",
+      createdAt: "2026-11-05 01:00:00",
+    });
+    attemptOn(db, "2026-11-03");
+    attemptOn(db, "2026-11-05");
+
+    const snapshot = growthSnapshot(
+      db,
+      "acct-a",
+      "2026-11",
+      new Date("2026-11-05T12:00:00Z")
+    );
+    expect(snapshot.days.find((d) => d.date === "2026-11-03")).toMatchObject({
+      partial: false,
+    });
+    expect(snapshot.days.find((d) => d.date === "2026-11-05")).toMatchObject({
+      partial: true,
+    });
+  });
+
+  it("attempt 的 UTC 时间按北京日归属", () => {
+    const db = setupGrowthDb();
+    ledger(db, {
+      kind: "baseline",
+      stars: 95,
+      occurredOn: "2026-11-01",
+      createdAt: "2026-11-01 01:00:00",
+    });
+    db.prepare(
+      `INSERT INTO practice_attempts
+         (unit_id, sentence_index, score, stars, owner, run_id, created_at)
+       VALUES ('u1', 0, 80, 2, 'acct-a', 'partial-run', '2026-11-03 16:30:00')`
+    ).run();
+
+    const snapshot = growthSnapshot(
+      db,
+      "acct-a",
+      "2026-11",
+      new Date("2026-11-04T12:00:00Z")
+    );
+    expect(snapshot.days.find((d) => d.date === "2026-11-03")).toMatchObject({
+      partial: false,
+    });
+    expect(snapshot.days.find((d) => d.date === "2026-11-04")).toMatchObject({
+      partial: true,
+    });
+  });
+
+  it("账号隔离：他人的账本和练习不影响本人", () => {
+    const db = setupGrowthDb();
+    ledger(db, {
+      stars: 10,
+      occurredOn: "2026-11-04",
+      weekStart: "2026-11-02",
+      createdAt: "2026-11-04 01:00:00",
+    });
+    ledger(db, {
+      accountId: "acct-b",
+      stars: 99,
+      occurredOn: "2026-11-04",
+      weekStart: "2026-11-02",
+      createdAt: "2026-11-04 02:00:00",
+    });
+    attemptOn(db, "2026-11-03", "acct-b");
+
+    const snapshot = growthSnapshot(
+      db,
+      "acct-a",
+      "2026-11",
+      new Date("2026-11-05T12:00:00Z")
+    );
+    expect(snapshot.totalStars).toBe(10);
+    expect(snapshot.days.find((d) => d.date === "2026-11-04")?.stars).toBe(10);
+    expect(snapshot.days.find((d) => d.date === "2026-11-03")?.partial).toBe(false);
   });
 });

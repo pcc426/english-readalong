@@ -222,6 +222,23 @@ describe("openDb 的 practice_attempts 迁移（V0.2 owner）", () => {
   });
 });
 
+describe("openDb 的 practice_attempts 索引（V0.4）", () => {
+  it("有 owner+created_at 索引", () => {
+    const p = path.join(makeDbDir("ra-attempts-idx-"), "readalong.db");
+    const db = openDb(p);
+    try {
+      const indexes = db
+        .prepare("PRAGMA index_list(practice_attempts)")
+        .all() as Array<{ name: string }>;
+      expect(indexes.map((index) => index.name)).toContain(
+        "idx_attempts_owner_created"
+      );
+    } finally {
+      db.close();
+    }
+  });
+});
+
 describe("openDb 的 star_ledger（V0.4）", () => {
   it("新库建出 star_ledger 与唯一索引", () => {
     const p = path.join(makeDbDir("ra-stars-"), "readalong.db");
