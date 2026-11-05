@@ -8,6 +8,7 @@ import {
   isValidMonth,
   leadingBlanks,
   monthDates,
+  monthLabel,
   monthRange,
   shiftDate,
   shiftMonth,
@@ -38,6 +39,10 @@ describe("beijing-date", () => {
     expect(isValidMonth("2026-11")).toBe(true);
     expect(isValidMonth("2026-13")).toBe(false);
     expect(isValidMonth("26-11")).toBe(false);
+  });
+
+  it("monthLabel 输出中文年月", () => {
+    expect(monthLabel("2026-11")).toBe("2026年11月");
   });
 
   it("shiftDate 跨月跨年", () => {

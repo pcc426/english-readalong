@@ -61,6 +61,11 @@ export function shiftMonth(month: string, delta: number): string {
   ).padStart(2, "0")}`;
 }
 
+export function monthLabel(month: string): string {
+  const [year, monthNo] = month.split("-").map(Number);
+  return `${year}年${monthNo}月`;
+}
+
 /** current + 之前 monthsBack 个月；monthsBack=11 即共 12 个月。 */
 export function monthRange(current: string, monthsBack: number): string[] {
   return Array.from({ length: monthsBack + 1 }, (_, index) =>
