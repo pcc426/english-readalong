@@ -1,3 +1,4 @@
+// V0.4 成长页占位：Task 11 会用真实的 GrowthView 替换这个页面。
 export default function GrowthPage() {
   return (
     <div className="mx-auto max-w-5xl px-6 py-8">

@@ -42,7 +42,7 @@ type StopIntent = "submit" | "rerecord" | "discard";
 export default function PracticeFlow({
   unit,
   mode = "practice",
-  backHref = "/",
+  backHref = "/units",
   backLabel = "‹ 单元列表",
   unconfirmedCount = 0,
 }: {
