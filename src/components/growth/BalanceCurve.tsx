@@ -1,5 +1,7 @@
 "use client";
 
+import { useId } from "react";
+
 import type { GrowthBalance } from "./types";
 
 export function BalanceCurve({
@@ -9,6 +11,8 @@ export function BalanceCurve({
   balances: GrowthBalance[];
   checkInDates: string[];
 }) {
+  const gradientId = `growth-curve-fill-${useId().replace(/:/g, "")}`;
+  if (balances.length === 0) return null;
   const width = 720;
   const height = 240;
   const pad = { left: 48, right: 18, top: 18, bottom: 30 };
@@ -44,7 +48,7 @@ export function BalanceCurve({
       aria-label="当月星星余额曲线"
     >
       <defs>
-        <linearGradient id="growth-curve-fill" x1="0" x2="0" y1="0" y2="1">
+        <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
           <stop offset="0%" stopColor="#10b981" stopOpacity="0.3" />
           <stop offset="100%" stopColor="#10b981" stopOpacity="0.02" />
         </linearGradient>
@@ -63,14 +67,14 @@ export function BalanceCurve({
             x={pad.left - 10}
             y={y(value) + 4}
             textAnchor="end"
-            className="fill-slate-400"
+            className="fill-slate-500"
             fontSize="11"
           >
             {value}
           </text>
         </g>
       ))}
-      <path d={area} fill="url(#growth-curve-fill)" />
+      <path d={area} fill={`url(#${gradientId})`} />
       <path
         d={line}
         fill="none"
@@ -100,7 +104,7 @@ export function BalanceCurve({
             x={x(day - 1)}
             y={height - 8}
             textAnchor="middle"
-            className="fill-slate-400"
+            className="fill-slate-500"
             fontSize="11"
           >
             {day}

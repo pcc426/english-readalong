@@ -74,7 +74,7 @@ export function Calendar({
                 </div>
               )}
               {isToday && (
-                <span className="absolute bottom-0.5 left-1 text-[8px] font-bold text-emerald-600">
+                <span className="absolute bottom-0.5 left-1 text-[10px] font-bold text-emerald-600">
                   今天
                 </span>
               )}
@@ -82,7 +82,7 @@ export function Calendar({
           );
         })}
       </div>
-      <div className="mt-3 flex flex-wrap items-center gap-4 text-[11px] text-slate-400">
+      <div className="mt-3 flex flex-wrap items-center gap-4 text-[11px] text-slate-500">
         <span className="flex items-center gap-1">
           <span className="font-bold text-emerald-500">✓</span>完成打卡
         </span>

@@ -1,3 +1,4 @@
+// Mirrors the server GrowthSnapshot in src/lib/domain/growth.ts.
 export interface GrowthDay {
   date: string;
   stars: number;
