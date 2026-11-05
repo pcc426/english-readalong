@@ -28,10 +28,14 @@ export interface ContentOverview {
     unpracticed: number;
   };
   encouragement: string;
-  /** 最近一次练习获得的总星数（票 04 / spec 决策 23–25）；从未练过为 null。
+  /** 最近一次完整练习的入账星（V0.4 账本口径）；从未入账为 null。
    * 本视图是全量口径、没有账号维度，这里恒为 null；
    * 按账号的值由 owned-content 在覆盖 percentages 时一并写入。 */
   latestRunStars: number | null;
+  /** 本周（北京时间周一起算）该内容的完整练习入账次数（0–3）。
+   * 本视图是全量口径、没有账号维度，这里恒为 0；
+   * 按账号的值由 owned-content 覆盖。 */
+  weeklyRuns: number;
 }
 
 export interface SentenceDetail {
@@ -58,6 +62,9 @@ export interface ContentDetail {
    * 界面回退 sourceLabel。 */
   subtitle: string | null;
   sentences: SentenceDetail[];
+  /** 本周（北京时间周一起算）该内容的完整练习入账次数（0–3）。
+   * 本视图无账号维度，恒为 0；按账号的值由 owned-content 覆盖。 */
+  weeklyRuns: number;
 }
 
 /** 内容详情：句子列表 + 每句最好成绩及达成时间（评分类逻辑见票 05）。 */
@@ -93,6 +100,7 @@ export function getContentDetail(
       poster: pack.poster ? `/media/${pack.poster}` : null,
       subtitle: standardEnumSubtitle(pack),
       sentences,
+      weeklyRuns: 0,
     };
   } finally {
     db.close();
@@ -119,6 +127,7 @@ export function getContentOverview(query: ContentQuery = {}): ContentOverview[] 
         percentages: dist.percentages,
         encouragement: encouragementFor(dist),
         latestRunStars: null,
+        weeklyRuns: 0,
       };
     });
   } finally {

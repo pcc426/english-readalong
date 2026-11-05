@@ -13,6 +13,7 @@ import {
 } from "@/lib/drafts/repo";
 import { finalizeDraft } from "@/lib/drafts/finalize";
 import { setStandardContentPublic } from "@/lib/settings/content-visibility";
+import { beijingToday, beijingWeekStart } from "@/lib/domain/beijing-date";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
@@ -152,37 +153,65 @@ describe("GET /api/units", () => {
     expect(body.units[0].encouragement).toContain("满星");
   });
 
-  describe("最近一次练习总星数 latestRunStars（票 04）", () => {
-    it("未练过为 null", async () => {
+  describe("内容星数与本周次数（V0.4 账本口径）", () => {
+    function insertRun(
+      owner: string,
+      stars: number,
+      occurredOn: string,
+      runId: string,
+      unitId = "u2-dragon-dance"
+    ): void {
+      const db = openDb(process.env.DB_PATH!);
+      try {
+        db.prepare(
+          `INSERT INTO star_ledger
+             (account_id, kind, unit_id, run_id, stars, base_stars, doubled, occurred_on, week_start, created_at)
+           VALUES (?, 'run', ?, ?, ?, ?, 0, ?, ?, '2026-11-05 01:00:00')`
+        ).run(
+          owner,
+          unitId,
+          runId,
+          stars,
+          stars,
+          occurredOn,
+          beijingWeekStart(occurredOn)
+        );
+      } finally {
+        db.close();
+      }
+    }
+
+    it("没有完整练习时 latestRunStars 为 null", async () => {
       setupEnv();
       const res = await GET(authedGet("http://x/api/units"));
       const body = await res.json();
       expect(body.units[0].latestRunStars).toBeNull();
+      expect(body.units[0].weeklyRuns).toBe(0);
     });
 
-    it("只有老数据（run_id NULL）回退为每句最佳星之和；有 run 后按最近 run 口径", async () => {
+    it("最近一次完整练习入账星按发生日期取最新", async () => {
       setupEnv();
       const owner = accountIdOf("parent@test.com");
-      // 老数据两句各 3 星（95 分）→ 回退 3 + 3 = 6
-      insertAttempt("u2-dragon-dance", owner, 0, 95);
-      insertAttempt("u2-dragon-dance", owner, 1, 95);
-      let res = await GET(authedGet("http://x/api/units"));
-      let body = await res.json();
-      expect(body.units[0].latestRunStars).toBe(6);
-
-      // 之后一轮新 run 只练 1 句 1 星 → 最近 run 口径，不叠加老数据
-      insertAttempt("u2-dragon-dance", owner, 2, 60, "run-new");
-      res = await GET(authedGet("http://x/api/units"));
-      body = await res.json();
-      expect(body.units[0].latestRunStars).toBe(1);
-    });
-
-    it("按账号隔离：他人的 run 不计入本账号", async () => {
-      setupEnv();
-      insertAttempt("u2-dragon-dance", "acct-other", 0, 95, "run-other");
+      const today = beijingToday();
+      insertRun(owner, 6, today, "run-a");
+      insertRun(owner, 2, today, "run-b");
       const res = await GET(authedGet("http://x/api/units"));
       const body = await res.json();
-      expect(body.units[0].latestRunStars).toBeNull();
+      expect(body.units[0].latestRunStars).toBe(2);
+      expect(body.units[0].weeklyRuns).toBe(2);
+    });
+
+    it("按账号隔离：他人的 run 不计入", async () => {
+      setupEnv();
+      const mine = accountIdOf("parent@test.com");
+      const other = accountIdOf("other@test.com");
+      const today = beijingToday();
+      insertRun(mine, 5, today, "run-mine");
+      insertRun(other, 7, today, "run-other");
+      const res = await GET(authedGet("http://x/api/units"));
+      const body = await res.json();
+      expect(body.units[0].latestRunStars).toBe(5);
+      expect(body.units[0].weeklyRuns).toBe(1);
     });
   });
 

@@ -11,6 +11,7 @@ import {
 import { createDraft, setDraftVideo, setDraftPoster, completeTranscription } from "@/lib/drafts/repo";
 import { markDraftPublished } from "@/lib/drafts/finalize";
 import { createStandardDraft } from "@/lib/drafts/standard-drafts";
+import { beijingToday, beijingWeekStart } from "@/lib/domain/beijing-date";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
@@ -85,8 +86,7 @@ describe("GET /api/drafts · posterUrl（票 01）", () => {
   });
 });
 
-describe("GET /api/drafts · latestRunStars（票 06）", () => {
-  /** published 草稿：句子 + 定稿状态，供星数口径测试 */
+describe("GET /api/drafts · 账本入账星与本周次数（V0.4）", () => {
   function seedPublished(
     db: Db,
     accountId: string,
@@ -98,62 +98,53 @@ describe("GET /api/drafts · latestRunStars（票 06）", () => {
     return id;
   }
 
-  function attempt(
+  function insertRun(
     db: Db,
-    input: {
-      unitId: string;
-      sentenceIndex: number;
-      score: number;
-      stars: number;
-      owner: string;
-      runId: string | null;
-    }
+    owner: string,
+    unitId: string,
+    stars: number,
+    occurredOn: string,
+    runId: string
   ): void {
     db.prepare(
-      "INSERT INTO practice_attempts (unit_id, sentence_index, score, stars, owner, run_id) VALUES (?, ?, ?, ?, ?, ?)"
-    ).run(input.unitId, input.sentenceIndex, input.score, input.stars, input.owner, input.runId);
+      `INSERT INTO star_ledger
+         (account_id, kind, unit_id, run_id, stars, base_stars, doubled, occurred_on, week_start, created_at)
+       VALUES (?, 'run', ?, ?, ?, ?, 0, ?, ?, '2026-11-05 01:00:00')`
+    ).run(
+      owner,
+      unitId,
+      runId,
+      stars,
+      stars,
+      occurredOn,
+      beijingWeekStart(occurredOn)
+    );
   }
 
-  it("published 草稿带 latestRunStars＝最近一次 run 的星数之和（同 run 同句取最高）", async () => {
+  it("published 行带最近完整练习入账星与本周次数", async () => {
     const db = setupEnv();
     const mine = accountIdOf("parent@test.com");
     const id = seedPublished(db, mine, "练过的");
-
-    // 上一轮 run：两句 3+2 星
-    attempt(db, { unitId: id, sentenceIndex: 0, score: 95, stars: 3, owner: mine, runId: "run-a" });
-    attempt(db, { unitId: id, sentenceIndex: 1, score: 85, stars: 2, owner: mine, runId: "run-a" });
-    // 更近的一轮 run：只练了第一句（重读一次取最高 2），总和＝2
-    attempt(db, { unitId: id, sentenceIndex: 0, score: 60, stars: 1, owner: mine, runId: "run-b" });
-    attempt(db, { unitId: id, sentenceIndex: 0, score: 80, stars: 2, owner: mine, runId: "run-b" });
+    const today = beijingToday();
+    insertRun(db, mine, id, 6, today, "run-a");
+    insertRun(db, mine, id, 12, today, "run-b");
 
     const res = await get(sessionCookieFor("parent@test.com"));
     const body = await res.json();
     const item = body.drafts.find((d: { id: string }) => d.id === id);
-    expect(item.latestRunStars).toBe(2);
+    expect(item.latestRunStars).toBe(12);
+    expect(item.weeklyRuns).toBe(2);
   });
 
-  it("没练过的 published 草稿 latestRunStars 为 null；非 published 一律 null", async () => {
+  it("未发布行 weeklyRuns 为 0", async () => {
     const db = setupEnv();
     const mine = accountIdOf("parent@test.com");
-    const neverPracticed = seedPublished(db, mine, "没练过");
-    const proofreading = seedDraft(db, mine, "校对中", 1);
-
+    const id = seedDraft(db, mine, "未发布", 2);
     const res = await get(sessionCookieFor("parent@test.com"));
     const body = await res.json();
-    expect(body.drafts.find((d: { id: string }) => d.id === neverPracticed).latestRunStars).toBeNull();
-    expect(body.drafts.find((d: { id: string }) => d.id === proofreading).latestRunStars).toBeNull();
-  });
-
-  it("星数按账号隔离：别人的练习记录不算我的", async () => {
-    const db = setupEnv();
-    const mine = accountIdOf("parent@test.com");
-    const other = accountIdOf("other@test.com");
-    const id = seedPublished(db, mine, "只有别人练过");
-    attempt(db, { unitId: id, sentenceIndex: 0, score: 95, stars: 3, owner: other, runId: "run-x" });
-
-    const res = await get(sessionCookieFor("parent@test.com"));
-    const body = await res.json();
-    expect(body.drafts.find((d: { id: string }) => d.id === id).latestRunStars).toBeNull();
+    const item = body.drafts.find((d: { id: string }) => d.id === id);
+    expect(item.latestRunStars).toBeNull();
+    expect(item.weeklyRuns).toBe(0);
   });
 });
 

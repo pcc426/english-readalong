@@ -7,7 +7,8 @@ import { requireAccount } from "@/lib/auth/guard";
 import { openDb, dbPath } from "@/lib/db";
 import { listDraftsByAccount, sentenceCountsByDraft, confirmedCountsByDraft } from "@/lib/drafts/repo";
 import { draftModuleMapByAccount } from "@/lib/drafts/standard-drafts";
-import { latestRunStars } from "@/lib/domain/stats";
+import { beijingToday } from "@/lib/domain/beijing-date";
+import { latestAwardedRunStars, weeklyRunsFor } from "@/lib/domain/star-ledger";
 import { mediaUrl } from "@/lib/media-url";
 import { standardEnumSubtitleForModule } from "@/lib/textbook/enum-subtitle";
 
@@ -36,10 +37,10 @@ export async function GET(req: Request) {
       db,
       drafts.map((d) => d.id)
     );
-    // 最近一次练习的总星数（票 06）：仅 published 行携带。定稿后内容包 id 即草稿 id
-    // （finalize.packFromDraft），口径与 owned-content 的 latestRunStars 同源（spec 决策 25）。
-    // 每账号 published 自定义内容个位数，逐条复用同一函数而非再造批量口径，
-    // 避免两处实现漂移；非 published / 没练过为 null（前端不显示星块）。
+    // 最近一次完整练习的入账星与本周入账次数（V0.4 账本口径）：仅 published 行携带。
+    // 定稿后内容包 id 即草稿 id（finalize.packFromDraft），
+    // 与 owned-content 的账本查询同源；非 published / 从未入账为 null。
+    const today = beijingToday();
     return NextResponse.json({
       drafts: drafts.map((d) => {
         const module = modules.get(d.id);
@@ -66,8 +67,12 @@ export async function GET(req: Request) {
               : null,
           latestRunStars:
             d.status === "published"
-              ? latestRunStars(db, d.id, { owner: auth.account.id })
+              ? latestAwardedRunStars(db, auth.account.id, d.id)
               : null,
+          weeklyRuns:
+            d.status === "published"
+              ? weeklyRunsFor(db, auth.account.id, d.id, today)
+              : 0,
           createdAt: d.createdAt,
         };
       }),

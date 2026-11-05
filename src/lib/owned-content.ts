@@ -10,8 +10,10 @@ import {
   type ContentOverview,
 } from "@/lib/content/view";
 import { listContent } from "@/lib/content/loader";
-import { bestAttemptsBySentence, completionDistribution, latestRunStars } from "@/lib/domain/stats";
+import { bestAttemptsBySentence, completionDistribution } from "@/lib/domain/stats";
 import { encouragementFor } from "@/lib/domain/encouragement";
+import { beijingToday } from "@/lib/domain/beijing-date";
+import { latestAwardedRunStars, weeklyRunsFor } from "@/lib/domain/star-ledger";
 import { mediaUrl } from "@/lib/media-url";
 
 /**
@@ -54,6 +56,7 @@ export function ownedContentDetail(
       s.bestScore = best?.score ?? null;
       s.bestAt = best?.createdAt ?? null;
     }
+    unit.weeklyRuns = weeklyRunsFor(db, accountId, unit.id, beijingToday());
   } finally {
     db.close();
   }
@@ -84,14 +87,16 @@ export function ownedContentOverview(
   const packs = new Map(listContent(query).map((p) => [p.id, p] as const));
   const db = openDb(dbPath());
   try {
+    const today = beijingToday();
     for (const u of units) {
       const pack = packs.get(u.id);
       if (!pack) continue;
       const dist = completionDistribution(db, pack, { owner: accountId });
       u.percentages = dist.percentages;
       u.encouragement = encouragementFor(dist);
-      // 最近一次练习的总星数（票 04）：与完成度同批按账号覆盖全量视图的 null 占位
-      u.latestRunStars = latestRunStars(db, pack.id, { owner: accountId });
+      // 最近一次完整练习的入账星与本周入账次数（V0.4 账本口径）
+      u.latestRunStars = latestAwardedRunStars(db, accountId, pack.id);
+      u.weeklyRuns = weeklyRunsFor(db, accountId, pack.id, today);
       // 封面（票 05 网格卡）：列表行的 /media/ 内部地址同样改写为鉴权路由
       if (u.poster) {
         u.poster = authMediaUrl(u.source, u.poster);

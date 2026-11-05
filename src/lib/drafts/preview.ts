@@ -56,6 +56,8 @@ export function buildPreviewDetail(
       bestScore: null,
       bestAt: null,
     })),
+    // 预览不查账本，本周次数恒 0（同 bestScore/bestAt 的占位语义）
+    weeklyRuns: 0,
   };
   return {
     unit,
