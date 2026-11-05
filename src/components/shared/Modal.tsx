@@ -24,34 +24,52 @@ export function Modal({
 }) {
   const titleId = useId();
   const cardRef = useRef<HTMLDivElement>(null);
+  const primaryRef = useRef<HTMLButtonElement>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
   useEffect(() => {
     if (!open) return;
     const previous = document.activeElement as HTMLElement | null;
+    const focusInitial = () => {
+      const target =
+        primaryRef.current ??
+        cardRef.current?.querySelector<HTMLElement>("button");
+      target?.focus();
+    };
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         onCloseRef.current();
         return;
       }
       if (event.key !== "Tab" || !cardRef.current) return;
-      const focusable = cardRef.current.querySelectorAll<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      const focusable = Array.from(
+        cardRef.current.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        )
       );
-      if (focusable.length === 0) return;
+      if (focusable.length === 0) {
+        event.preventDefault();
+        return;
+      }
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
+      const active = document.activeElement as HTMLElement | null;
+      if (!active || !cardRef.current.contains(active)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+        return;
+      }
+      if (event.shiftKey && active === first) {
         event.preventDefault();
         last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
+      } else if (!event.shiftKey && active === last) {
         event.preventDefault();
         first.focus();
       }
     };
     document.addEventListener("keydown", onKey);
-    cardRef.current?.querySelector<HTMLElement>("button")?.focus();
+    focusInitial();
     return () => {
       document.removeEventListener("keydown", onKey);
       previous?.focus();
@@ -88,6 +106,7 @@ export function Modal({
         <div className="mt-7 grid gap-3">
           {primaryLabel && onPrimary && (
             <button
+              ref={primaryRef}
               type="button"
               onClick={onPrimary}
               className="rounded-2xl bg-emerald-500 px-5 py-3.5 text-lg font-bold text-white shadow-sm active:bg-emerald-600"
