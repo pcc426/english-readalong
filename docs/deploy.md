@@ -181,6 +181,16 @@ pm2 reload english-readalong
 - 需要恢复所有账号可见时，在「管理 → 教材内容可见性」打开开关；状态存数据库，跨部署保留。
 - 关闭只是访问控制，不会删除标准内容、草稿、素材或练习记录。
 
+### V0.4 初始星星回填
+
+部署脚本会在构建后、重启前执行 `npm run backfill:stars`。也可以手动执行：
+
+```bash
+ssh <user@host> "cd /opt/english-readalong && npm run backfill:stars"
+```
+
+输出会列出本次新增的 `账号 / 内容: +星星`。重复执行不会重复插入。
+
 常用命令：
 
 ```bash
