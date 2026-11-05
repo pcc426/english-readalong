@@ -13,7 +13,8 @@ interface NavItem {
   exact: boolean;
 }
 
-const STANDARD_ITEM: NavItem = { href: "/", label: "教材内容", exact: true };
+const GROWTH_ITEM: NavItem = { href: "/", label: "我的成长", exact: true };
+const STANDARD_ITEM: NavItem = { href: "/units", label: "教材内容", exact: false };
 const CUSTOM_ITEM: NavItem = { href: "/custom", label: "自定义内容", exact: false };
 const ADMIN_ITEM: NavItem = { href: "/admin", label: "管理", exact: false };
 
@@ -26,6 +27,7 @@ export default function Sidebar({
 }) {
   const pathname = usePathname();
   const items = [
+    GROWTH_ITEM,
     ...(showStandard ? [STANDARD_ITEM] : []),
     CUSTOM_ITEM,
     ...(isAdmin ? [ADMIN_ITEM] : []),

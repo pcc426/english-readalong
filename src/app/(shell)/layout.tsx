@@ -3,7 +3,7 @@
 // 登录后首页壳（票 03）：加载时用 /api/auth/me 鉴权，401 或无账号跳 /login。
 // 这条同时接住遗留项：首页此前没有页面级未登录跳转，现由壳统一兜底。
 // UI 不做自动化测试，走手工验收清单（spec · Testing Decisions）。
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/shell/Sidebar";
 import TopNav from "@/components/shell/TopNav";
@@ -15,7 +15,6 @@ export default function ShellLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const pathname = usePathname();
   const [account, setAccount] = useState<Account | null>(null);
   const [failed, setFailed] = useState(false);
   // 侧边栏折叠（V0.2.3）：给校对/练习页的右操作列腾空间；状态持久化
@@ -60,15 +59,7 @@ export default function ShellLayout({
     };
   }, [router]);
 
-  // v0.3.6：关闭态下家庭账号进根路径（教材内容）直接落到自定义内容；
-  // 管理员 standardContentVisible 恒为 true，不受影响。
-  const redirectHome =
-    account != null && !account.standardContentVisible && pathname === "/";
-  useEffect(() => {
-    if (redirectHome) router.replace("/custom");
-  }, [redirectHome, router]);
-
-  if (!account || redirectHome) {
+  if (!account) {
     return (
       <main className="flex min-h-[100dvh] items-center justify-center px-5">
         <p className="text-lg text-slate-400" role="status">
