@@ -42,7 +42,7 @@ export default async function UnitPage({
 
   return (
     <main className="flex h-full overflow-hidden">
-      <PracticeFlow unit={unit} />
+      <PracticeFlow unit={unit} weeklyRuns={unit.weeklyRuns} />
     </main>
   );
 }

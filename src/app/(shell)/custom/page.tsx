@@ -9,6 +9,7 @@
 import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { WeeklyLimitModal } from "@/components/shared/WeeklyLimitModal";
 import { STATUS_BADGES, type DraftStatusUI } from "@/components/shared/draft-ui";
 import {
   parseTabParam,
@@ -30,6 +31,8 @@ interface DraftOverview {
   posterUrl: string | null;
   /** 最近一次练习获得的总星数；仅 published 行有值，没练过为 null（不显示星块） */
   latestRunStars: number | null;
+  /** 本周（北京时间周一起算）完整练习入账次数（0–3，V0.4 账本口径） */
+  weeklyRuns: number;
   createdAt: string;
 }
 
@@ -51,6 +54,8 @@ function CustomListInner() {
   const [failed, setFailed] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 本周练满 3 次的已定稿卡片：点卡不跳转，只弹限次说明（V0.4 账本口径）
+  const [capped, setCapped] = useState<DraftOverview | null>(null);
 
   const loadDrafts = useCallback(async () => {
     try {
@@ -170,6 +175,12 @@ function CustomListInner() {
               <a
                 key={draft.id}
                 href={cardHref(draft)}
+                onClick={(event) => {
+                  if (draft.weeklyRuns >= 3) {
+                    event.preventDefault();
+                    setCapped(draft);
+                  }
+                }}
                 className="flex flex-col overflow-hidden rounded-3xl bg-white shadow-md ring-1 ring-slate-100 transition hover:-translate-y-0.5 hover:shadow-lg"
               >
                 {cardBody(draft)}
@@ -178,6 +189,12 @@ function CustomListInner() {
           )}
         </div>
       )}
+
+      <WeeklyLimitModal
+        open={capped != null}
+        onClose={() => setCapped(null)}
+        contentType="custom"
+      />
     </div>
   );
 
@@ -227,8 +244,12 @@ function CustomListInner() {
                 <span className="block text-2xl font-extrabold leading-none text-amber-500">
                   🌟{draft.latestRunStars}
                 </span>
-                <p className="mt-0.5 text-[11px] text-slate-400">上次练习获得</p>
+                <p className="mt-0.5 text-[11px] text-slate-400">上次练完获得</p>
               </>
+            ) : draft.status === "published" ? (
+              <span className="text-xs font-medium text-slate-400">
+                还没完整练过
+              </span>
             ) : (
               <span />
             )}

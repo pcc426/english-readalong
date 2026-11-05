@@ -6,6 +6,7 @@
 // 另返回 textbookUnits（注册教材全部单元）供单元下拉。筛选全在客户端（home-grid.ts）。
 // 未登录时 GET /api/units 返回 401，由壳层统一重定向兜底，这里只标加载失败。
 import { useEffect, useMemo, useState } from "react";
+import { WeeklyLimitModal } from "@/components/shared/WeeklyLimitModal";
 import { sourceLabel } from "@/lib/content/source-label";
 import {
   filterStandardContent,
@@ -29,6 +30,8 @@ interface UnitOverview {
   poster: string | null;
   /** 最近一次练习获得的总星数（票 04）；从未练过为 null */
   latestRunStars: number | null;
+  /** 本周（北京时间周一起算）完整练习入账次数（0–3，V0.4 账本口径） */
+  weeklyRuns: number;
   encouragement: string;
 }
 
@@ -44,6 +47,8 @@ export default function StandardContentPage() {
   const [failed, setFailed] = useState(false);
   const [unitFilter, setUnitFilter] = useState<UnitFilter>("all");
   const [moduleFilter, setModuleFilter] = useState<ModuleFilter>("all");
+  // 本周练满 3 次的卡片：点卡不跳转，只弹限次说明（V0.4 账本口径）
+  const [capped, setCapped] = useState<UnitOverview | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -143,19 +148,41 @@ export default function StandardContentPage() {
       ) : (
         <div className="mt-6 grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(180px,1fr))]">
           {filtered.map((unit) => (
-            <ContentCard key={unit.id} unit={unit} />
+            <ContentCard
+              key={unit.id}
+              unit={unit}
+              onCapReached={setCapped}
+            />
           ))}
         </div>
       )}
+
+      <WeeklyLimitModal
+        open={capped != null}
+        onClose={() => setCapped(null)}
+        contentType="standard"
+      />
     </div>
   );
 }
 
 /** 网格卡（票 05，参照原型 ContentCard 重写）：9:16 封面 + 课文名 + 枚举串 + 总星数 */
-function ContentCard({ unit }: { unit: UnitOverview }) {
+function ContentCard({
+  unit,
+  onCapReached,
+}: {
+  unit: UnitOverview;
+  onCapReached: (unit: UnitOverview) => void;
+}) {
   return (
     <a
       href={`/units/${unit.id}`}
+      onClick={(event) => {
+        if (unit.weeklyRuns >= 3) {
+          event.preventDefault();
+          onCapReached(unit);
+        }
+      }}
       className="flex flex-col overflow-hidden rounded-3xl bg-white shadow-md ring-1 ring-slate-100 transition hover:-translate-y-0.5 hover:shadow-lg"
     >
       {/* 9:16 封面（票 01）；无封面显示占位不裂图。
@@ -186,17 +213,19 @@ function ContentCard({ unit }: { unit: UnitOverview }) {
         </p>
         <div className="mt-2 flex items-end justify-between gap-2 border-t border-slate-100 pt-2">
           {unit.latestRunStars != null ? (
-            // 最近一次练习总星数（票 04，spec 决策 23）：🌟N 无空格
-            <span className="text-2xl font-extrabold leading-none text-amber-500">
-              🌟{unit.latestRunStars}
-            </span>
+            // 最近一次完整练习入账星（V0.4 账本口径，spec 决策 23）：🌟N 无空格
+            <>
+              <span className="text-2xl font-extrabold leading-none text-amber-500">
+                🌟{unit.latestRunStars}
+              </span>
+              <p className="mt-0.5 text-[11px] text-slate-400">上次练完获得</p>
+            </>
           ) : (
-            <span className="text-xs font-medium text-slate-400">还没练过</span>
+            <span className="text-xs font-medium text-slate-400">
+              还没完整练过
+            </span>
           )}
         </div>
-        {unit.latestRunStars != null && (
-          <p className="mt-0.5 text-[11px] text-slate-400">上次练习获得</p>
-        )}
         {/* V0.3.1 票 03：鼓励语 ≤10 字、不与星数并排，独占卡片最下一行 */}
         <p className="mt-auto pt-1 text-xs font-bold text-emerald-600">
           {unit.encouragement}

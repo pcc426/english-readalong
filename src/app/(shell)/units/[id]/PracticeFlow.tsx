@@ -11,6 +11,7 @@ import {
   type FlowState,
 } from "@/lib/domain/practice-flow";
 import { mapScoreToStars } from "@/lib/domain/stars";
+import { WeeklyLimitModal } from "@/components/shared/WeeklyLimitModal";
 import { sourceLabel } from "@/lib/content/source-label";
 import type { ContentDetail } from "@/lib/content/view";
 import { cellStars, replayControl } from "./practice-panel";
@@ -41,12 +42,15 @@ type StopIntent = "submit" | "rerecord" | "discard";
 
 export default function PracticeFlow({
   unit,
+  weeklyRuns = 0,
   mode = "practice",
   backHref = "/units",
   backLabel = "‹ 单元列表",
   unconfirmedCount = 0,
 }: {
   unit: ContentDetail;
+  /** 本周（北京时间周一起算）该内容完整练习入账次数；≥3 时开始练习弹限次说明 */
+  weeklyRuns?: number;
   /** practice＝正式练习（默认，行为零变化）；preview＝草稿预览：不录音不评分（V0.3 票 08） */
   mode?: FlowMode;
   /** 左上返回链接（preview 下指向校对页）；默认维持正式练习的「单元列表」 */
@@ -56,6 +60,9 @@ export default function PracticeFlow({
   unconfirmedCount?: number;
 }) {
   const practice = mode === "practice";
+  // 本周已练满 3 次：只拦正式练习的开始按钮，预览流程不受影响
+  const capped = practice && weeklyRuns >= 3;
+  const [capOpen, setCapOpen] = useState(false);
   const total = unit.sentences.length;
   const [state, dispatch] = useReducer(
     (s: FlowState, e: FlowEvent) => reduceFlow(s, e, total, mode),
@@ -196,6 +203,11 @@ export default function PracticeFlow({
         dispatch({ type: "scored", result });
       } else {
         dispatch({ type: "submitFailed" });
+        // 本周限次在提交时兜底拦截（入口拦截之外，防止页面停留跨周/并发）
+        if (res.status === 409 && body?.error?.code === "WEEKLY_LIMIT_REACHED") {
+          setCapOpen(true);
+          return;
+        }
         if (res.status === 401) {
           // API 守卫判会话失效（ADR-0003）：普通"再试一次"救不回来，引导重新登录
           setSessionExpired(true);
@@ -721,7 +733,13 @@ export default function PracticeFlow({
         {state.step === "idle" && practice && (
           <div className="grid shrink-0 grid-cols-[2fr_1fr] gap-3">
             <button
-              onClick={() => dispatch({ type: "begin" })}
+              onClick={() => {
+                if (capped) {
+                  setCapOpen(true);
+                  return;
+                }
+                dispatch({ type: "begin" });
+              }}
               className="rounded-2xl bg-emerald-500 py-4 text-2xl font-bold text-white shadow-md active:bg-emerald-600"
             >
               ▶ 开始练习
@@ -857,6 +875,12 @@ export default function PracticeFlow({
           );
         })()}
       </aside>
+
+      <WeeklyLimitModal
+        open={capOpen}
+        onClose={() => setCapOpen(false)}
+        contentType={unit.type}
+      />
     </>
   );
 }
