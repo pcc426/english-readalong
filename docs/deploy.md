@@ -189,7 +189,14 @@ pm2 reload english-readalong
 ssh <user@host> "cd /opt/english-readalong && npm run backfill:stars"
 ```
 
-输出会列出本次新增的 `账号 / 内容: +星星`。重复执行不会重复插入。
+- **切点只定一次**：首次执行会把上线切点与上线月份存进 `app_settings`
+  （`v04_baseline_cutoff` / `v04_baseline_month`）。之后重复部署只折算切点之前的历史
+  练习，不会把上线后的练习再折成新的 baseline。
+- 输出会列出本次新增的 `账号 / 内容: +星星`，随后按账号打印 baseline 合计
+  （如 `acct-xxx: 95 stars`），最后是本次插入行数。
+- 预期量级：家长测试账号约 **95** 星；管理员约 **75** 星，另有约 **35** 星来自
+  owner 为 NULL 的旧记录并入管理员（实际值取决于每句最高星合并结果）。
+- 重复执行不会重复插入；回填失败不阻塞部署，修好后手动重跑即可。
 
 常用命令：
 

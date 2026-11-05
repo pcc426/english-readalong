@@ -35,7 +35,7 @@ echo "==> 远程安装依赖并构建（better-sqlite3 预编译包走 npmmirror
 ssh "$HOST" "cd '$APP_DIR' && export npm_config_better_sqlite3_binary_host_mirror=https://registry.npmmirror.com/-/binary/better-sqlite3 && npm ci --silent && npm run build"
 
 echo "==> 回填初始星星（幂等）"
-ssh "$HOST" "cd '$APP_DIR' && npm run backfill:stars"
+ssh "$HOST" "cd '$APP_DIR' && npm run backfill:stars" || echo "backfill failed; continuing; rerun manually"
 
 echo "==> pm2 平滑重启"
 ssh "$HOST" "cd '$APP_DIR' && (pm2 reload english-readalong 2>/dev/null || pm2 start npm --name english-readalong -- start && pm2 save)"
