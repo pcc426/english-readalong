@@ -242,18 +242,61 @@ describe("openDb 的 star_ledger（V0.4）", () => {
       ]);
       const indexes = db
         .prepare("PRAGMA index_list(star_ledger)")
-        .all() as Array<{ name: string }>;
-      const names = indexes.map((index) => index.name);
-      expect(names).toContain("idx_star_ledger_run");
-      expect(names).toContain("idx_star_ledger_baseline");
-      expect(names).toContain("idx_star_ledger_account_day");
-      expect(names).toContain("idx_star_ledger_account_week");
+        .all() as Array<{ name: string; unique: number }>;
+      const byName = new Map(indexes.map((index) => [index.name, index]));
+      expect(byName.has("idx_star_ledger_run")).toBe(true);
+      expect(byName.has("idx_star_ledger_baseline")).toBe(true);
+      expect(byName.has("idx_star_ledger_account_day")).toBe(true);
+      expect(byName.has("idx_star_ledger_account_week")).toBe(true);
+      expect(byName.get("idx_star_ledger_run")?.unique).toBe(1);
+      expect(byName.get("idx_star_ledger_baseline")?.unique).toBe(1);
+
+      function indexSql(name: string): string {
+        return (
+          db
+            .prepare(
+              "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?"
+            )
+            .get(name) as { sql: string }
+        ).sql;
+      }
+      expect(indexSql("idx_star_ledger_run")).toContain("WHERE");
+      expect(indexSql("idx_star_ledger_baseline")).toContain("WHERE");
     } finally {
       db.close();
     }
   });
 
-  it("重复 openDb 幂等，旧库自动补建", () => {
+  it("重复 run_id 与重复 baseline 被唯一索引拦截，同内容多条 run 允许", () => {
+    const p = path.join(makeDbDir("ra-stars-uniq-"), "readalong.db");
+    const db = openDb(p);
+    try {
+      // better-sqlite3 默认开启外键约束：先建出流水引用的账号
+      db.prepare(
+        `INSERT INTO accounts (id, email, password_hash) VALUES ('acct-a', 'stars@test.com', 'x')`
+      ).run();
+      const insertRun = db.prepare(
+        `INSERT INTO star_ledger
+           (account_id, kind, unit_id, run_id, stars, base_stars, doubled, occurred_on, week_start)
+         VALUES ('acct-a', 'run', 'u1', ?, 3, 3, 0, '2026-11-05', '2026-11-02')`
+      );
+      const insertBaseline = db.prepare(
+        `INSERT INTO star_ledger
+           (account_id, kind, unit_id, run_id, stars, base_stars, doubled, occurred_on, week_start)
+         VALUES ('acct-a', 'baseline', 'u1', NULL, 5, 5, 0, '2026-11-01', NULL)`
+      );
+
+      insertRun.run("run-1");
+      expect(() => insertRun.run("run-1")).toThrow(/UNIQUE/);
+      insertRun.run("run-2"); // 同内容第二条 run 允许
+      insertBaseline.run();
+      expect(() => insertBaseline.run()).toThrow(/UNIQUE/);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("重复 openDb 幂等", () => {
     const p = path.join(makeDbDir("ra-stars-old-"), "readalong.db");
     const first = openDb(p);
     first.close();
