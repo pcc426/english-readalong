@@ -18,6 +18,11 @@ export function WeeklyLimitModal({
       open={open}
       onClose={onClose}
       title="本周挑战次数用完啦"
+      leading={
+        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-amber-100 text-4xl">
+          🌟
+        </div>
+      }
       primaryLabel="去练其他内容"
       onPrimary={() => {
         onClose();
@@ -26,9 +31,6 @@ export function WeeklyLimitModal({
       secondaryLabel="知道了"
       onSecondary={onClose}
     >
-      <div className="mx-auto mt-4 flex h-20 w-20 items-center justify-center rounded-full bg-amber-100 text-4xl">
-        🌟
-      </div>
       <p className="mt-4 text-lg leading-relaxed text-slate-600">
         这个内容本周已经挑战 3 次啦，下周再来挑战，先试试其他内容吧！
       </p>

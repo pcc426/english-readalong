@@ -7,6 +7,7 @@ export function Modal({
   open,
   onClose,
   title,
+  leading,
   children,
   primaryLabel,
   onPrimary,
@@ -16,6 +17,7 @@ export function Modal({
   open: boolean;
   onClose: () => void;
   title: string;
+  leading?: ReactNode;
   children: ReactNode;
   primaryLabel?: string;
   onPrimary?: () => void;
@@ -38,6 +40,7 @@ export function Modal({
       target?.focus();
     };
     const onKey = (event: KeyboardEvent) => {
+      if (event.isComposing) return;
       if (event.key === "Escape") {
         onCloseRef.current();
         return;
@@ -47,7 +50,7 @@ export function Modal({
         cardRef.current.querySelectorAll<HTMLElement>(
           'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
         )
-      );
+      ).filter((element) => !element.hasAttribute("disabled") && element.tabIndex >= 0);
       if (focusable.length === 0) {
         event.preventDefault();
         return;
@@ -99,6 +102,7 @@ export function Modal({
         >
           ✕
         </button>
+        {leading}
         <h2 id={titleId} className="mt-2 text-2xl font-extrabold text-slate-800">
           {title}
         </h2>
