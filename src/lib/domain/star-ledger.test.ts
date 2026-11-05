@@ -160,13 +160,14 @@ describe("runStats / awardRunIfComplete", () => {
       unitId: "u1",
       runId: "run-1",
       sentenceCount: 2,
-      completedAt: "2026-11-05 01:02:00",
+      completedAt: "2026-11-06 01:00:00",
     });
     expect(second.stars).toBe(5);
     const rows = ledgerRows(db);
     expect(rows).toHaveLength(1);
     expect(rows[0].stars).toBe(5);
     expect(rows[0].occurred_on).toBe("2026-11-05");
+    expect(rows[0].week_start).toBe("2026-11-02");
   });
 
   it("同一内容第 4 次完整练习被限次，不写账本", () => {
@@ -225,6 +226,11 @@ describe("latestAwardedRunStars / totalStars", () => {
     db.prepare(
       `INSERT INTO star_ledger
          (account_id, kind, unit_id, run_id, stars, base_stars, doubled, occurred_on, week_start)
+       VALUES ('acct-a', 'baseline', 'u0', NULL, 10, 10, 0, '2026-11-01', NULL)`
+    ).run();
+    db.prepare(
+      `INSERT INTO star_ledger
+         (account_id, kind, unit_id, run_id, stars, base_stars, doubled, occurred_on, week_start)
        VALUES ('acct-a', 'run', 'u1', 'r1', 5, 5, 0, '2026-11-04', '2026-11-02')`
     ).run();
     db.prepare(
@@ -234,7 +240,7 @@ describe("latestAwardedRunStars / totalStars", () => {
     ).run();
     expect(latestAwardedRunStars(db, "acct-a", "u1")).toBe(88);
     expect(latestAwardedRunStars(db, "acct-a", "other")).toBeNull();
-    expect(totalStars(db, "acct-a")).toBe(93);
+    expect(totalStars(db, "acct-a")).toBe(103); // 5 + 88 + 10 baseline
   });
 
   it("账号隔离", () => {
