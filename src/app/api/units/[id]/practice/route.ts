@@ -8,6 +8,8 @@ import { getScoringService } from "@/lib/scoring/current";
 import { requireAccount } from "@/lib/auth/guard";
 import { errorResponse } from "@/lib/http";
 import { standardContentVisibleForAccount } from "@/lib/settings/content-visibility";
+import { beijingToday } from "@/lib/domain/beijing-date";
+import { awardRunIfComplete, weeklyRunsFor } from "@/lib/domain/star-ledger";
 
 export const dynamic = "force-dynamic";
 
@@ -71,6 +73,31 @@ export async function POST(
     return errorResponse(404, "UNIT_NOT_FOUND", "单元或句子不存在");
   }
 
+  // 粗粒度预检：用北京今天挡住第 4 次；真正的 cap 以入账时的 occurred_on 为准。
+  // 已入账的 run 允许补读：awardRunIfComplete 会走 existing-row 更新，不再消耗 cap。
+  const capDb = openDb(dbPath());
+  try {
+    const alreadyAwarded = runId
+      ? capDb
+          .prepare(
+            "SELECT 1 AS ok FROM star_ledger WHERE account_id = ? AND run_id = ?"
+          )
+          .get(auth.account.id, runId)
+      : undefined;
+    if (
+      !alreadyAwarded &&
+      weeklyRunsFor(capDb, auth.account.id, id, beijingToday()) >= 3
+    ) {
+      return errorResponse(
+        409,
+        "WEEKLY_LIMIT_REACHED",
+        "这个内容本周已经挑战 3 次啦，下周再来挑战，先试试其他内容吧！"
+      );
+    }
+  } finally {
+    capDb.close();
+  }
+
   // 评测服务构造失败（如缺密钥）是服务器配置问题，与"可重试的评分失败"分开
   let service: ReturnType<typeof getScoringService>;
   try {
@@ -112,19 +139,56 @@ export async function POST(
   const stars = mapScoreToStars(score);
   const db = openDb(dbPath());
   try {
-    // 最好成绩按账号隔离：新纪录判定只和本人历史比（票 10）
-    const prev = bestAttemptsBySentence(db, id, { owner: auth.account.id }).get(
-      sentenceIndex
-    )?.score ?? null;
-    const isNewBest = prev === null || score > prev;
-    db.prepare(
-      "INSERT INTO practice_attempts (unit_id, sentence_index, score, stars, owner, run_id) VALUES (?, ?, ?, ?, ?, ?)"
-    ).run(id, sentenceIndex, score, stars, auth.account.id, runId);
+    const tx = db.transaction(() => {
+      // 最好成绩按账号隔离：新纪录判定只和本人历史比（票 10）
+      const prev =
+        bestAttemptsBySentence(db, id, { owner: auth.account.id }).get(
+          sentenceIndex
+        )?.score ?? null;
+      const isNewBest = prev === null || score > prev;
+      const info = db
+        .prepare(
+          "INSERT INTO practice_attempts (unit_id, sentence_index, score, stars, owner, run_id) VALUES (?, ?, ?, ?, ?, ?)"
+        )
+        .run(id, sentenceIndex, score, stars, auth.account.id, runId);
+      const inserted = db
+        .prepare("SELECT created_at FROM practice_attempts WHERE id = ?")
+        .get(info.lastInsertRowid) as { created_at: string };
+      const award = runId
+        ? awardRunIfComplete(db, {
+            accountId: auth.account.id,
+            unitId: id,
+            runId,
+            sentenceCount: pack.sentences.length,
+            completedAt: inserted.created_at,
+          })
+        : {
+            complete: false,
+            stars: null,
+            baseStars: null,
+            doubled: false,
+            weeklyRuns: weeklyRunsFor(
+              db,
+              auth.account.id,
+              id,
+              beijingToday()
+            ),
+            weeklyLimitReached: false,
+          };
+      return { prev, isNewBest, award };
+    });
+
+    const { prev, isNewBest, award } = tx();
     return NextResponse.json({
       score,
       stars,
       isNewBest,
       bestScore: Math.max(score, prev ?? score),
+      runComplete: award.complete,
+      runStars: award.stars,
+      runDoubled: award.doubled,
+      weeklyRuns: award.weeklyRuns,
+      weeklyLimitReached: award.weeklyLimitReached,
     });
   } finally {
     db.close();

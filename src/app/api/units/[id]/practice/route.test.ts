@@ -367,6 +367,107 @@ describe("POST /api/units/[id]/practice", () => {
     });
   });
 
+  describe("V0.4 星星账本与每周上限", () => {
+    function ledgerRows() {
+      const db = openDb(process.env.DB_PATH!);
+      try {
+        return db
+          .prepare(
+            `SELECT run_id, stars, base_stars, doubled, occurred_on, week_start
+             FROM star_ledger ORDER BY id`
+          )
+          .all();
+      } finally {
+        db.close();
+      }
+    }
+
+    it("完整练完 2 句：入账按每句最高星，返回 runComplete/runStars", async () => {
+      setupEnv();
+      setScoringService(new FakeScoringService([92, 80]));
+      await post(0, fakeWav(), undefined, "u2-dragon-dance", "run-1");
+      const res = await post(1, fakeWav(), undefined, "u2-dragon-dance", "run-1");
+      const body = await res.json();
+      expect(body).toMatchObject({
+        runComplete: true,
+        runStars: 5,
+        runDoubled: false,
+        weeklyRuns: 1,
+      });
+      expect(ledgerRows()).toHaveLength(1);
+      expect(ledgerRows()[0]).toMatchObject({
+        run_id: "run-1",
+        stars: 5,
+        base_stars: 5,
+        doubled: 0,
+      });
+    });
+
+    it("只练 1 句不入账", async () => {
+      setupEnv();
+      setScoringService(new FakeScoringService(92));
+      const res = await post(0, fakeWav(), undefined, "u2-dragon-dance", "run-1");
+      expect(await res.json()).toMatchObject({
+        runComplete: false,
+        runStars: null,
+      });
+      expect(ledgerRows()).toHaveLength(0);
+    });
+
+    it("2 句都三星时翻倍（round(2*0.9)=2）", async () => {
+      setupEnv();
+      setScoringService(new FakeScoringService([92, 95]));
+      await post(0, fakeWav(), undefined, "u2-dragon-dance", "run-double");
+      const res = await post(1, fakeWav(), undefined, "u2-dragon-dance", "run-double");
+      expect(await res.json()).toMatchObject({
+        runComplete: true,
+        runStars: 12,
+        runDoubled: true,
+      });
+      expect(ledgerRows()[0]).toMatchObject({ stars: 12, base_stars: 6, doubled: 1 });
+    });
+
+    it("本周第 4 次完整练习被 409 拦截，且不调用评测", async () => {
+      setupEnv();
+      setScoringService(new FakeScoringService(92));
+      for (const runId of ["r1", "r2", "r3"]) {
+        await post(0, fakeWav(), undefined, "u2-dragon-dance", runId);
+        await post(1, fakeWav(), undefined, "u2-dragon-dance", runId);
+      }
+      // 第 4 次若调用评测会因空队列返回 502；409 证明限次在评分前
+      setScoringService(new FakeScoringService([]));
+      const res = await post(0, fakeWav(), undefined, "u2-dragon-dance", "r4");
+      expect(res.status).toBe(409);
+      expect((await res.json()).error.code).toBe("WEEKLY_LIMIT_REACHED");
+      expect(attemptRows()).toHaveLength(6);
+    });
+
+    it("已入账的同 run 补读不被预检拦截，更新同一行", async () => {
+      setupEnv();
+      // 3 轮，每轮 2 句：92（3 星）+ 80（2 星）= 5 星，不翻倍
+      setScoringService(new FakeScoringService([92, 80, 92, 80, 92, 80]));
+      for (const runId of ["r1", "r2", "r3"]) {
+        await post(0, fakeWav(), undefined, "u2-dragon-dance", runId);
+        await post(1, fakeWav(), undefined, "u2-dragon-dance", runId);
+      }
+      expect(ledgerRows()).toHaveLength(3);
+
+      // 3 轮已满，但 r1 已入账；同 run 补读第 2 句到 95（3 星）应放行并更新 r1
+      setScoringService(new FakeScoringService(95));
+      const res = await post(1, fakeWav(), undefined, "u2-dragon-dance", "r1");
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({
+        runComplete: true,
+        runStars: 12,
+        runDoubled: true,
+        weeklyRuns: 3,
+      });
+      const rows = ledgerRows() as Array<{ run_id: string; stars: number }>;
+      expect(rows).toHaveLength(3);
+      expect(rows.find((row) => row.run_id === "r1")?.stars).toBe(12);
+    });
+  });
+
   describe("教材内容可见性开关（v0.3.6）", () => {
     it("关闭态下非管理员练标准内容 404，且不触发评测", async () => {
       setupEnv(false);
