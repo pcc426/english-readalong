@@ -22,6 +22,7 @@ export function GrowthView() {
   useEffect(() => {
     let cancelled = false;
     setFailed(false);
+    setSnapshot(null);
     (async () => {
       try {
         const res = await fetch(`/api/growth?month=${month}`);
