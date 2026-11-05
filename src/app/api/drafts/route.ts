@@ -39,7 +39,8 @@ export async function GET(req: Request) {
     );
     // 最近一次完整练习的入账星与本周入账次数（V0.4 账本口径）：仅 published 行携带。
     // 定稿后内容包 id 即草稿 id（finalize.packFromDraft），
-    // 与 owned-content 的账本查询同源；非 published / 从未入账为 null。
+    // 与 owned-content 的账本查询同源；latestRunStars 在非 published / 从未入账时为 null，
+    // weeklyRuns 在非 published 行恒为 0。
     const today = beijingToday();
     return NextResponse.json({
       drafts: drafts.map((d) => {

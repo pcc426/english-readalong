@@ -14,6 +14,7 @@ import {
 import { createStandardDraft } from "@/lib/drafts/standard-drafts";
 import { finalizeDraft } from "@/lib/drafts/finalize";
 import { setStandardContentPublic } from "@/lib/settings/content-visibility";
+import { beijingToday, beijingWeekStart } from "@/lib/domain/beijing-date";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
@@ -104,6 +105,33 @@ function insertAttempt(
     db.prepare(
       "INSERT INTO practice_attempts (unit_id, sentence_index, score, stars, owner, created_at) VALUES (?, ?, ?, ?, ?, ?)"
     ).run(unitId, sentenceIndex, score, 1, owner, createdAt);
+  } finally {
+    db.close();
+  }
+}
+
+function insertRun(
+  unitId: string,
+  owner: string,
+  stars: number,
+  occurredOn: string,
+  runId: string
+) {
+  const db = openDb(process.env.DB_PATH!);
+  try {
+    db.prepare(
+      `INSERT INTO star_ledger
+         (account_id, kind, unit_id, run_id, stars, base_stars, doubled, occurred_on, week_start, created_at)
+       VALUES (?, 'run', ?, ?, ?, ?, 0, ?, ?, '2026-11-05 01:00:00')`
+    ).run(
+      owner,
+      unitId,
+      runId,
+      stars,
+      stars,
+      occurredOn,
+      beijingWeekStart(occurredOn)
+    );
   } finally {
     db.close();
   }
@@ -214,6 +242,20 @@ describe("GET /api/units/[id]", () => {
     const body = await res.json();
     expect(body.unit.sentences[0].bestScore).toBeNull();
     expect(body.unit.sentences[0].bestAt).toBeNull();
+  });
+
+  it("详情按账号返回本周完整练习入账次数 weeklyRuns（非接口默认 0）", async () => {
+    setupEnv();
+    const owner = accountIdOf("parent@test.com");
+    const today = beijingToday();
+    insertRun("u2-dragon-dance", owner, 6, today, "run-a");
+
+    let res = await GET(authedGet(), ctx("u2-dragon-dance"));
+    expect((await res.json()).unit.weeklyRuns).toBe(1);
+
+    insertRun("u2-dragon-dance", owner, 6, today, "run-b");
+    res = await GET(authedGet(), ctx("u2-dragon-dance"));
+    expect((await res.json()).unit.weeklyRuns).toBe(2);
   });
 
   it("已登录时未知单元返回 404", async () => {

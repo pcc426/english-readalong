@@ -26,7 +26,7 @@ export function openDb(dbPath: string): Database.Database {
       -- 归属字段：MVP 单孩子恒为 NULL，公网化时启用（ADR-0002 的预留）
       owner TEXT,
       -- 练习 run 归属（票 04）：一次 PracticeFlow 从 begin 到结束/中途退出为一轮，
-      -- 轮内所有 attempt 共享一个 runId；老数据为 NULL（统计口径见 stats.latestRunStars）
+      -- 轮内所有 attempt 共享一个 runId；老数据为 NULL（run 分组口径见 star-ledger.runStats）
       run_id TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );

@@ -146,6 +146,17 @@ describe("GET /api/drafts · 账本入账星与本周次数（V0.4）", () => {
     expect(item.latestRunStars).toBeNull();
     expect(item.weeklyRuns).toBe(0);
   });
+
+  it("published 但从未入账：latestRunStars 为 null，weeklyRuns 为 0", async () => {
+    const db = setupEnv();
+    const mine = accountIdOf("parent@test.com");
+    const id = seedPublished(db, mine, "没练过");
+    const res = await get(sessionCookieFor("parent@test.com"));
+    const body = await res.json();
+    const item = body.drafts.find((d: { id: string }) => d.id === id);
+    expect(item.latestRunStars).toBeNull();
+    expect(item.weeklyRuns).toBe(0);
+  });
 });
 
 describe("GET /api/drafts", () => {
