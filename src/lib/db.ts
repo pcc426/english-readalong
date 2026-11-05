@@ -55,6 +55,30 @@ export function openDb(dbPath: string): Database.Database {
       value TEXT NOT NULL
     );
 
+    -- V0.4 星星账本：只增不减的账号级流水。
+    -- baseline = 上线时按内容历史最好星一次性折算；run = 一次完整练习的入账。
+    CREATE TABLE IF NOT EXISTS star_ledger (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      account_id TEXT NOT NULL REFERENCES accounts(id),
+      kind TEXT NOT NULL CHECK (kind IN ('baseline', 'run')),
+      unit_id TEXT NOT NULL,
+      run_id TEXT,
+      stars INTEGER NOT NULL,
+      base_stars INTEGER NOT NULL,
+      doubled INTEGER NOT NULL DEFAULT 0,
+      occurred_on TEXT NOT NULL,
+      week_start TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_star_ledger_run
+      ON star_ledger (account_id, run_id) WHERE run_id IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_star_ledger_baseline
+      ON star_ledger (account_id, unit_id) WHERE kind = 'baseline';
+    CREATE INDEX IF NOT EXISTS idx_star_ledger_account_day
+      ON star_ledger (account_id, occurred_on);
+    CREATE INDEX IF NOT EXISTS idx_star_ledger_account_week
+      ON star_ledger (account_id, unit_id, week_start);
+
     -- 内容草稿（校对中间态只存 SQLite，不进内容包文件；spec Implementation Decisions）
     -- type 预留 standard：管理员将来用同一条上传/校对管线制作教材内容
     CREATE TABLE IF NOT EXISTS content_drafts (

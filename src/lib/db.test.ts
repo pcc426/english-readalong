@@ -221,3 +221,47 @@ describe("openDb 的 practice_attempts 迁移（V0.2 owner）", () => {
     }
   });
 });
+
+describe("openDb 的 star_ledger（V0.4）", () => {
+  it("新库建出 star_ledger 与唯一索引", () => {
+    const p = path.join(makeDbDir("ra-stars-"), "readalong.db");
+    const db = openDb(p);
+    try {
+      expect(columnNames(db, "star_ledger")).toEqual([
+        "id",
+        "account_id",
+        "kind",
+        "unit_id",
+        "run_id",
+        "stars",
+        "base_stars",
+        "doubled",
+        "occurred_on",
+        "week_start",
+        "created_at",
+      ]);
+      const indexes = db
+        .prepare("PRAGMA index_list(star_ledger)")
+        .all() as Array<{ name: string }>;
+      const names = indexes.map((index) => index.name);
+      expect(names).toContain("idx_star_ledger_run");
+      expect(names).toContain("idx_star_ledger_baseline");
+      expect(names).toContain("idx_star_ledger_account_day");
+      expect(names).toContain("idx_star_ledger_account_week");
+    } finally {
+      db.close();
+    }
+  });
+
+  it("重复 openDb 幂等，旧库自动补建", () => {
+    const p = path.join(makeDbDir("ra-stars-old-"), "readalong.db");
+    const first = openDb(p);
+    first.close();
+    const second = openDb(p);
+    try {
+      expect(columnNames(second, "star_ledger")).toContain("occurred_on");
+    } finally {
+      second.close();
+    }
+  });
+});
