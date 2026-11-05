@@ -4,12 +4,13 @@
 // 上传表单已移至 /custom/upload（票 07），本页只做列表：右上【＋ 上传视频】进入。
 // tabs「可练习（已定稿）/ 制作中（转写中＋待校对）」默认可练习，?tab=making 直开
 // 制作中（上传成功跳回带此参）；数据仍走 GET /api/drafts?type=custom，
-// published 行携带 latestRunStars（同 owned-content 口径）供「🌟N 上次练习获得」。
+// published 行携带 latestRunStars（同 owned-content 口径）供「🌟N 上次练完获得」。
 // UI 不做自动化测试，走 iPad 真机手工验收清单（spec · Testing Decisions）。
 import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { WeeklyLimitModal } from "@/components/shared/WeeklyLimitModal";
+import { WEEKLY_RUN_LIMIT } from "@/lib/domain/limits";
 import { STATUS_BADGES, type DraftStatusUI } from "@/components/shared/draft-ui";
 import {
   parseTabParam,
@@ -54,7 +55,7 @@ function CustomListInner() {
   const [failed, setFailed] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // 本周练满 3 次的已定稿卡片：点卡不跳转，只弹限次说明（V0.4 账本口径）
+  // 本周练满上限的已定稿卡片：点卡不跳转，只弹限次说明（V0.4 账本口径）
   const [capped, setCapped] = useState<DraftOverview | null>(null);
 
   const loadDrafts = useCallback(async () => {
@@ -175,10 +176,21 @@ function CustomListInner() {
               <a
                 key={draft.id}
                 href={cardHref(draft)}
+                aria-haspopup={
+                  draft.status === "published" &&
+                  draft.weeklyRuns >= WEEKLY_RUN_LIMIT
+                    ? "dialog"
+                    : undefined
+                }
                 onClick={(event) => {
-                  if (draft.weeklyRuns >= 3) {
+                  if (
+                    draft.status === "published" &&
+                    draft.weeklyRuns >= WEEKLY_RUN_LIMIT
+                  ) {
                     event.preventDefault();
                     setCapped(draft);
+                    // 后台重取：卡片若已跨周（列表数据陈旧），关掉弹窗后可正常进入
+                    void loadDrafts();
                   }
                 }}
                 className="flex flex-col overflow-hidden rounded-3xl bg-white shadow-md ring-1 ring-slate-100 transition hover:-translate-y-0.5 hover:shadow-lg"

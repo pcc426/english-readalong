@@ -11,6 +11,7 @@ import {
   type FlowState,
 } from "@/lib/domain/practice-flow";
 import { mapScoreToStars } from "@/lib/domain/stars";
+import { WEEKLY_RUN_LIMIT } from "@/lib/domain/limits";
 import { WeeklyLimitModal } from "@/components/shared/WeeklyLimitModal";
 import { sourceLabel } from "@/lib/content/source-label";
 import type { ContentDetail } from "@/lib/content/view";
@@ -60,8 +61,8 @@ export default function PracticeFlow({
   unconfirmedCount?: number;
 }) {
   const practice = mode === "practice";
-  // 本周已练满 3 次：只拦正式练习的开始按钮，预览流程不受影响
-  const capped = practice && weeklyRuns >= 3;
+  // 本周已练满上限：只拦正式练习的开始按钮，预览流程不受影响
+  const capped = practice && weeklyRuns >= WEEKLY_RUN_LIMIT;
   const [capOpen, setCapOpen] = useState(false);
   const total = unit.sentences.length;
   const [state, dispatch] = useReducer(

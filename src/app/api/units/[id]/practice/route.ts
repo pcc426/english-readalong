@@ -9,6 +9,7 @@ import { requireAccount } from "@/lib/auth/guard";
 import { errorResponse } from "@/lib/http";
 import { standardContentVisibleForAccount } from "@/lib/settings/content-visibility";
 import { beijingToday } from "@/lib/domain/beijing-date";
+import { WEEKLY_RUN_LIMIT } from "@/lib/domain/limits";
 import { awardRunIfComplete, weeklyRunsFor } from "@/lib/domain/star-ledger";
 
 export const dynamic = "force-dynamic";
@@ -86,7 +87,7 @@ export async function POST(
       : undefined;
     if (
       !alreadyAwarded &&
-      weeklyRunsFor(capDb, auth.account.id, id, beijingToday()) >= 3
+      weeklyRunsFor(capDb, auth.account.id, id, beijingToday()) >= WEEKLY_RUN_LIMIT
     ) {
       return errorResponse(
         409,

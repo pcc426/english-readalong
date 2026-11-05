@@ -7,6 +7,7 @@
 // 未登录时 GET /api/units 返回 401，由壳层统一重定向兜底，这里只标加载失败。
 import { useEffect, useMemo, useState } from "react";
 import { WeeklyLimitModal } from "@/components/shared/WeeklyLimitModal";
+import { WEEKLY_RUN_LIMIT } from "@/lib/domain/limits";
 import { sourceLabel } from "@/lib/content/source-label";
 import {
   filterStandardContent,
@@ -28,7 +29,7 @@ interface UnitOverview {
   subtitle: string | null;
   /** 竖版封面（票 01）；无封面为 null，卡片显示占位 */
   poster: string | null;
-  /** 最近一次练习获得的总星数（票 04）；从未练过为 null */
+  /** 最近一次完整练习的入账星（V0.4 账本口径）；从未完整练过为 null */
   latestRunStars: number | null;
   /** 本周（北京时间周一起算）完整练习入账次数（0–3，V0.4 账本口径） */
   weeklyRuns: number;
@@ -47,8 +48,10 @@ export default function StandardContentPage() {
   const [failed, setFailed] = useState(false);
   const [unitFilter, setUnitFilter] = useState<UnitFilter>("all");
   const [moduleFilter, setModuleFilter] = useState<ModuleFilter>("all");
-  // 本周练满 3 次的卡片：点卡不跳转，只弹限次说明（V0.4 账本口径）
+  // 本周练满上限的卡片：点卡不跳转，只弹限次说明（V0.4 账本口径）
   const [capped, setCapped] = useState<UnitOverview | null>(null);
+  // 拦截时触发一次后台重取：卡片若已跨周（下拉数据陈旧），关掉弹窗后可正常进入
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -75,7 +78,7 @@ export default function StandardContentPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reloadKey]);
 
   // 换单元后原模块选择在该单元可能不存在，重置为「全部模块」（原型 A 联动行为）
   function onUnitChange(raw: string) {
@@ -151,7 +154,10 @@ export default function StandardContentPage() {
             <ContentCard
               key={unit.id}
               unit={unit}
-              onCapReached={setCapped}
+              onCapReached={(cappedUnit) => {
+                setCapped(cappedUnit);
+                setReloadKey((key) => key + 1);
+              }}
             />
           ))}
         </div>
@@ -177,8 +183,11 @@ function ContentCard({
   return (
     <a
       href={`/units/${unit.id}`}
+      aria-haspopup={
+        unit.weeklyRuns >= WEEKLY_RUN_LIMIT ? "dialog" : undefined
+      }
       onClick={(event) => {
-        if (unit.weeklyRuns >= 3) {
+        if (unit.weeklyRuns >= WEEKLY_RUN_LIMIT) {
           event.preventDefault();
           onCapReached(unit);
         }

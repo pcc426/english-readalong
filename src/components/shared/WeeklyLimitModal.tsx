@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { WEEKLY_RUN_LIMIT } from "@/lib/domain/limits";
 import { Modal } from "./Modal";
 
 export function WeeklyLimitModal({
@@ -32,7 +33,7 @@ export function WeeklyLimitModal({
       onSecondary={onClose}
     >
       <p className="mt-4 text-lg leading-relaxed text-slate-600">
-        这个内容本周已经挑战 3 次啦，下周再来挑战，先试试其他内容吧！
+        这个内容本周已经挑战 {WEEKLY_RUN_LIMIT} 次啦，下周再来挑战，先试试其他内容吧！
       </p>
       <p className="mt-4 text-xs text-slate-400">下周一自动重置</p>
     </Modal>

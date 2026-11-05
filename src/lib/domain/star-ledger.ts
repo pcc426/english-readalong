@@ -1,5 +1,6 @@
 import type { Db } from "../db";
 import { beijingDateOf, beijingWeekStart } from "./beijing-date";
+import { WEEKLY_RUN_LIMIT } from "./limits";
 
 export interface RunStats {
   covered: number;
@@ -108,7 +109,7 @@ export function awardRunIfComplete(
     input.unitId,
     occurredOn
   );
-  if (weeklyRuns >= 3) {
+  if (weeklyRuns >= WEEKLY_RUN_LIMIT) {
     return {
       complete: true,
       stars: null,
