@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useReducer, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   canSkip,
   TICK_MS,
@@ -17,6 +18,7 @@ import { sourceLabel } from "@/lib/content/source-label";
 import type { ContentDetail } from "@/lib/content/view";
 import { cellStars, replayControl } from "./practice-panel";
 import { publishConfirmText } from "./publish-confirm";
+import { finishStorageKey, type FinishPayload } from "./finish-summary";
 
 // 录音最长秒数：超时自动提交，防止孩子忘按"读好了"一直录
 const MAX_RECORD_SECONDS = 15;
@@ -53,8 +55,8 @@ export default function PracticeFlow({
   unit,
   weeklyRuns = 0,
   mode = "practice",
-  backHref = "/units",
-  backLabel = "‹ 单元列表",
+  backHref,
+  backLabel,
   unconfirmedCount = 0,
 }: {
   unit: ContentDetail;
@@ -62,16 +64,23 @@ export default function PracticeFlow({
   weeklyRuns?: number;
   /** practice＝正式练习（默认，行为零变化）；preview＝草稿预览：不录音不评分（V0.3 票 08） */
   mode?: FlowMode;
-  /** 左上返回链接（preview 下指向校对页）；默认维持正式练习的「单元列表」 */
+  /** 左上返回链接；缺省按内容类型回「教材内容 /units」或「自定义内容 /custom」 */
   backHref?: string;
+  /** 左上返回链接文案；preview 下由调用方指学校对页 */
   backLabel?: string;
   /** preview 专用：未确认句数，>0 时顶部提示且定稿按钮禁用 */
   unconfirmedCount?: number;
 }) {
   const practice = mode === "practice";
+  // 自定义内容的练习页复用 /units/[id] 路由，返回列表应回「自定义内容」而不是教材内容
+  const resolvedBackHref =
+    backHref ?? (unit.type === "custom" ? "/custom" : "/units");
+  const resolvedBackLabel =
+    backLabel ?? (unit.type === "custom" ? "‹ 自定义内容" : "‹ 单元列表");
   // 本周已练满上限：只拦正式练习的开始按钮，预览流程不受影响
   const capped = practice && weeklyRuns >= WEEKLY_RUN_LIMIT;
   const [capOpen, setCapOpen] = useState(false);
+  const router = useRouter();
   const total = unit.sentences.length;
   const [state, dispatch] = useReducer(
     (s: FlowState, e: FlowEvent) => reduceFlow(s, e, total, mode),
@@ -123,11 +132,13 @@ export default function PracticeFlow({
   );
   // 本次会话练过（出过分）的句子，用于收尾时统计"本次练习"总星级
   const [sessionPracticed, setSessionPracticed] = useState<Set<number>>(new Set());
-  // 练习 run 归属（票 04）：一次 mount（或「再练一遍」整体重开）为新一轮，
+  // 练习 run 归属（票 04）：一次 mount 为新一轮（结束页「再练一遍」整页重开＝新 mount），
   // 轮内所有评分提交共享同一 runId，服务端据此统计「最近一次练习」总星数
-  const [runId, setRunId] = useState(() => crypto.randomUUID());
-  // 服务端返回的本轮练习汇总：用于收尾页展示完整/翻倍/未完成三态
+  const [runId] = useState(() => crypto.randomUUID());
+  // 服务端返回的本轮练习汇总：跳转独立结束页时写入本轮结果
   const [runSummary, setRunSummary] = useState<RunSummary | null>(null);
+  // 一轮练完只跳一次独立结束页（严格模式会重复触发 effect）
+  const finishRedirectedRef = useRef(false);
 
   const current = state.step === "finished" ? null : unit.sentences[state.index];
   // 依赖 key：只在"进入某个句子的某个步骤"时触发相关 effect（tick/held 等细节变化不触发）
@@ -342,6 +353,49 @@ export default function PracticeFlow({
     };
   }, []);
 
+  // 一轮练完：把本轮汇总写进 sessionStorage，跳转到独立的结束页（V0.4 验收调整）。
+  // preview 没有收尾页，不跳。
+  useEffect(() => {
+    if (!practice || state.step !== "finished" || finishRedirectedRef.current)
+      return;
+    finishRedirectedRef.current = true;
+    const earned = unit.sentences.reduce((sum, sentence) => {
+      const best = localBest[sentence.index];
+      if (!sessionPracticed.has(sentence.index) || best == null) return sum;
+      return sum + mapScoreToStars(best);
+    }, 0);
+    const payload: FinishPayload = {
+      unitId: unit.id,
+      title: unit.title,
+      type: unit.type,
+      total,
+      practiced: sessionPracticed.size,
+      earned,
+      runStars: runSummary?.runStars ?? null,
+      runDoubled: runSummary?.runDoubled === true,
+      weeklyRuns: runSummary?.weeklyRuns ?? 0,
+      weeklyLimitReached: runSummary?.weeklyLimitReached === true,
+    };
+    try {
+      sessionStorage.setItem(finishStorageKey(unit.id), JSON.stringify(payload));
+    } catch {
+      // 隐私模式等 sessionStorage 不可用：仍跳转，结束页会提示结果已失效
+    }
+    router.replace(`/units/${unit.id}/finish`);
+  }, [
+    practice,
+    state.step,
+    unit.id,
+    unit.title,
+    unit.type,
+    unit.sentences,
+    total,
+    localBest,
+    sessionPracticed,
+    runSummary,
+    router,
+  ]);
+
   // 播放态：seek 完成再播；未切分句防御性跳过
   useEffect(() => {
     if (state.step !== "playing") return;
@@ -455,14 +509,6 @@ export default function PracticeFlow({
       dispatch({ type: "select", index: state.index + 1 });
   };
 
-  /** 收尾页「再练一遍」：整体重开＝新一轮练习，换新 runId（票 04） */
-  const restartRun = () => {
-    setRunId(crypto.randomUUID());
-    setSessionPracticed(new Set());
-    setRunSummary(null);
-    dispatch({ type: "select", index: 0 });
-  };
-
   // —— 定稿发布（仅 preview 渲染入口，票 08 / ADR 0005：发布动作只从预览页发起） ——
   // 沿用校对页的确认文案与 422 逐句问题拼接；成功跳真实练习页 /units/{id}
   const [publishing, setPublishing] = useState(false);
@@ -504,6 +550,18 @@ export default function PracticeFlow({
     } finally {
       setPublishing(false);
     }
+  }
+
+  // 正式练习练完即跳独立结束页（上面的 effect）；跳转前给一个极简占位，
+  // 不再把结果卡塞在练习右栏
+  if (practice && state.step === "finished") {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <p className="text-lg text-slate-400" role="status">
+          正在生成练习结果…
+        </p>
+      </div>
+    );
   }
 
   const result = state.step === "scored" ? state.result : null;
@@ -552,8 +610,8 @@ export default function PracticeFlow({
       {/* 右列：操作区，固定宽、独立滚动 */}
       <aside className="flex h-full w-[26rem] shrink-0 flex-col gap-3 overflow-y-auto border-l border-slate-200 bg-slate-50 p-4">
         <div>
-          <a href={backHref} className="text-base text-emerald-700">
-            {backLabel}
+          <a href={resolvedBackHref} className="text-base text-emerald-700">
+            {resolvedBackLabel}
           </a>
           <h1 className="mt-1 truncate text-2xl font-bold">{unit.title}</h1>
           <p className="text-base text-slate-500">
@@ -696,13 +754,9 @@ export default function PracticeFlow({
               </div>
             )}
 
-            {(state.step === "idle" || state.step === "finished") && (
+            {state.step === "idle" && (
               <p className="mt-3 text-lg text-slate-500">
-                {state.step === "idle"
-                  ? practice
-                    ? "准备好就开始吧！"
-                    : "点「开始播放」逐句检查切分"
-                  : "整个单元练完啦！"}
+                {practice ? "准备好就开始吧！" : "点「开始播放」逐句检查切分"}
               </p>
             )}
           </section>
@@ -800,7 +854,7 @@ export default function PracticeFlow({
             )}
             <div className="grid shrink-0 grid-cols-2 gap-3">
               <a
-                href={backHref}
+                href={resolvedBackHref}
                 className="rounded-2xl bg-white py-4 text-center text-xl font-bold text-slate-700 shadow-md ring-1 ring-slate-200 active:bg-slate-100"
               >
                 ← 退回校对
@@ -868,116 +922,6 @@ export default function PracticeFlow({
           })}
         </nav>
 
-        {/* 收尾总结（票 11：保持在句格之后；preview 无收尾页，票 08）；「再练一遍」整体重开换新 runId（票 04） */}
-        {state.step === "finished" && practice && (() => {
-          const earned = unit.sentences.reduce((sum, sentence) => {
-            if (!sessionPracticed.has(sentence.index) || localBest[sentence.index] == null)
-              return sum;
-            return sum + mapScoreToStars(localBest[sentence.index]);
-          }, 0);
-          const practiced = sessionPracticed.size;
-          const complete = practiced === unit.sentences.length;
-          const awarded = complete ? (runSummary?.runStars ?? earned) : earned;
-          const doubled = complete && runSummary?.runDoubled === true;
-
-          if (runSummary?.weeklyLimitReached) {
-            return (
-              <section className="mt-5 rounded-3xl bg-white p-6 text-center shadow-sm ring-1 ring-slate-100">
-                <div className="text-5xl">🌟</div>
-                <p className="mt-2 text-2xl font-black text-slate-700">
-                  本周挑战次数已用完
-                </p>
-                <p className="mt-2 text-base text-slate-500">
-                  本次不计入星星，下周再来挑战吧。
-                </p>
-                <button
-                  onClick={restartRun}
-                  className="mt-4 w-full rounded-2xl bg-emerald-500 py-4 text-xl font-bold text-white active:bg-emerald-600"
-                >
-                  ↺ 再练一遍
-                </button>
-              </section>
-            );
-          }
-
-          if (complete && doubled) {
-            return (
-              <section className="relative mt-5 overflow-hidden rounded-3xl bg-gradient-to-br from-amber-100 via-amber-50 to-white p-6 text-center shadow-sm ring-1 ring-amber-100">
-                <span className="absolute left-5 top-5 text-2xl">✨</span>
-                <span className="absolute right-6 top-8 text-xl">⭐</span>
-                <span className="absolute bottom-6 left-8 text-xl">🌟</span>
-                <div className="text-5xl">🎉</div>
-                <p className="mt-2 text-2xl font-black text-amber-700">
-                  读得太棒了！
-                </p>
-                <p className="mt-1 text-lg font-extrabold text-amber-600">
-                  这次星星翻倍啦！
-                </p>
-                <p className="mt-3 text-5xl font-black text-amber-600">
-                  {awarded} <span className="text-3xl">🌟</span>
-                </p>
-                <p className="mt-1 text-sm font-bold text-amber-500">
-                  共获得 {awarded} 🌟
-                </p>
-                <button
-                  onClick={restartRun}
-                  className="mt-5 w-full rounded-2xl bg-emerald-500 py-4 text-xl font-bold text-white active:bg-emerald-600"
-                >
-                  ↺ 再练一遍
-                </button>
-              </section>
-            );
-          }
-
-          if (complete) {
-            return (
-              <section className="mt-5 rounded-3xl bg-emerald-50 p-6 text-center ring-1 ring-emerald-100">
-                <p className="text-2xl font-bold text-emerald-700">
-                  🎉 整个内容练完啦！
-                </p>
-                <p className="mt-3 text-3xl font-bold text-amber-500">
-                  本次获得 {awarded} 颗星
-                  <span className="ml-2 text-lg font-normal text-slate-500">
-                    （{practiced} 句全部读完）
-                  </span>
-                </p>
-                <button
-                  onClick={restartRun}
-                  className="mt-4 w-full rounded-2xl bg-emerald-500 py-4 text-xl font-bold text-white active:bg-emerald-600"
-                >
-                  ↺ 再练一遍
-                </button>
-              </section>
-            );
-          }
-
-          return (
-            <section className="mt-5 rounded-3xl bg-white p-6 text-center shadow-sm ring-1 ring-slate-100">
-              <div className="text-5xl">🌱</div>
-              <p className="mt-2 text-2xl font-black text-slate-700">
-                这次还差一点点
-              </p>
-              <p className="mt-1 text-lg font-bold text-slate-500">
-                本次读了 {practiced}/{unit.sentences.length} 句
-              </p>
-              <p className="mt-3 text-xl font-bold text-amber-500">
-                本次句子星 {earned} 颗
-              </p>
-              <div className="mx-auto mt-4 max-w-md rounded-2xl bg-amber-50 px-4 py-3 text-base font-bold text-amber-700 ring-1 ring-amber-100">
-                未读完所有句子，不能累计星星🌟哦！
-              </div>
-              <p className="mt-3 text-sm text-slate-400">
-                点「再练一遍」，把剩下的句子读完就能拿到星星。
-              </p>
-              <button
-                onClick={restartRun}
-                className="mt-4 w-full rounded-2xl bg-emerald-500 py-4 text-xl font-bold text-white active:bg-emerald-600"
-              >
-                ↺ 再练一遍
-              </button>
-            </section>
-          );
-        })()}
       </aside>
 
       <WeeklyLimitModal

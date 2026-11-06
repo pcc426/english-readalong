@@ -39,7 +39,7 @@ export function Calendar({
           return (
             <div
               key={date}
-              className={`relative min-h-[70px] rounded-2xl p-1.5 ring-1 ${
+              className={`relative flex min-h-[70px] flex-col rounded-2xl p-1.5 ring-1 ${
                 day?.checkedIn
                   ? "bg-amber-50 ring-amber-100"
                   : day?.partial
@@ -63,21 +63,19 @@ export function Calendar({
                   </span>
                 )}
               </div>
-              {day?.checkedIn && (
-                <div className="absolute inset-x-1 bottom-1.5 text-center text-sm font-extrabold leading-none text-amber-600">
-                  🌟{day.stars}
-                </div>
-              )}
-              {day?.partial && (
-                <div className="absolute inset-x-0 bottom-2 flex justify-center">
+              {/* 星星/小圆点在日期格正中，底部固定给「今天」留位置，互不重叠 */}
+              <div className="flex flex-1 items-center justify-center">
+                {day?.checkedIn ? (
+                  <span className="text-sm font-extrabold leading-none text-amber-600">
+                    🌟{day.stars}
+                  </span>
+                ) : day?.partial ? (
                   <span className="h-2 w-2 rounded-full bg-amber-300 ring-2 ring-amber-100" />
-                </div>
-              )}
-              {isToday && (
-                <span className="absolute bottom-0.5 left-1 text-[10px] font-bold text-emerald-600">
-                  今天
-                </span>
-              )}
+                ) : null}
+              </div>
+              <div className="h-3 text-center text-[10px] font-bold leading-none text-emerald-600">
+                {isToday ? "今天" : ""}
+              </div>
             </div>
           );
         })}
