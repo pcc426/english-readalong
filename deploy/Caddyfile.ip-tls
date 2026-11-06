@@ -1,0 +1,14 @@
+# 临时调试：还没有域名时，用公网 IP + 自签证书对外提供 HTTPS。
+# 需要 .env 同时设置：
+#   READALONG_SITE_ADDRESS=https://<公网IP>:8443
+#   READALONG_DEFAULT_SNI=<公网IP>
+#
+# 自签证书在 iPad/浏览器上会提示不受信任；正式使用请换成 deploy/Caddyfile + 域名。
+{
+	default_sni {$READALONG_DEFAULT_SNI}
+}
+
+{$READALONG_SITE_ADDRESS} {
+	tls internal
+	reverse_proxy 127.0.0.1:3000
+}

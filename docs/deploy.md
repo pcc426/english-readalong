@@ -49,14 +49,60 @@ ufw enable && ufw status
 若要异地家庭访问，需放行其出口 IP 或暂时全放行 80/443——放行策略与备案一并调整（见「九、部署待办」）。
 若 VPS 厂商有安全组，同样只放行 SSH + 可信 IP 的 80/443。
 
-## 四、Caddy（自动 HTTPS）
+## 四、Caddy（HTTPS 与反向代理）
 
-```bash
-scp deploy/Caddyfile <user@VPS>:/etc/caddy/Caddyfile   # 本地执行
-# 在 VPS 上写入域名并启动：
-ssh <user@VPS> "sed -i 's/{\$DOMAIN}/<你的域名>/' /etc/caddy/Caddyfile && systemctl reload caddy"
-# 证书自动签发与续期，无需手动管理
-```
+站点地址不再写死在 `deploy/Caddyfile`，而是从 `.env` 的 `READALONG_SITE_ADDRESS`
+读取。Caddy 不自动加载 `.env`，需要让它的 systemd 服务读这份文件（一次性配置）。
+
+1. 在本地 `.env` 中设置站点地址：
+
+   ```dotenv
+   # 有域名（推荐，Caddy 自动申请 Let's Encrypt 证书）
+   READALONG_SITE_ADDRESS=https://english.example.com
+   ```
+
+   如果域名还没就绪，可先用公网 IP + 自签证书调试：
+
+   ```dotenv
+   READALONG_SITE_ADDRESS=https://<公网IP>:8443
+   READALONG_DEFAULT_SNI=<公网IP>
+   ```
+
+2. 在 VPS 上让 Caddy 的 systemd 服务加载这份 `.env`（一次性）：
+
+   ```bash
+   sudo mkdir -p /etc/systemd/system/caddy.service.d
+   sudo tee /etc/systemd/system/caddy.service.d/readalong.conf >/dev/null <<'EOF'
+   [Service]
+   EnvironmentFile=/opt/english-readalong/.env
+   EOF
+   sudo systemctl daemon-reload
+   ```
+
+   systemd 以 root 读取该文件，`.env` 保持 `600` 权限即可。
+   注意：这样 Caddy 进程也会看到 `.env` 中的讯飞密钥。如果介意，可以改用
+   `/etc/caddy/readalong.env` 只放 `READALONG_SITE_ADDRESS`（IP 调试版再加
+   `READALONG_DEFAULT_SNI`），并把上面的 `EnvironmentFile` 指向它。
+
+3. 安装对应的 Caddyfile（本地执行）：
+
+   ```bash
+   # 域名 + 自动 HTTPS
+   scp deploy/Caddyfile <user@VPS>:/etc/caddy/Caddyfile
+
+   # 或：公网 IP + 自签证书调试
+   scp deploy/Caddyfile.ip-tls <user@VPS>:/etc/caddy/Caddyfile
+   ```
+
+4. 启动并检查：
+
+   ```bash
+   ssh <user@VPS> "sudo systemctl restart caddy && sudo systemctl status caddy"
+   ```
+
+   `systemctl restart` 会读取最新的 `.env`；只 `reload` 不会重新加载
+   `EnvironmentFile`。之后修改站点地址，也要再 `restart` 一次。
+   证书由 Caddy 自动签发与续期，无需手动管理。
 
 ## 五、凭据环境变量（.env）
 
@@ -79,6 +125,8 @@ ssh <user@VPS> "sed -i 's/{\$DOMAIN}/<你的域名>/' /etc/caddy/Caddyfile && sy
 | `CONTENT_DATA_DIR` | 可选 | 运行时内容目录（自定义包与运行时标准包），默认 `data/content` |
 | `UPLOADS_DIR` | 可选 | 上传视频运行时目录，默认 `data/uploads` |
 | `SHIPPED_MEDIA_DIR` | 可选 | 随代码标准内容视频目录，默认 `content/media`；视频不做静态公开，统一经 `/api/media/shipped/<文件名>` 鉴权提供 |
+| `READALONG_SITE_ADDRESS` | 部署 Caddy 时必填 | Caddy 站点对外地址，由 `deploy/Caddyfile` 从环境变量读取，如 `https://english.example.com`；IP 调试版填 `https://<公网IP>:8443` |
+| `READALONG_DEFAULT_SNI` | 仅 IP 调试版 | 公网 IP，配合 `deploy/Caddyfile.ip-tls` 的自签证书使用 |
 
 获取方式：[xfyun.cn 控制台](https://www.xfyun.cn/) → 对应服务页 → 服务管理里取 APPID / APIKey / APISecret。
 
@@ -154,7 +202,8 @@ data/
      npx tsx --env-file=.env scripts/smoke-lfasr.ts
      ```
 
-**之后的每次发版**：本地执行 `./scripts/deploy.sh <user@VPS> <你的域名>`——
+**之后的每次发版**：本地执行 `./scripts/deploy.sh <user@VPS>`——
+站点地址默认读本地 `.env` 的 `READALONG_SITE_ADDRESS`，也可以作为第二个参数临时覆盖。
 rsync 代码（不覆盖 `data/`）→ 传 `.env` → 远程 `npm ci && npm run build` → `pm2 reload`。
 
 ### 从 V0.2.x 升级到 V0.3.x（发版后一次性步骤）
@@ -242,6 +291,10 @@ V0.1 练习链路的 7 条快速冒烟仍有效：
 - **动态 IP 变了打不开**：查新 IP（`curl ip.sb`）→ 更新 ufw 规则。
 - **证书没签下来**：域名解析未生效或 80 端口被防火墙挡住（签发时 Caddy 需要可
   从家庭 IP 可达 80/443）。
+- **Caddy 启动报错 / 站点地址为空**：确认 `/opt/english-readalong/.env` 里有
+  `READALONG_SITE_ADDRESS`，且 systemd drop-in 的 `EnvironmentFile` 指向正确路径；
+  改完 `.env` 后 `sudo systemctl restart caddy`。注意 `caddy validate` 在 shell 里
+  执行时不会读 `EnvironmentFile`。
 - **ffmpeg 缺失**：上传时长校验（ffprobe）与「转写失败：…」里的抽音轨错误 →
   服务器 `apt install -y ffmpeg`。
 - **VPS 磁盘增长**：自定义视频存 `data/uploads/`，单文件上限 200MB；留意磁盘，

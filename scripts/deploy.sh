@@ -2,13 +2,25 @@
 # 部署脚本（票 07）：同步代码到 VPS → 远程构建 → pm2 平滑重启。
 # 前提：服务器已完成 docs/deploy.md 的一次性准备（Node 22 / ffmpeg / pm2 / Caddy）。
 #
-# 用法: ./scripts/deploy.sh <user@host> <域名> [远程目录]
-# 示例: ./scripts/deploy.sh root@1.2.3.4 english.example.com
+# 用法: ./scripts/deploy.sh <user@host> [站点地址] [远程目录]
+# 站点地址默认读本地 .env 的 READALONG_SITE_ADDRESS（仅用于结束提示）。
+# 示例: ./scripts/deploy.sh root@1.2.3.4
+#       ./scripts/deploy.sh root@1.2.3.4 english.example.com
 #       ./scripts/deploy.sh root@1.2.3.4 english.example.com /srv/readalong
 set -euo pipefail
 
-HOST=${1:?用法: deploy.sh <user@host> <域名> [远程目录]}
-DOMAIN=${2:?需要域名（iPad 麦克风要求 HTTPS，纯 IP 不可行）}
+HOST=${1:?用法: deploy.sh <user@host> [站点地址] [远程目录]}
+if [ -z "${2:-}" ] && [ -f .env ]; then
+  SITE_ADDRESS=$(grep -E '^READALONG_SITE_ADDRESS=' .env | tail -n1 | cut -d= -f2- || true)
+else
+  SITE_ADDRESS=${2:-}
+fi
+SITE_ADDRESS=${SITE_ADDRESS#https://}
+SITE_ADDRESS=${SITE_ADDRESS#http://}
+if [ -z "$SITE_ADDRESS" ]; then
+  echo "缺少站点地址：请在本地 .env 设置 READALONG_SITE_ADDRESS，或作为第二个参数传入" >&2
+  exit 1
+fi
 APP_DIR=${3:-/opt/english-readalong}
 
 cd "$(dirname "$0")/.."
@@ -41,5 +53,5 @@ echo "==> pm2 平滑重启"
 ssh "$HOST" "cd '$APP_DIR' && (pm2 reload english-readalong 2>/dev/null || pm2 start npm --name english-readalong -- start && pm2 save)"
 
 echo ""
-echo "✅ 部署完成: https://$DOMAIN"
+echo "✅ 部署完成: https://$SITE_ADDRESS"
 echo "   查看日志: ssh $HOST \"pm2 logs english-readalong\""

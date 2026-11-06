@@ -1,8 +1,10 @@
-{
-	default_sni 118.89.182.62
-}
-
-https://118.89.182.62:8443 {
-	tls internal
+# 生产环境：站点地址从环境变量读取，值放在 .env 的 READALONG_SITE_ADDRESS。
+# Caddy 通过 systemd EnvironmentFile 加载 .env，配置步骤见 docs/deploy.md「四、Caddy」。
+#
+# 示例：
+#   READALONG_SITE_ADDRESS=https://english.example.com
+#
+# 未设置该变量时 Caddy 无法启动（有意为之，避免误用示例域名）。
+{$READALONG_SITE_ADDRESS} {
 	reverse_proxy 127.0.0.1:3000
 }
