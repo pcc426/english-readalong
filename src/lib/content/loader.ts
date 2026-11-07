@@ -65,7 +65,9 @@ function loadContentPacks(dir: string, requireOwner?: string): ContentPack[] {
  * 不覆盖随代码已发布的素材。运行时目录缺失视为空（还没有管理员制作是常态）。
  */
 function loadStandardPacks(): ContentPack[] {
-  const shipped = loadContentPacks(standardContentDir());
+  // content/units 随代码标准内容目录：部署可整体删除（改走上传通路），目录缺失视为空。
+  const shippedDir = standardContentDir();
+  const shipped = existsSync(shippedDir) ? loadContentPacks(shippedDir) : [];
   const runtimeDir = standardRuntimeDir();
   const runtime = existsSync(runtimeDir) ? loadContentPacks(runtimeDir) : [];
   const shippedIds = new Set(shipped.map((p) => p.id));

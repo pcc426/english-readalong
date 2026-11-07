@@ -415,6 +415,13 @@ describe("标准双目录合并（12 号票：随代码目录 + 运行时目录�
     expect(getContent("std-runtime-1")).toBeNull();
   });
 
+  it("随代码目录（content/units）缺失时视为空，不报错", () => {
+    // CONTENT_DIR 指向不存在的路径：随代码标准内容整体删除后不应抛 ENOENT
+    process.env.CONTENT_DIR = path.join(makeTempDir("readalong-nostd-"), "not-exist");
+    process.env.CONTENT_DATA_DIR = makeTempDir("readalong-custom-");
+    expect(listContent().map((p) => p.id)).toEqual([]);
+  });
+
   it("运行时标准目录里的坏包同样报明确错误（含文件名）", () => {
     setupContentEnv({});
     writeRuntimeStandard({ "broken.json": "{ not json" });
