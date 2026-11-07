@@ -96,10 +96,10 @@ npm run dev
 | `LFASR_EXTRACT_AUDIO` | 否 | 关闭 | 设为 `1` 时先用 ffmpeg 抽 16kHz 单声道音轨再提交；LFASR 拒收视频文件时打开 |
 | `LFASR_PAUSE_MS` | 否 | `700` | 无句末标点时按停顿切句的阈值（毫秒）。调小切得更碎，调大合并更多 |
 | `DB_PATH` | 否 | `data/readalong.db` | SQLite 数据库路径 |
-| `CONTENT_DIR` | 否 | `content/units` | 随代码部署的标准内容包目录（每次部署同步） |
+| `CONTENT_DIR` | 否 | `content/units` | 随代码标准内容包目录；本仓库已无随代码内容，目录缺失视为空 |
 | `CONTENT_DATA_DIR` | 否 | `data/content` | 运行时内容包目录：自定义内容按账号分目录，另有 `standard/` 存放运行时制作的标准内容 |
 | `UPLOADS_DIR` | 否 | `data/uploads` | 上传视频目录，按账号分目录 |
-| `SHIPPED_MEDIA_DIR` | 否 | `content/media` | 随代码部署的标准内容视频目录 |
+| `SHIPPED_MEDIA_DIR` | 否 | `content/media` | 随代码标准内容视频目录；本仓库已无随代码内容 |
 | `READALONG_SITE_ADDRESS` | 部署 Caddy 时必填 | — | Caddy 站点对外地址，由 `deploy/Caddyfile` 从环境变量读取，如 `https://english.example.com`；IP 调试版填 `https://<公网IP>:8443` |
 | `READALONG_DEFAULT_SNI` | 仅 IP 调试版 | — | 公网 IP，配合 `deploy/Caddyfile.ip-tls` 的自签证书使用 |
 
@@ -115,18 +115,18 @@ npm run dev
 
 ## 内容包与媒体文件
 
-标准内容由「内容包 JSON + 视频 + 封面」组成：
+内容由「内容包 JSON + 视频 + 封面」组成：
 
 | 类型 | 位置 | 说明 |
 | --- | --- | --- |
-| 标准内容包（随代码） | `content/units/*.json` | 部署时同步，所有账号（开关打开时）可见 |
-| 标准内容视频（随代码） | `content/media/` | 不通过静态目录公开，统一走 `/api/media/shipped/<文件名>`，需登录 |
-| 标准内容封面（随代码） | `content/media/posters/` | 竖版 JPEG |
 | 自定义内容视频 | `data/uploads/<accountId>/` | 上传原文件，仅所属账号可见 |
 | 自定义内容包 | `data/content/<accountId>/` | 定稿后生成，仅所属账号可见 |
-| 运行时标准内容包 | `data/content/standard/` | 管理员通过上传管线制作的标准内容 |
+| 标准内容包 | `data/content/standard/` | 管理员通过上传管线制作，所有账号（开关打开时）可见 |
+| 标准内容视频 | `data/uploads/<accountId>/` | 标准内容定稿时视频落在管理员上传目录，经鉴权接口对所有登录账号放行 |
 
-`content/media/` 与 `content/units/` 是一一对应的：删除某个单元的视频或封面时，要同时删除引用它的内容包，否则列表仍会显示卡片但播放返回 404。只想保留自定义内容时，可以把这两处随代码内容整体删掉。
+本仓库已移除随代码的教材标准内容（原 `content/units/` 与 `content/media/`），
+标准内容现在全部通过管理员上传管线制作、落在运行时目录 `data/content/standard/`；
+所有视频与封面统一经鉴权接口读取，不作为静态资源公开。
 
 内容包最小示例：
 
@@ -135,8 +135,8 @@ npm run dev
   "id": "u2-dragon-dance",
   "title": "The dragon dance",
   "source": "沪教版五上 Unit 2 · Story time",
-  "video": "五上_U2.mp4",
-  "poster": "五上_U2.jpg",
+  "video": "acct-xxx/1a2b3c.mp4",
+  "poster": "acct-xxx/1a2b3c.poster.jpg",
   "sentences": [
     { "text": "Stop!", "start": 5, "end": 6.05 },
     { "text": "Let's try again.", "start": 15.78, "end": 17.37 }
@@ -146,8 +146,8 @@ npm run dev
 
 关键字段：
 
-- `id`：全局唯一；与运行时同 id 的标准包冲突时，以代码内包优先
-- `video` / `poster`：相对文件名，随代码内容位于 `content/media/`；上传内容则填 `<accountId>/<uuid>.<ext>` 形式的相对路径
+- `id`：全局唯一
+- `video` / `poster`：相对引用，填 `<accountId>/<uuid>.<ext>` 形式（指向 `data/uploads/<accountId>/`）
 - `sentences[].start` / `end`：秒，可同时为 `null` 表示尚未切分
 - 可选教材归属字段：`seriesCode`、`bookId`、`unitNo`、`moduleKind`、`lessonTitle`
 - `type` / `owner`：自定义内容必须写 `"type": "custom"` 和所属账号 `owner`
@@ -210,9 +210,7 @@ src/
   components/          # UI 组件
   lib/                 # 领域逻辑：评分、转写、星星账本、内容加载、鉴权
 content/
-  units/               # 随代码的标准内容包
-  media/               # 随代码的标准内容视频与封面
-  textbook/            # 教材解析产物与注册数据
+  textbook/            # 教材解析产物与注册数据（构建期导入）
 data/                  # 运行时数据（gitignored）：SQLite、上传、运行时内容包
 scripts/               # 运维与一次性脚本
 deploy/                # Caddy 配置示例
@@ -238,4 +236,4 @@ docs/                  # ADR、部署手册、验收清单
 
 本项目采用仓库根目录 `LICENSE` 文件中声明的许可证（在 GitHub 仓库设置中配置）。
 
-注意：`content/media/` 下的教材配套音视频、`content/units/` 中引用的教材原文，以及 `content/textbook/grade5a.json` 中的课文文本，版权归原教材出版方所有，不在代码开源协议的覆盖范围内；对外分发前请自行确认授权。
+注意：`content/textbook/grade5a.json` 中的课文文本版权归原教材出版方所有，不在代码开源协议的覆盖范围内；对外分发前请自行确认授权。
