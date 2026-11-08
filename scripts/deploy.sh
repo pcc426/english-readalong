@@ -37,6 +37,7 @@ rsync -az --delete \
   --exclude research \
   --exclude docs \
   --exclude .claude \
+  --exclude .husky \
   --exclude scripts/reset-password.ts \
   ./ "$HOST:$APP_DIR/"
 
