@@ -121,10 +121,10 @@ ufw enable && ufw status
 | `LFASR_EXTRACT_AUDIO` | 可选 | `=1` 时先用 ffmpeg 抽 16kHz 单声道音轨再提交；LFASR 拒收视频文件时打开（`scripts/smoke-lfasr.ts` 可先实测） |
 | `LFASR_PAUSE_MS` | 可选 | 无句末标点时按停顿切句的阈值（毫秒），默认 `700`。调小切得更碎、调大合得更多；改完 pm2 restart 生效 |
 | `DB_PATH` | 可选 | SQLite 库路径，默认 `data/readalong.db` |
-| `CONTENT_DIR` | 可选 | 随代码部署的标准内容目录，默认 `content/units` |
+| `CONTENT_DIR` | 可选 | 随代码标准内容包目录，默认 `content/units`；本仓库已无随代码内容，目录缺失视为空 |
 | `CONTENT_DATA_DIR` | 可选 | 运行时内容目录（自定义包与运行时标准包），默认 `data/content` |
 | `UPLOADS_DIR` | 可选 | 上传视频运行时目录，默认 `data/uploads` |
-| `SHIPPED_MEDIA_DIR` | 可选 | 随代码标准内容视频目录，默认 `content/media`；视频不做静态公开，统一经 `/api/media/shipped/<文件名>` 鉴权提供 |
+| `SHIPPED_MEDIA_DIR` | 可选 | 随代码标准内容视频目录，默认 `content/media`；本仓库已无随代码内容 |
 | `READALONG_SITE_ADDRESS` | 部署 Caddy 时必填 | Caddy 站点对外地址，由 `deploy/Caddyfile` 从环境变量读取，如 `https://english.example.com`；IP 调试版填 `https://<公网IP>:8443` |
 | `READALONG_DEFAULT_SNI` | 仅 IP 调试版 | 公网 IP，配合 `deploy/Caddyfile.ip-tls` 的自签证书使用 |
 
@@ -144,10 +144,11 @@ data/
     └── standard/             # 管理员定稿产出的公开标准内容包（运行时写入）
 ```
 
-- `scripts/deploy.sh` 用 `rsync --delete --exclude data` 同步代码：服务器上的 `data/`
-  **既不会被更新也不会被删除**，升级部署不动运行数据（账号、上传、练习记录全保留）。
-- 随代码部署的只读标准内容在 `content/units/`，rsync 每次同步；运行时定稿的标准包
-  （`data/content/standard/`）与其 id 冲突时以代码内包优先。
+- `scripts/deploy.sh` 让服务器 `git fetch && git reset --hard origin/main`：只覆盖 git
+  追踪的文件，`data/` 等 untracked 文件**既不会被更新也不会被删除**，升级部署不动
+  运行数据（账号、上传、练习记录全保留）。
+- 本仓库已无随代码标准内容（`content/units/` 已移除）；标准内容全部由管理员上传
+  管线制作、落在运行时目录 `data/content/standard/`。
 - 不要手工改动或备份到别处后改权限——整个 `data/` 归应用运行进程读写。
 
 ## 七、全新 VPS 部署步骤（V0.2 顺序）
@@ -202,9 +203,10 @@ data/
      npx tsx --env-file=.env scripts/smoke-lfasr.ts
      ```
 
-**之后的每次发版**：本地执行 `./scripts/deploy.sh <user@VPS>`——
-站点地址默认读本地 `.env` 的 `READALONG_SITE_ADDRESS`，也可以作为第二个参数临时覆盖。
-rsync 代码（不覆盖 `data/`）→ 传 `.env` → 远程 `npm ci && npm run build` → `pm2 reload`。
+**之后的每次发版**：本地执行 `./scripts/deploy.sh <host>`（如 `english-vps`）——
+脚本会先检查工作区干净、并列出未 push 提交让你选「push 部署最新」或「按远端部署」；
+服务器 `git fetch && git reset --hard origin/main` 拉代码，单独传 `.env` 与
+`scripts/reset-password.ts`，然后远程 `npm ci && npm run build` → `pm2 reload`。
 
 ### 从 V0.2.x 升级到 V0.3.x（发版后一次性步骤）
 
