@@ -35,3 +35,10 @@ models/
 # 高危运维脚本：知道邮箱即可改任意账号密码，仅保留在服务器与本机，永不入库
 # （deploy.sh 的 rsync 也单独 exclude，防止下次部署被 --delete 清掉）
 scripts/reset-password.ts
+
+# 本地内部文档与 agent 工作约定（仅本机，不进 git）
+AGENTS.md
+docs/agents/
+research/
+content/textbook/REVIEW-NOTES.md
+docs/acceptance-v02.md

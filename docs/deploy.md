@@ -192,7 +192,7 @@ data/
    pm2 start npm --name english-readalong -- start && pm2 save
    ```
 
-8. **验证**（最终以 `docs/acceptance-v02.md` 真机清单为准）：
+8. **验证**：
 
    - 浏览器打开 `https://<域名>` → 跳转登录页，管理员账号能登录进首页；
    - `pm2 logs english-readalong` 无启动报错；
@@ -258,8 +258,6 @@ ssh <user@VPS> "pm2 restart english-readalong"  # 改 .env 后重启生效
 
 ## 八、iPad 真机验收
 
-V0.2 完整可勾选清单见 **`docs/acceptance-v02.md`**（票 13），覆盖登录、上传、
-转写、两个校对工具、定稿门禁、标准内容制作、隐私隔离与竖屏布局。
 V0.1 练习链路的 7 条快速冒烟仍有效：
 
 1. iPad Safari 打开 `https://<域名>` → 登录后出现两个单元卡片

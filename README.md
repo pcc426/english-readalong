@@ -219,11 +219,9 @@ docs/                  # ADR、部署手册、验收清单
 
 ## 文档与约定
 
-- [AGENTS.md](AGENTS.md)：AI 代理在本仓库工作的入口
 - [GLOSSARY.md](GLOSSARY.md)：领域词汇表（跟读、句子星、账号星星、完整练习等）
 - [docs/adr/](docs/adr/)：架构决策记录
 - [docs/deploy.md](docs/deploy.md)：服务器部署手册
-- [docs/acceptance-v02.md](docs/acceptance-v02.md)：真机验收清单
 
 ## 安全与隐私
 
