@@ -232,6 +232,6 @@ docs/                  # ADR、部署手册、验收清单
 
 ## License
 
-本项目采用仓库根目录 `LICENSE` 文件中声明的许可证（在 GitHub 仓库设置中配置）。
+本项目代码以 [GNU General Public License v3.0](LICENSE) 开源。
 
-注意：`content/textbook/grade5a.json` 中的课文文本版权归原教材出版方所有，不在代码开源协议的覆盖范围内；对外分发前请自行确认授权。
+注意：`content/textbook/grade5a.json` 中的课文文本版权归原教材出版方所有，不在 GPL 覆盖范围内；对外分发前请自行确认授权。
