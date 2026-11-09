@@ -5,22 +5,22 @@
 - 逐句跟读：听一句示范 → 录音 → AI 评分 → 星星反馈
 - 成长记录：账号星星、连续打卡、打卡月历、余额曲线
 - 自定义内容：家长上传英语视频 → 自动转写 → 校对/预览 → 发布 → 跟读
-- 标准内容：随仓库附带的教材内容包（当前为沪教版五年级上册）
+- 标准内容：随仓库附带的教材内容包（当前为沪教版五年级上册，教材暂未授权，标准内容暂不开放）
 - 邀请制账号：没有公开注册入口，管理员创建账号；自定义内容按账号隔离
 
-> 项目状态：个人家庭项目，按版本迭代中（当前 V0.4.1）。许可证尚未指定，见文末。
+> 项目状态：个人家庭项目，按版本迭代中（当前 V0.4.1）。许可证见文末。
 
 ## 技术栈
 
-| 层 | 选型 |
-| --- | --- |
-| Web | Next.js 15（App Router）+ React 19 + TypeScript |
-| 样式 | Tailwind CSS 4 |
-| 数据 | SQLite（better-sqlite3，WAL 模式） |
-| 语音评测 | 讯飞开放平台「语音评测（流式版）」ISE |
-| 录音转写 | 讯飞开放平台「录音文件转写」LFASR（大模型版 / 标准版） |
-| 媒体处理 | ffmpeg / ffprobe |
-| 测试 | Vitest |
+| 层    | 选型                                            |
+| ---- | --------------------------------------------- |
+| Web  | Next.js 15（App Router）+ React 19 + TypeScript |
+| 样式   | Tailwind CSS 4                                |
+| 数据   | SQLite（better-sqlite3，WAL 模式）                 |
+| 语音评测 | 讯飞开放平台「语音评测（流式版）」ISE                          |
+| 录音转写 | 讯飞开放平台「录音文件转写」LFASR（大模型版 / 标准版）               |
+| 媒体处理 | ffmpeg / ffprobe                              |
+| 测试   | Vitest                                        |
 
 ## 环境要求
 
@@ -88,20 +88,20 @@ npm run dev
 
 `.env` 不入库，模板见 [.env.example](.env.example)。
 
-| 变量 | 必填 | 默认值 | 说明 |
-| --- | --- | --- | --- |
-| `XFYUN_APPID` / `XFYUN_API_KEY` / `XFYUN_API_SECRET` | 要评分则必填；生产必填 | — | 讯飞「语音评测（流式版）」凭据 |
-| `LFASR_APP_ID` / `LFASR_API_KEY` / `LFASR_API_SECRET` | 生产必填；开发可留空 | — | 讯飞「录音文件转写」凭据。三项齐全才走真实转写，否则开发/测试使用假转写 |
-| `LFASR_MODE` | 否 | `llm` | `llm`（录音文件转写大模型，只收音频）或 `standard`（标准版，可直接传视频）。注意两个版本的密钥归属不同 |
-| `LFASR_EXTRACT_AUDIO` | 否 | 关闭 | 设为 `1` 时先用 ffmpeg 抽 16kHz 单声道音轨再提交；LFASR 拒收视频文件时打开 |
-| `LFASR_PAUSE_MS` | 否 | `700` | 无句末标点时按停顿切句的阈值（毫秒）。调小切得更碎，调大合并更多 |
-| `DB_PATH` | 否 | `data/readalong.db` | SQLite 数据库路径 |
-| `CONTENT_DIR` | 否 | `content/units` | 随代码标准内容包目录；本仓库已无随代码内容，目录缺失视为空 |
-| `CONTENT_DATA_DIR` | 否 | `data/content` | 运行时内容包目录：自定义内容按账号分目录，另有 `standard/` 存放运行时制作的标准内容 |
-| `UPLOADS_DIR` | 否 | `data/uploads` | 上传视频目录，按账号分目录 |
-| `SHIPPED_MEDIA_DIR` | 否 | `content/media` | 随代码标准内容视频目录；本仓库已无随代码内容 |
-| `READALONG_SITE_ADDRESS` | 部署 Caddy 时必填 | — | Caddy 站点对外地址，由 `deploy/Caddyfile` 从环境变量读取，如 `https://english.example.com`；IP 调试版填 `https://<公网IP>:8443` |
-| `READALONG_DEFAULT_SNI` | 仅 IP 调试版 | — | 公网 IP，配合 `deploy/Caddyfile.ip-tls` 的自签证书使用 |
+| 变量                                                    | 必填           | 默认值                 | 说明                                                                                                      |
+| ----------------------------------------------------- | ------------ | ------------------- | ------------------------------------------------------------------------------------------------------- |
+| `XFYUN_APPID` / `XFYUN_API_KEY` / `XFYUN_API_SECRET`  | 要评分则必填；生产必填  | —                   | 讯飞「语音评测（流式版）」凭据                                                                                         |
+| `LFASR_APP_ID` / `LFASR_API_KEY` / `LFASR_API_SECRET` | 生产必填；开发可留空   | —                   | 讯飞「录音文件转写」凭据。三项齐全才走真实转写，否则开发/测试使用假转写                                                                    |
+| `LFASR_MODE`                                          | 否            | `llm`               | `llm`（录音文件转写大模型，只收音频）或 `standard`（标准版，可直接传视频）。注意两个版本的密钥归属不同                                             |
+| `LFASR_EXTRACT_AUDIO`                                 | 否            | 关闭                  | 设为 `1` 时先用 ffmpeg 抽 16kHz 单声道音轨再提交；LFASR 拒收视频文件时打开                                                      |
+| `LFASR_PAUSE_MS`                                      | 否            | `700`               | 无句末标点时按停顿切句的阈值（毫秒）。调小切得更碎，调大合并更多                                                                        |
+| `DB_PATH`                                             | 否            | `data/readalong.db` | SQLite 数据库路径                                                                                            |
+| `CONTENT_DIR`                                         | 否            | `content/units`     | 随代码标准内容包目录；本仓库已无随代码内容，目录缺失视为空                                                                           |
+| `CONTENT_DATA_DIR`                                    | 否            | `data/content`      | 运行时内容包目录：自定义内容按账号分目录，另有 `standard/` 存放运行时制作的标准内容                                                        |
+| `UPLOADS_DIR`                                         | 否            | `data/uploads`      | 上传视频目录，按账号分目录                                                                                           |
+| `SHIPPED_MEDIA_DIR`                                   | 否            | `content/media`     | 随代码标准内容视频目录；本仓库已无随代码内容                                                                                  |
+| `READALONG_SITE_ADDRESS`                              | 部署 Caddy 时必填 | —                   | Caddy 站点对外地址，由 `deploy/Caddyfile` 从环境变量读取，如 `https://english.example.com`；IP 调试版填 `https://<公网IP>:8443` |
+| `READALONG_DEFAULT_SNI`                               | 仅 IP 调试版     | —                   | 公网 IP，配合 `deploy/Caddyfile.ip-tls` 的自签证书使用                                                              |
 
 会话不需要额外密钥：会话 id 为服务端随机不透明字符串，存 SQLite，通过 HttpOnly + Secure Cookie 下发。
 
@@ -117,15 +117,15 @@ npm run dev
 
 内容由「内容包 JSON + 视频 + 封面」组成：
 
-| 类型 | 位置 | 说明 |
-| --- | --- | --- |
-| 自定义内容视频 | `data/uploads/<accountId>/` | 上传原文件，仅所属账号可见 |
-| 自定义内容包 | `data/content/<accountId>/` | 定稿后生成，仅所属账号可见 |
-| 标准内容包 | `data/content/standard/` | 管理员通过上传管线制作，所有账号（开关打开时）可见 |
-| 标准内容视频 | `data/uploads/<accountId>/` | 标准内容定稿时视频落在管理员上传目录，经鉴权接口对所有登录账号放行 |
+| 类型      | 位置                          | 说明                                |
+| ------- | --------------------------- | --------------------------------- |
+| 自定义内容视频 | `data/uploads/<accountId>/` | 上传原文件，仅所属账号可见                     |
+| 自定义内容包  | `data/content/<accountId>/` | 定稿后生成，仅所属账号可见                     |
+| 标准内容包   | `data/content/standard/`    | 管理员通过上传管线制作，所有账号（开关打开时）可见         |
+| 标准内容视频  | `data/uploads/<accountId>/` | 标准内容定稿时视频落在管理员上传目录，经鉴权接口对所有登录账号放行 |
 
-本仓库已移除随代码的教材标准内容（原 `content/units/` 与 `content/media/`），
-标准内容现在全部通过管理员上传管线制作、落在运行时目录 `data/content/standard/`；
+本仓库已移除随代码的教材标准内容（原 `content/units/` 与 `content/media/`），  
+标准内容现在全部通过管理员上传管线制作、落在运行时目录 `data/content/standard/`；  
 所有视频与封面统一经鉴权接口读取，不作为静态资源公开。
 
 内容包最小示例：
@@ -156,27 +156,27 @@ npm run dev
 
 ## 常用命令
 
-| 命令 | 说明 |
-| --- | --- |
-| `npm run dev` | 开发服务器（Turbopack，默认 <http://localhost:3000>） |
-| `npm run build` | 生产构建 |
-| `npm start` | 运行生产构建 |
-| `npm test` | 跑一遍 Vitest |
-| `npm run test:watch` | 监听模式跑测试 |
-| `npm run typecheck` | TypeScript 类型检查 |
-| `npm run backfill:stars` | 回填 V0.4 初始星星（幂等；首次执行会记录上线切点） |
+| 命令                       | 说明                                          |
+| ------------------------ | ------------------------------------------- |
+| `npm run dev`            | 开发服务器（Turbopack，默认 <http://localhost:3000>） |
+| `npm run build`          | 生产构建                                        |
+| `npm start`              | 运行生产构建                                      |
+| `npm test`               | 跑一遍 Vitest                                  |
+| `npm run test:watch`     | 监听模式跑测试                                     |
+| `npm run typecheck`      | TypeScript 类型检查                             |
+| `npm run backfill:stars` | 回填 V0.4 初始星星（幂等；首次执行会记录上线切点）                |
 
 一次性脚本（位于 `scripts/`，多数需要 `npx tsx --env-file=.env`）：
 
-| 脚本 | 用途 |
-| --- | --- |
-| `create-admin.ts <邮箱> <密码>` | 创建管理员账号；缺参时交互输入 |
-| `backfill-posters.ts` | 为已有视频补抽封面，并回填草稿封面字段（幂等） |
-| `migrate-practice-owner.ts` | 把 owner 为空的旧练习记录归到首个管理员名下 |
-| `migrate-v03-standard-packs.ts` | V0.3 标准内容包迁移；默认 dry-run，核对后加 `--apply` |
-| `smoke-xunfei.ts` | 语音评测接口冒烟（真实调用，按次计费） |
-| `smoke-lfasr.ts` | 录音文件转写冒烟（真实调用，按音频时长计费） |
-| `align.ts <whisper.json> <sentences.json> <out.json>` | 离线素材对齐：用词级转写和权威句子清单生成起止时间 |
+| 脚本                                                    | 用途                                     |
+| ----------------------------------------------------- | -------------------------------------- |
+| `create-admin.ts <邮箱> <密码>`                           | 创建管理员账号；缺参时交互输入                        |
+| `backfill-posters.ts`                                 | 为已有视频补抽封面，并回填草稿封面字段（幂等）                |
+| `migrate-practice-owner.ts`                           | 把 owner 为空的旧练习记录归到首个管理员名下              |
+| `migrate-v03-standard-packs.ts`                       | V0.3 标准内容包迁移；默认 dry-run，核对后加 `--apply` |
+| `smoke-xunfei.ts`                                     | 语音评测接口冒烟（真实调用，按次计费）                    |
+| `smoke-lfasr.ts`                                      | 录音文件转写冒烟（真实调用，按音频时长计费）                 |
+| `align.ts <whisper.json> <sentences.json> <out.json>` | 离线素材对齐：用词级转写和权威句子清单生成起止时间              |
 
 测试与类型检查：
 
