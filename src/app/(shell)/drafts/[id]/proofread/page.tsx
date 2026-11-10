@@ -12,6 +12,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { adjustBoundsMs, CALIBRATE_STEP_MS, MIN_CLIP_MS } from "@/lib/domain/calibrate";
 import { formatMs, previewGate } from "@/components/shared/draft-ui";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { useSentenceSave } from "@/components/shared/use-draft-save";
 import {
   resolveProofreadStatus,
@@ -56,6 +57,8 @@ export default function ProofreadPage() {
   const [playing, setPlaying] = useState(false);
   const [mutating, setMutating] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  // V0.4.2：删除句子的确认弹框（替换原生 confirm）
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   // V0.2.4 票 03：可编辑标题（发布以新标题为准）
   const [titleValue, setTitleValue] = useState<string | null>(null);
   const [titleSave, setTitleSave] = useState<
@@ -325,13 +328,6 @@ export default function ProofreadPage() {
 
   async function handleDelete() {
     if (!id || !current || mutating) return;
-    if (
-      !window.confirm(
-        `确定删除第 ${current.index + 1} 句吗？删除后不能恢复。`
-      )
-    ) {
-      return;
-    }
     setMutating(true);
     setActionError(null);
     try {
@@ -655,7 +651,7 @@ export default function ProofreadPage() {
               </button>
               <button
                 type="button"
-                onClick={() => void handleDelete()}
+                onClick={() => setConfirmingDelete(true)}
                 disabled={mutating || sentences.length <= 1}
                 className="rounded-2xl bg-red-50 px-4 py-2 text-base font-semibold text-red-600 ring-1 ring-red-100 active:bg-red-100 disabled:opacity-40"
               >
@@ -730,6 +726,19 @@ export default function ProofreadPage() {
           )}
         </div>
       </aside>
+
+      <ConfirmDialog
+        open={confirmingDelete}
+        onClose={() => setConfirmingDelete(false)}
+        icon="✂️"
+        title={current ? `删除第 ${current.index + 1} 句？` : ""}
+        message="这一句删除后不能恢复。"
+        confirmLabel="确定删除"
+        onConfirm={() => {
+          setConfirmingDelete(false);
+          void handleDelete();
+        }}
+      />
     </div>
   );
 }

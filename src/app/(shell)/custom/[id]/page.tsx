@@ -11,7 +11,9 @@ import {
   STATUS_BADGES,
   formatMs,
   previewGate,
+  statusBadgeLabel,
 } from "@/components/shared/draft-ui";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import type { DraftDetailView } from "@/components/proofread/types";
 
 export default function DraftDetailPage() {
@@ -25,6 +27,8 @@ export default function DraftDetailPage() {
   // V0.2.4 票 04：退回校对的进行中/结果反馈
   const [unpublishing, setUnpublishing] = useState(false);
   const [unpublishError, setUnpublishError] = useState<string | null>(null);
+  // V0.4.2：退回校对的确认弹框（替换原生 confirm）
+  const [confirmingUnpublish, setConfirmingUnpublish] = useState(false);
 
   const loadDraft = useCallback(async () => {
     if (!id) return;
@@ -74,16 +78,6 @@ export default function DraftDetailPage() {
    * 回到校对态 UI（句子原样保留，改错句 → 重新确认 → 再次定稿）。 */
   async function handleUnpublish() {
     if (!id || unpublishing) return;
-    if (
-      !window.confirm(
-        `确定把「${draft?.title ?? ""}」退回校对吗？\n\n` +
-          `· 该内容会立即从所有家庭的练习列表中消失；\n` +
-          `· 所有家庭在这条内容上的练习记录将被清空；\n` +
-          `· 校对成果保留，改完后重新定稿即可（练习链接不变）。`
-      )
-    ) {
-      return;
-    }
     setUnpublishing(true);
     setUnpublishError(null);
     try {
@@ -127,7 +121,7 @@ export default function DraftDetailPage() {
       <div className="mt-4 flex items-center gap-3">
         <h1 className="text-3xl font-bold tracking-tight">{draft.title}</h1>
         <span className={`rounded-full px-4 py-1 text-lg font-bold ${badge.className}`}>
-          {badge.label}
+          {statusBadgeLabel(draft.status, "custom")}
         </span>
       </div>
 
@@ -242,7 +236,7 @@ export default function DraftDetailPage() {
           )}
           <button
             type="button"
-            onClick={() => void handleUnpublish()}
+            onClick={() => setConfirmingUnpublish(true)}
             disabled={unpublishing}
             className="mt-8 rounded-2xl bg-red-50 px-5 py-3 text-lg font-semibold text-red-600 ring-1 ring-red-100 active:bg-red-100 disabled:opacity-40"
           >
@@ -250,6 +244,23 @@ export default function DraftDetailPage() {
           </button>
         </>
       )}
+
+      <ConfirmDialog
+        open={confirmingUnpublish}
+        onClose={() => setConfirmingUnpublish(false)}
+        icon="⚠️"
+        title={`退回校对「${draft.title}」？`}
+        points={[
+          "该内容会立即从所有家庭的练习列表中消失",
+          "所有家庭在这条内容上的练习记录将被清空",
+          "校对成果保留，改完后重新定稿即可（练习链接不变）",
+        ]}
+        confirmLabel="确定退回校对"
+        onConfirm={() => {
+          setConfirmingUnpublish(false);
+          void handleUnpublish();
+        }}
+      />
     </div>
   );
 }

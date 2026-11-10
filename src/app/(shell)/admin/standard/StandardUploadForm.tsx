@@ -15,6 +15,7 @@ import {
   useCountdown,
   percentOf,
 } from "@/components/shared/upload-countdown";
+import { markUploadStarted } from "@/components/shared/upload-handoff";
 import { buildEnumTitle } from "@/lib/textbook/title";
 import {
   AccessGate,
@@ -42,6 +43,9 @@ export default function StandardUploadForm({
   // V0.3.4 票 01：上传进度（百分比）、取消句柄、完成后的 3 秒倒计时
   const [percent, setPercent] = useState(0);
   const [countdown, setCountdown] = useState<number | null>(null);
+  // V0.4.2：进度到 100% 就倒计时回列表，服务端转写过程交给列表页异步等待
+  const resultRef = useRef<"pending" | "ok" | "error">("pending");
+  const completionStartedRef = useRef(false);
   const cancelRef = useRef<(() => void) | null>(null);
   const navigatedRef = useRef(false);
 
@@ -68,6 +72,33 @@ export default function StandardUploadForm({
     router.push("/admin/standard");
   }
 
+  /** 进入完成态并开始倒计时（只一次）：进度到 100% 或 201 到达时调用 */
+  function startCountdownOnce() {
+    if (completionStartedRef.current) return;
+    completionStartedRef.current = true;
+    // 告诉列表页「刚上传过」，它会在随后 20 秒内继续轮询把卡片接上
+    markUploadStarted();
+    setCountdown(3);
+  }
+
+  /** 倒计时走完：没出错就直接回列表；服务端转写、建卡片都交给列表页异步等待 */
+  function handleCountdownDone() {
+    if (resultRef.current !== "error") navigateToList();
+  }
+
+  /** 201 到达：只记成功；倒计时若没启动过（拿不到总字节）在这里兜底启动 */
+  function handleUploaded() {
+    resultRef.current = "ok";
+    startCountdownOnce();
+  }
+
+  /** 上传失败/取消：撤掉可能已经开始的倒计时，避免带着错误跳页 */
+  function handleUploadFailed() {
+    resultRef.current = "error";
+    completionStartedRef.current = false;
+    setCountdown(null);
+  }
+
   async function handleUpload(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (uploading) return;
@@ -81,7 +112,11 @@ export default function StandardUploadForm({
     }
     setUploading(true);
     setError(null);
+    setPercent(0);
+    setCountdown(null);
     navigatedRef.current = false;
+    completionStartedRef.current = false;
+    resultRef.current = "pending";
     const form = new FormData();
     form.set("file", file);
     form.set("type", "standard");
@@ -90,24 +125,31 @@ export default function StandardUploadForm({
     const handle = uploadWithProgress({
       url: "/api/uploads",
       body: form,
-      onProgress: (loaded, total) => setPercent(percentOf(loaded, total)),
+      onProgress: (loaded, total) => {
+        const next = percentOf(loaded, total);
+        setPercent(next);
+        // V0.4.2：进度条一显示 100% 就开始 3 秒倒计时；真正跳转仍等服务端 201
+        if (next >= 100) startCountdownOnce();
+      },
     });
     cancelRef.current = handle.cancel;
     try {
       const res = await handle.promise;
       if (res.status === 201) {
-        // 成功不留在上传页：3 秒倒计时后跳回制作列表（可提前点按钮前往）
-        setCountdown(3);
+        handleUploaded();
         return;
       }
       if (res.status === 0) {
         // 用户取消：回 idle 可重试
+        handleUploadFailed();
         setError("已取消上传");
         return;
       }
+      handleUploadFailed();
       const body = res.body as { error?: { message?: string } } | null;
       setError(body?.error?.message ?? "上传失败，请重试");
     } catch {
+      handleUploadFailed();
       setError("网络开小差了，请重试");
     } finally {
       setUploading(false);
@@ -252,10 +294,10 @@ export default function StandardUploadForm({
             disabled={uploading || countdown !== null || !file}
             className="mt-5 w-full rounded-2xl bg-emerald-500 py-4 text-xl font-bold text-white shadow-md active:bg-emerald-600 disabled:opacity-40"
           >
-            {uploading
-              ? `上传中… ${percent}%`
-              : countdown !== null
-                ? `上传完成 · ${countdown} 秒后自动前往`
+            {countdown !== null
+              ? `上传完成 · ${countdown} 秒后自动前往`
+              : uploading
+                ? `上传中… ${percent}%`
                 : "上传并开始转写"}
           </button>
 
@@ -279,7 +321,7 @@ export default function StandardUploadForm({
           )}
           {countdown !== null && (
             <>
-              <AutoNavigate onDone={navigateToList} onTick={setCountdown} />
+              <AutoNavigate onDone={handleCountdownDone} onTick={setCountdown} />
               <button
                 type="button"
                 onClick={navigateToList}

@@ -14,10 +14,11 @@ import {
 import { mapScoreToStars } from "@/lib/domain/stars";
 import { WEEKLY_RUN_LIMIT } from "@/lib/domain/limits";
 import { WeeklyLimitModal } from "@/components/shared/WeeklyLimitModal";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { sourceLabel } from "@/lib/content/source-label";
 import type { ContentDetail } from "@/lib/content/view";
 import { cellStars, replayControl } from "./practice-panel";
-import { publishConfirmText } from "./publish-confirm";
+import { publishAudienceText } from "./publish-confirm";
 import { finishStorageKey, type FinishPayload } from "./finish-summary";
 
 // 录音最长秒数：超时自动提交，防止孩子忘按"读好了"一直录
@@ -513,14 +514,11 @@ export default function PracticeFlow({
   // 沿用校对页的确认文案与 422 逐句问题拼接；成功跳真实练习页 /units/{id}
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
+  // V0.4.2：定稿发布的确认弹框（替换原生 confirm）
+  const [confirmingPublish, setConfirmingPublish] = useState(false);
 
   async function publishDraft() {
     if (publishing) return;
-    if (
-      !window.confirm(publishConfirmText(unit.type, unit.title))
-    ) {
-      return;
-    }
     setPublishing(true);
     setPublishError(null);
     try {
@@ -860,7 +858,7 @@ export default function PracticeFlow({
                 ← 退回校对
               </a>
               <button
-                onClick={() => void publishDraft()}
+                onClick={() => setConfirmingPublish(true)}
                 disabled={publishing || unconfirmedCount > 0}
                 title={
                   unconfirmedCount > 0
@@ -928,6 +926,21 @@ export default function PracticeFlow({
         open={capOpen}
         onClose={() => setCapOpen(false)}
         contentType={unit.type}
+      />
+
+      <ConfirmDialog
+        open={confirmingPublish}
+        onClose={() => setConfirmingPublish(false)}
+        icon="🚀"
+        title={`定稿发布「${unit.title}」？`}
+        message={publishAudienceText(unit.type)}
+        confirmLabel="确认发布"
+        cancelLabel="再等等"
+        tone="primary"
+        onConfirm={() => {
+          setConfirmingPublish(false);
+          void publishDraft();
+        }}
       />
     </>
   );

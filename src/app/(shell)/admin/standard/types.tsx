@@ -32,6 +32,8 @@ export interface StandardDraftOverview {
   unitId: string | null;
   moduleKind: string | null;
   status: "transcribing" | "proofreading" | "published";
+  /** 转写失败原因（V0.4.2）：非空时卡片提示「转写失败，请重新上传视频」 */
+  transcribeError: string | null;
   sentenceCount: number;
   confirmedCount: number;
   /** 枚举串（V0.3.4 票 04）：服务端生成；custom / 注册表查不到为 null */

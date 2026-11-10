@@ -13,6 +13,27 @@ export const STATUS_BADGES: Record<
   published: { label: "已定稿", className: "bg-emerald-100 text-emerald-700" },
 };
 
+/**
+ * 徽标文案（V0.4.2）：自定义内容页把 published 显示为「已发布」，
+ * 教材制作页仍是「已定稿」。只改显示名，status 字段与接口不动。
+ */
+export function statusBadgeLabel(
+  status: DraftStatusUI,
+  surface: "standard" | "custom"
+): string {
+  if (surface === "custom" && status === "published") return "已发布";
+  return STATUS_BADGES[status].label;
+}
+
+/** 转写失败徽标（V0.4.2）：上传后转写失败时列表卡片改用它 */
+export const TRANSCRIBE_FAILED_BADGE = {
+  label: "转写失败",
+  className: "bg-red-100 text-red-700",
+} as const;
+
+/** 转写失败时卡片上的提示（上传失败与转写失败共用同一句） */
+export const TRANSCRIBE_FAILED_HINT = "转写失败，请重新上传视频！";
+
 /** 毫秒 → m:ss.s（校对页 SentenceRow 与草稿详情页同一口径） */
 export function formatMs(ms: number): string {
   const total = ms / 1000;

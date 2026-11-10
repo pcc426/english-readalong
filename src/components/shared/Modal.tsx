@@ -11,6 +11,8 @@ export function Modal({
   children,
   primaryLabel,
   onPrimary,
+  primaryTone = "primary",
+  initialFocus = "primary",
   secondaryLabel,
   onSecondary,
 }: {
@@ -21,12 +23,17 @@ export function Modal({
   children: ReactNode;
   primaryLabel?: string;
   onPrimary?: () => void;
+  /** 主按钮配色（V0.4.2）：危险操作用 danger */
+  primaryTone?: "primary" | "danger";
+  /** 打开时的初始焦点（V0.4.2）：危险操作默认落在「取消」上，避免误触确认 */
+  initialFocus?: "primary" | "secondary";
   secondaryLabel?: string;
   onSecondary?: () => void;
 }) {
   const titleId = useId();
   const cardRef = useRef<HTMLDivElement>(null);
   const primaryRef = useRef<HTMLButtonElement>(null);
+  const secondaryRef = useRef<HTMLButtonElement>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
@@ -34,8 +41,10 @@ export function Modal({
     if (!open) return;
     const previous = document.activeElement as HTMLElement | null;
     const focusInitial = () => {
+      const preferred =
+        initialFocus === "secondary" ? secondaryRef.current : primaryRef.current;
       const target =
-        primaryRef.current ??
+        preferred ??
         cardRef.current?.querySelector<HTMLElement>("button");
       target?.focus();
     };
@@ -113,13 +122,18 @@ export function Modal({
               ref={primaryRef}
               type="button"
               onClick={onPrimary}
-              className="rounded-2xl bg-emerald-500 px-5 py-3.5 text-lg font-bold text-white shadow-sm active:bg-emerald-600"
+              className={`rounded-2xl px-5 py-3.5 text-lg font-bold text-white shadow-sm ${
+                primaryTone === "danger"
+                  ? "bg-red-500 active:bg-red-600"
+                  : "bg-emerald-500 active:bg-emerald-600"
+              }`}
             >
               {primaryLabel}
             </button>
           )}
           {secondaryLabel && onSecondary && (
             <button
+              ref={secondaryRef}
               type="button"
               onClick={onSecondary}
               className="rounded-2xl px-5 py-3 text-base font-semibold text-slate-500 ring-1 ring-slate-200 active:bg-slate-50"

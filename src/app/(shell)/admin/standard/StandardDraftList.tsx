@@ -3,13 +3,30 @@
 // 教材内容制作·草稿列表（V0.3.4 票 04，拆自 StandardAdminClient）。
 // 默认页 /admin/standard：tab（制作中/已定稿）+ 网格卡（样式对齐自定义列表），
 // 原有按钮一个不少（去校对/去预览/查看/退回校对/删除），语义与拆分前一致。
-import { useCallback, useEffect, useState } from "react";
-import { STATUS_BADGES, previewGate } from "@/components/shared/draft-ui";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  STATUS_BADGES,
+  TRANSCRIBE_FAILED_BADGE,
+  TRANSCRIBE_FAILED_HINT,
+  previewGate,
+} from "@/components/shared/draft-ui";
+import { readUploadHint, UPLOAD_WATCH_MS } from "@/components/shared/upload-handoff";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import {
   AccessGate,
   useAdminAccess,
   type StandardDraftOverview,
 } from "./types";
+
+/** 转写中卡片的自动刷新间隔（V0.4.2）：转写完成后无需手动刷新即出现「去校对」 */
+const TRANSCRIBING_POLL_MS = 3000;
+
+/** 退回校对的后果要点（V0.4.2：从原生 confirm 换到自定义弹框，文案不变） */
+const UNPUBLISH_POINTS = [
+  "该内容会立即从所有家庭的练习列表中消失",
+  "所有家庭在这条内容上的练习记录将被清空",
+  "校对成果保留，改完后重新定稿即可（练习链接不变）",
+];
 
 export default function StandardDraftList() {
   const access = useAdminAccess();
@@ -21,8 +38,15 @@ export default function StandardDraftList() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   // V0.2.4 票 04：退回校对的进行中反馈
   const [unpublishingId, setUnpublishingId] = useState<string | null>(null);
+  // V0.4.2：确认弹框（替换原生 confirm）
+  const [confirming, setConfirming] = useState<
+    { kind: "unpublish" | "delete"; draft: StandardDraftOverview } | null
+  >(null);
   // v0.3.6：标准内容当前是否对家庭账号开放（只用于状态提示）
   const [standardPublic, setStandardPublic] = useState<boolean | null>(null);
+
+  // V0.4.2：转写中卡片的自动刷新
+  const loadedRef = useRef(false);
 
   const loadDrafts = useCallback(async () => {
     try {
@@ -30,19 +54,38 @@ export default function StandardDraftList() {
       // 管理员自己的自定义草稿归「自定义内容」页
       const res = await fetch("/api/drafts?type=standard");
       if (!res.ok) {
-        setFailed(true);
+        // 已有数据时（轮询刷新）不把整页切成失败态
+        if (!loadedRef.current) setFailed(true);
         return;
       }
       const body = (await res.json()) as { drafts?: StandardDraftOverview[] };
+      loadedRef.current = true;
       setDrafts(body.drafts ?? []);
     } catch {
-      setFailed(true);
+      if (!loadedRef.current) setFailed(true);
     }
   }, []);
 
   useEffect(() => {
     if (access === "allowed") void loadDrafts();
   }, [access, loadDrafts]);
+
+  // V0.4.2：只要还有转写中的卡片就 3 秒一轮刷新，转写完自动出「去校对」
+  const transcribing = (drafts ?? []).some((d) => d.status === "transcribing");
+  // 刚上传过时（100% 就跳回列表，草稿可能还没建好）额外轮询一小段时间
+  const [uploadWatch, setUploadWatch] = useState(false);
+  useEffect(() => {
+    if (!readUploadHint()) return;
+    setUploadWatch(true);
+    const timer = setTimeout(() => setUploadWatch(false), UPLOAD_WATCH_MS);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (access !== "allowed" || (!transcribing && !uploadWatch)) return;
+    const timer = setInterval(() => void loadDrafts(), TRANSCRIBING_POLL_MS);
+    return () => clearInterval(timer);
+  }, [access, transcribing, uploadWatch, loadDrafts]);
 
   useEffect(() => {
     if (access !== "allowed") return;
@@ -65,18 +108,14 @@ export default function StandardDraftList() {
     };
   }, [access]);
 
+  /** 点「退回校对」：先弹确认框，确认后才真正执行 */
+  function requestUnpublish(draft: StandardDraftOverview) {
+    if (unpublishingId) return;
+    setConfirming({ kind: "unpublish", draft });
+  }
+
   async function handleUnpublish(draft: StandardDraftOverview) {
     if (unpublishingId) return;
-    if (
-      !window.confirm(
-        `确定把「${draft.title}」退回校对吗？\n\n` +
-          `· 该内容会立即从所有家庭的练习列表中消失；\n` +
-          `· 所有家庭在这条内容上的练习记录将被清空；\n` +
-          `· 校对成果保留，改完后重新定稿即可（练习链接不变）。`
-      )
-    ) {
-      return;
-    }
     setUnpublishingId(draft.id);
     setError(null);
     setNotice(null);
@@ -100,11 +139,14 @@ export default function StandardDraftList() {
     }
   }
 
+  /** 点「删除」：先弹确认框 */
+  function requestDelete(draft: StandardDraftOverview) {
+    if (deletingId) return;
+    setConfirming({ kind: "delete", draft });
+  }
+
   async function handleDelete(draft: StandardDraftOverview) {
     if (deletingId) return;
-    if (!window.confirm(`确定删除「${draft.title}」吗？视频文件会一并删除。`)) {
-      return;
-    }
     setDeletingId(draft.id);
     try {
       const res = await fetch(`/api/drafts/${draft.id}`, { method: "DELETE" });
@@ -209,8 +251,8 @@ export default function StandardDraftList() {
                   <DraftCard
                     key={draft.id}
                     draft={draft}
-                    onUnpublish={handleUnpublish}
-                    onDelete={handleDelete}
+                    onUnpublish={requestUnpublish}
+                    onDelete={requestDelete}
                     unpublishingId={unpublishingId}
                     deletingId={deletingId}
                   />
@@ -220,6 +262,35 @@ export default function StandardDraftList() {
           </>
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirming !== null}
+        onClose={() => setConfirming(null)}
+        icon={confirming?.kind === "unpublish" ? "⚠️" : "🗑️"}
+        title={
+          confirming?.kind === "unpublish"
+            ? `退回校对「${confirming.draft.title}」？`
+            : confirming
+              ? `删除「${confirming.draft.title}」？`
+              : ""
+        }
+        message={
+          confirming?.kind === "delete"
+            ? "这条内容和它的视频文件会一起删除，删除后不能恢复。"
+            : undefined
+        }
+        points={confirming?.kind === "unpublish" ? UNPUBLISH_POINTS : undefined}
+        confirmLabel={
+          confirming?.kind === "unpublish" ? "确定退回校对" : "确定删除"
+        }
+        onConfirm={() => {
+          const target = confirming;
+          setConfirming(null);
+          if (!target) return;
+          if (target.kind === "unpublish") void handleUnpublish(target.draft);
+          else void handleDelete(target.draft);
+        }}
+      />
     </AccessGate>
   );
 }
@@ -237,7 +308,9 @@ function DraftCard({
   unpublishingId: string | null;
   deletingId: string | null;
 }) {
-  const badge = STATUS_BADGES[draft.status];
+  // 转写失败（V0.4.2）：徽标与提示都换掉，卡片保持不可点
+  const failed = draft.status === "transcribing" && Boolean(draft.transcribeError);
+  const badge = failed ? TRANSCRIBE_FAILED_BADGE : STATUS_BADGES[draft.status];
   // 票 09：与校对页/custom 详情同一把尺（previewGate）
   const gate = previewGate(draft.sentenceCount, draft.confirmedCount);
   const pct = draft.sentenceCount
@@ -288,29 +361,21 @@ function DraftCard({
           </div>
         )}
         {draft.status === "transcribing" && (
-          <p className="mt-1 text-xs text-slate-500">
-            视频转写中，完成后可校对…
+          <p
+            className={`mt-1 text-xs ${failed ? "font-semibold text-red-600" : "text-slate-500"}`}
+          >
+            {failed ? TRANSCRIBE_FAILED_HINT : "视频转写中，完成后可校对…"}
           </p>
         )}
 
         {/* 主操作（无框文字 + 箭头，纵向；V0.3.4 用户定稿）。
-            去校对/查看是链接；去预览是按钮（原实现用 location.href 跳预览页）；
-            退回校对是按钮（强确认 + unpublish），语义与拆分前一致 */}
+            去校对/查看是链接；去预览是按钮（原实现用 location.href 跳预览页）。
+            V0.4.2：「退回校对」弱化后移到底栏，与「删除」同一行对齐 */}
         <div className="mt-auto flex flex-col gap-0.5 pt-2 text-lg font-extrabold">
           {draft.status === "published" ? (
-            <>
-              <a href={`/units/${draft.id}`} className="text-emerald-600">
-                查看 →
-              </a>
-              <button
-                type="button"
-                onClick={() => onUnpublish(draft)}
-                disabled={unpublishingId === draft.id}
-                className="text-left text-red-600 disabled:opacity-40"
-              >
-                {unpublishingId === draft.id ? "退回中…" : "退回校对 →"}
-              </button>
-            </>
+            <a href={`/units/${draft.id}`} className="text-emerald-600">
+              查看 →
+            </a>
           ) : draft.status === "proofreading" ? (
             <>
               <a
@@ -332,17 +397,30 @@ function DraftCard({
                 </button>
               )}
             </>
-          ) : (
+          ) : failed ? null : (
             <span className="text-slate-400">转写完成后可校对</span>
           )}
         </div>
 
-        <div className="mt-1 flex justify-end">
+        {/* 底栏（V0.4.2）：published 卡左下「退回校对」与右下「删除」同字号、同 hover 样式 */}
+        <div className="mt-1 flex items-center justify-between gap-2">
+          {draft.status === "published" ? (
+            <button
+              type="button"
+              onClick={() => onUnpublish(draft)}
+              disabled={unpublishingId === draft.id}
+              className="rounded-lg px-2 py-1 text-xs font-semibold text-slate-400 hover:bg-slate-50 hover:text-red-500 active:bg-slate-100 disabled:opacity-40"
+            >
+              {unpublishingId === draft.id ? "退回中…" : "退回校对"}
+            </button>
+          ) : (
+            <span />
+          )}
           <button
             type="button"
             onClick={() => void onDelete(draft)}
             disabled={deletingId === draft.id}
-            className="rounded-lg px-2 py-1 text-xs font-semibold text-slate-400 hover:bg-slate-50 hover:text-red-500 active:bg-slate-100 disabled:opacity-40"
+            className="shrink-0 rounded-lg px-2 py-1 text-xs font-semibold text-slate-400 hover:bg-slate-50 hover:text-red-500 active:bg-slate-100 disabled:opacity-40"
           >
             {deletingId === draft.id ? "删除中…" : "删除"}
           </button>

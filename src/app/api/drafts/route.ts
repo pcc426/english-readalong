@@ -52,6 +52,8 @@ export async function GET(req: Request) {
           unitId: module?.unitId ?? null,
           moduleKind: module?.moduleKind ?? null,
           status: d.status,
+          // 转写失败原因（V0.4.2）：列表卡片据此提示「转写失败，请重新上传视频」
+          transcribeError: d.transcribeError,
           sentenceCount: counts.get(d.id) ?? 0,
           confirmedCount: confirmed.get(d.id) ?? 0,
           // 封面（票 01）：抽帧完成才有，转写期间列表对缺失容忍（null → 占位）

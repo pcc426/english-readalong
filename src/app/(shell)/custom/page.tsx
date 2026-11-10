@@ -6,12 +6,14 @@
 // 制作中（上传成功跳回带此参）；数据仍走 GET /api/drafts?type=custom，
 // published 行携带 latestRunStars（同 owned-content 口径）供「🌟N 上次练完获得」。
 // UI 不做自动化测试，走 iPad 真机手工验收清单（spec · Testing Decisions）。
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { WeeklyLimitModal } from "@/components/shared/WeeklyLimitModal";
 import { WEEKLY_RUN_LIMIT } from "@/lib/domain/limits";
-import { STATUS_BADGES, type DraftStatusUI } from "@/components/shared/draft-ui";
+import { STATUS_BADGES, statusBadgeLabel, TRANSCRIBE_FAILED_BADGE, TRANSCRIBE_FAILED_HINT, type DraftStatusUI } from "@/components/shared/draft-ui";
+import { readUploadHint, UPLOAD_WATCH_MS } from "@/components/shared/upload-handoff";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import {
   parseTabParam,
   tabOfStatus,
@@ -27,6 +29,8 @@ interface DraftOverview {
   unitId: string | null;
   moduleKind: string | null;
   status: DraftStatusUI;
+  /** 转写失败原因（V0.4.2）：非空时卡片提示「转写失败，请重新上传视频」 */
+  transcribeError: string | null;
   sentenceCount: number;
   confirmedCount: number;
   posterUrl: string | null;
@@ -55,21 +59,29 @@ function CustomListInner() {
   const [failed, setFailed] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // V0.4.2：删除确认弹框（替换原生 confirm）
+  const [confirming, setConfirming] = useState<DraftOverview | null>(null);
   // 本周练满上限的已定稿卡片：点卡不跳转，只弹限次说明（V0.4 账本口径）
   const [capped, setCapped] = useState<DraftOverview | null>(null);
+
+  // 转写中卡片的自动刷新间隔（V0.4.2）：转写完成后无需手动刷新即出现「去校对」
+  const TRANSCRIBING_POLL_MS = 3000;
+  const loadedRef = useRef(false);
 
   const loadDrafts = useCallback(async () => {
     try {
       // 本页只管自定义内容；管理员的标准草稿走「标准内容制作」页
       const res = await fetch("/api/drafts?type=custom");
       if (!res.ok) {
-        setFailed(true);
+        // 已有数据时（轮询刷新）不把整页切成失败态
+        if (!loadedRef.current) setFailed(true);
         return;
       }
       const body = (await res.json()) as { drafts?: DraftOverview[] };
+      loadedRef.current = true;
       setDrafts(body.drafts ?? []);
     } catch {
-      setFailed(true);
+      if (!loadedRef.current) setFailed(true);
     }
   }, []);
 
@@ -77,10 +89,32 @@ function CustomListInner() {
     void loadDrafts();
   }, [loadDrafts]);
 
+  // V0.4.2：只要还有转写中的卡片就 3 秒一轮刷新
+  const transcribing = (drafts ?? []).some(
+    (d) => d.status === "transcribing"
+  );
+  // 刚上传过时（100% 就跳回列表，草稿可能还没建好）额外轮询一小段时间
+  const [uploadWatch, setUploadWatch] = useState(false);
+  useEffect(() => {
+    if (!readUploadHint()) return;
+    setUploadWatch(true);
+    const timer = setTimeout(() => setUploadWatch(false), UPLOAD_WATCH_MS);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!transcribing && !uploadWatch) return;
+    const timer = setInterval(() => void loadDrafts(), TRANSCRIBING_POLL_MS);
+    return () => clearInterval(timer);
+  }, [transcribing, uploadWatch, loadDrafts]);
+
+  /** 点「删除」：先弹确认框 */
+  function requestDelete(draft: DraftOverview) {
+    if (deletingId) return;
+    setConfirming(draft);
+  }
+
   async function handleDelete(draft: DraftOverview) {
-    if (!window.confirm(`确定删除「${draft.title}」吗？视频文件会一并删除。`)) {
-      return;
-    }
     setDeletingId(draft.id);
     try {
       const res = await fetch(`/api/drafts/${draft.id}`, { method: "DELETE" });
@@ -207,6 +241,20 @@ function CustomListInner() {
         onClose={() => setCapped(null)}
         contentType="custom"
       />
+
+      <ConfirmDialog
+        open={confirming !== null}
+        onClose={() => setConfirming(null)}
+        icon="🗑️"
+        title={confirming ? `删除「${confirming.title}」？` : ""}
+        message="这条内容和它的视频文件会一起删除，删除后不能恢复。"
+        confirmLabel="确定删除"
+        onConfirm={() => {
+          const target = confirming;
+          setConfirming(null);
+          if (target) void handleDelete(target);
+        }}
+      />
     </div>
   );
 
@@ -245,6 +293,10 @@ function CustomListInner() {
                 />
               </div>
             </div>
+          ) : draft.transcribeError ? (
+            <p className="mt-0.5 text-xs font-semibold text-red-600">
+              {TRANSCRIBE_FAILED_HINT}
+            </p>
           ) : (
             <p className="mt-0.5 text-xs text-slate-500">
               视频转写中，完成后可校对…
@@ -294,17 +346,20 @@ function CustomListInner() {
         <span className="absolute left-3 top-3 rounded-full bg-violet-100 px-2.5 py-1 text-xs font-bold text-violet-700">
           自定义
         </span>
-        <span className="absolute right-3 top-3">{statusBadge(draft.status)}</span>
+        <span className="absolute right-3 top-3">
+          {statusBadge(draft.status, Boolean(draft.transcribeError))}
+        </span>
       </div>
     );
   }
 
-  /** 状态徽标（配色沿用 STATUS_BADGES：转写中 sky / 待校对 amber / 已定稿 emerald） */
-  function statusBadge(status: DraftStatusUI) {
-    const badge = STATUS_BADGES[status];
+  /** 状态徽标（配色沿用 STATUS_BADGES：转写中 sky / 待校对 amber / 已发布 emerald；
+   *  转写失败改红底「转写失败」） */
+  function statusBadge(status: DraftStatusUI, failed: boolean) {
+    const badge = failed ? TRANSCRIBE_FAILED_BADGE : STATUS_BADGES[status];
     return (
       <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${badge.className}`}>
-        {badge.label}
+        {failed ? TRANSCRIBE_FAILED_BADGE.label : statusBadgeLabel(status, "custom")}
       </span>
     );
   }
@@ -327,7 +382,7 @@ function CustomListInner() {
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          void handleDelete(draft);
+          void requestDelete(draft);
         }}
         disabled={deletingId === draft.id}
         className="shrink-0 rounded-lg px-2 py-1 text-xs font-semibold text-slate-400 hover:bg-slate-50 hover:text-red-500 active:bg-slate-100 disabled:opacity-40"
