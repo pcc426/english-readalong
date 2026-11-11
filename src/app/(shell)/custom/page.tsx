@@ -11,7 +11,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { WeeklyLimitModal } from "@/components/shared/WeeklyLimitModal";
 import { WEEKLY_RUN_LIMIT } from "@/lib/domain/limits";
-import { STATUS_BADGES, statusBadgeLabel, TRANSCRIBE_FAILED_BADGE, TRANSCRIBE_FAILED_HINT, type DraftStatusUI } from "@/components/shared/draft-ui";
+import { STATUS_BADGES, TRANSCRIBE_FAILED_BADGE, TRANSCRIBE_FAILED_HINT, type DraftStatusUI } from "@/components/shared/draft-ui";
 import { readUploadHint, UPLOAD_WATCH_MS } from "@/components/shared/upload-handoff";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import {
@@ -359,7 +359,7 @@ function CustomListInner() {
     const badge = failed ? TRANSCRIBE_FAILED_BADGE : STATUS_BADGES[status];
     return (
       <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${badge.className}`}>
-        {failed ? TRANSCRIBE_FAILED_BADGE.label : statusBadgeLabel(status, "custom")}
+        {failed ? TRANSCRIBE_FAILED_BADGE.label : badge.label}
       </span>
     );
   }

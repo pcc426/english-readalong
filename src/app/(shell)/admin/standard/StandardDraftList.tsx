@@ -221,7 +221,7 @@ export default function StandardDraftList() {
               {(
                 [
                   ["making", `制作中 (${making.length})`],
-                  ["published", `已定稿 (${published.length})`],
+                  ["published", `已发布 (${published.length})`],
                 ] as const
               ).map(([key, label]) => (
                 <button
@@ -243,7 +243,7 @@ export default function StandardDraftList() {
               <p className="mt-8 rounded-3xl bg-white p-12 text-center text-lg text-slate-500 shadow-md ring-1 ring-slate-100">
                 {tab === "making"
                   ? "还没有制作中的标准内容，从右上角开始上传"
-                  : "还没有已定稿的标准内容"}
+                  : "还没有已发布的标准内容"}
               </p>
             ) : (
               <div className="mt-6 grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(180px,1fr))]">
@@ -402,14 +402,15 @@ function DraftCard({
           )}
         </div>
 
-        {/* 底栏（V0.4.2）：published 卡左下「退回校对」与右下「删除」同字号、同 hover 样式 */}
+        {/* 底栏（V0.4.2）：published 卡左下「退回校对」与右下「删除」同字号、同 hover 样式；
+            左按钮去掉左内边距，让文字与上方「查看 →」左对齐 */}
         <div className="mt-1 flex items-center justify-between gap-2">
           {draft.status === "published" ? (
             <button
               type="button"
               onClick={() => onUnpublish(draft)}
               disabled={unpublishingId === draft.id}
-              className="rounded-lg px-2 py-1 text-xs font-semibold text-slate-400 hover:bg-slate-50 hover:text-red-500 active:bg-slate-100 disabled:opacity-40"
+              className="rounded-lg py-1 pl-0 pr-2 text-xs font-semibold text-slate-400 hover:bg-slate-50 hover:text-red-500 active:bg-slate-100 disabled:opacity-40"
             >
               {unpublishingId === draft.id ? "退回中…" : "退回校对"}
             </button>

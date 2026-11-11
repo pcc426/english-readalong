@@ -11,7 +11,6 @@ import {
   STATUS_BADGES,
   formatMs,
   previewGate,
-  statusBadgeLabel,
 } from "@/components/shared/draft-ui";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import type { DraftDetailView } from "@/components/proofread/types";
@@ -121,7 +120,7 @@ export default function DraftDetailPage() {
       <div className="mt-4 flex items-center gap-3">
         <h1 className="text-3xl font-bold tracking-tight">{draft.title}</h1>
         <span className={`rounded-full px-4 py-1 text-lg font-bold ${badge.className}`}>
-          {statusBadgeLabel(draft.status, "custom")}
+          {badge.label}
         </span>
       </div>
 

@@ -79,13 +79,19 @@ function seedDraft(db: Db, taskId: string | null): string {
   return draft.id;
 }
 
-describe("nextPollDelayMs（退避纯函数）", () => {
-  it("首查用基础间隔，指数增长，封顶", () => {
+describe("nextPollDelayMs（间隔纯函数；默认 base=max 即固定 5s，V0.4.2）", () => {
+  it("默认固定 5s：不随 attempt 增长", () => {
     expect(nextPollDelayMs(1)).toBe(5000);
-    expect(nextPollDelayMs(2)).toBe(10000);
-    expect(nextPollDelayMs(3)).toBe(20000);
-    expect(nextPollDelayMs(9)).toBe(60000);
-    expect(nextPollDelayMs(50)).toBe(60000); // 封顶后不再增长
+    expect(nextPollDelayMs(2)).toBe(5000);
+    expect(nextPollDelayMs(50)).toBe(5000);
+  });
+
+  it("显式给 max 时保留指数退避算式（需要时可调回退避模式）", () => {
+    expect(nextPollDelayMs(1, 5000, 60000)).toBe(5000);
+    expect(nextPollDelayMs(2, 5000, 60000)).toBe(10000);
+    expect(nextPollDelayMs(3, 5000, 60000)).toBe(20000);
+    expect(nextPollDelayMs(9, 5000, 60000)).toBe(60000);
+    expect(nextPollDelayMs(50, 5000, 60000)).toBe(60000); // 封顶后不再增长
   });
 });
 

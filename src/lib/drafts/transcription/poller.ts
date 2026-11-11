@@ -26,11 +26,15 @@ export function isResumableDraft(
   return draft.status === "transcribing" && Boolean(draft.transcribeTaskId);
 }
 
-/** 退避间隔：第 attempt 次轮询前等 base * 2^(attempt-1)，封顶 max（默认 5s → 60s） */
+/**
+ * 轮询间隔（V0.4.2 验收反馈）：默认固定 5s（base = max），转写完成的状态感知
+ * 延迟不超过约 5s + 前端刷新 3s。函数本身保留退避算式——调小 maxAttempts
+ * 或调大 maxDelayMs 即回到退避模式，也便于单测注入。
+ */
 export function nextPollDelayMs(
   attempt: number,
   baseMs = 5000,
-  maxMs = 60000
+  maxMs = 5000
 ): number {
   return Math.min(baseMs * 2 ** (attempt - 1), maxMs);
 }
@@ -83,13 +87,18 @@ export async function pollDraftOnce(
     setTranscribeError(db, draftId, result.error);
     return "stop";
   }
+  // pending：转写仍在进行。若上一轮是网络抖动留下的临时错误，这里清掉，
+  // 避免列表卡片一直挂着「转写失败」红标（V0.4.2：失败徽标按 transcribeError 显示）
+  if (draft.transcribeError) {
+    setTranscribeError(db, draftId, "");
+  }
   return "continue";
 }
 
 export interface PollerOptions {
   baseDelayMs?: number;
   maxDelayMs?: number;
-  /** 轮询上限（5s→60s 退避下默认 240 次约覆盖讯飞 SLA 的 5 小时） */
+  /** 轮询上限（V0.4.2：5s 固定间隔下默认 3600 次，约覆盖讯飞 SLA 的 5 小时） */
   maxAttempts?: number;
   /** 定时器缝：单测注入队列调度器，生产用全局 setTimeout */
   setTimeoutFn?: (fn: () => void, ms: number) => unknown;
@@ -117,8 +126,8 @@ export class TranscriptionPoller {
     options: PollerOptions = {}
   ) {
     this.baseDelayMs = options.baseDelayMs ?? 5000;
-    this.maxDelayMs = options.maxDelayMs ?? 60000;
-    this.maxAttempts = options.maxAttempts ?? 240;
+    this.maxDelayMs = options.maxDelayMs ?? 5000;
+    this.maxAttempts = options.maxAttempts ?? 3600;
     this.setTimeoutFn = options.setTimeoutFn ?? ((fn, ms) => setTimeout(fn, ms));
     this.openDbFn = options.openDbFn ?? (() => openDb(dbPath()));
   }

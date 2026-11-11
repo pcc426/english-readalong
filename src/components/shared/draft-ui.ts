@@ -3,27 +3,16 @@
 // 与 GET /api/drafts 等草稿接口响应的 status 字段对应。
 export type DraftStatusUI = "transcribing" | "proofreading" | "published";
 
-/** 草稿状态 → 徽标文案与配色（spec 界面布局：转写中 / 未校对 / 已定稿） */
+/** 草稿状态 → 徽标文案与配色；published 的显示文案 V0.4.2 统一为「已发布」
+ * （自定义内容页与教材制作页一致，仅显示名，status 字段不动） */
 export const STATUS_BADGES: Record<
   DraftStatusUI,
   { label: string; className: string }
 > = {
   transcribing: { label: "转写中", className: "bg-sky-100 text-sky-700" },
   proofreading: { label: "未校对", className: "bg-amber-100 text-amber-700" },
-  published: { label: "已定稿", className: "bg-emerald-100 text-emerald-700" },
+  published: { label: "已发布", className: "bg-emerald-100 text-emerald-700" },
 };
-
-/**
- * 徽标文案（V0.4.2）：自定义内容页把 published 显示为「已发布」，
- * 教材制作页仍是「已定稿」。只改显示名，status 字段与接口不动。
- */
-export function statusBadgeLabel(
-  status: DraftStatusUI,
-  surface: "standard" | "custom"
-): string {
-  if (surface === "custom" && status === "published") return "已发布";
-  return STATUS_BADGES[status].label;
-}
 
 /** 转写失败徽标（V0.4.2）：上传后转写失败时列表卡片改用它 */
 export const TRANSCRIBE_FAILED_BADGE = {
