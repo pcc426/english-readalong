@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import SiteFooter from "@/components/shared/SiteFooter";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -20,6 +21,7 @@ export default function RootLayout({
         className="min-h-screen bg-sky-50 text-slate-800 antialiased"
       >
         {children}
+        <SiteFooter />
       </body>
     </html>
   );

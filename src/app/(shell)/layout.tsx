@@ -83,7 +83,7 @@ export default function ShellLayout({
           collapsed={collapsed}
           onToggleSidebar={toggleSidebar}
         />
-        <main className="min-h-0 flex-1 overflow-y-auto">{children}</main>
+        <main className="min-h-0 flex-1 overflow-y-auto pb-12">{children}</main>
       </div>
     </div>
   );

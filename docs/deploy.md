@@ -118,6 +118,7 @@ ufw enable && ufw status
 | `SHIPPED_MEDIA_DIR` | 可选 | 随代码标准内容视频目录，默认 `content/media`；本仓库已无随代码内容 |
 | `READALONG_SITE_ADDRESS` | 部署 Caddy 时必填 | Caddy 站点对外地址，Caddy 实际从 `/etc/caddy/domain.env` 读取（见第四节），如 `https://readaloud.com.cn`；应用 `.env` 中的同名变量仅作站点记录，应用代码不读取，`deploy.sh` 仍会随 `.env` 同步。IP 调试留档用法填 `https://<公网IP>:8443` |
 | `READALONG_DEFAULT_SNI` | 仅 IP 调试留档 | 公网 IP，配合 `deploy/Caddyfile.ip-tls` 的自签证书使用；正式域名形态不需要 |
+| `READALONG_ICP_NUMBER` | 否 | ICP 备案号原文（如 `沪ICP备2026061963号-1`）。配置后全站页脚展示并链接工信部备案系统 `beian.miit.gov.cn`；留空不渲染页脚。Next.js 服务端读取，改值后 `pm2 reload english-readalong` 生效。公安联网备案号待申请通过后补挂 |
 
 获取方式：[xfyun.cn 控制台](https://www.xfyun.cn/) → 对应服务页 → 服务管理里取 APPID / APIKey / APISecret。
 
@@ -265,7 +266,9 @@ V0.1 练习链路的 7 条快速冒烟仍有效：
 
 1. **域名备案**：已完成（2026-11）。`readaloud.com.cn`（含 www）已解析到 VPS，
    Caddy 切换为自动 HTTPS（Let's Encrypt，自动续期），旧 IP:8443 自签入口关闭。
-   备案号在网页页脚的展示为 V0.4.3 阶段二，待备案号原文后上线。
+   V0.4.3 阶段二已上线 ICP 备案号页脚（`沪ICP备2026061963号-1`，环境变量
+   `READALONG_ICP_NUMBER`，根布局全站渲染含登录页）；**公安联网备案号申请中，
+   通过后在同一页脚补挂**（链接 `beian.gov.cn`）。
 2. **防火墙 / IP 白名单调整**：ADR-0003 以登录鉴权取代白名单作为主访问控制后，
    实际定档为「全放行 80/443，仅靠登录 + 限速」（最宽档）：主机不启用 ufw/firewalld，
    边界由腾讯云安全组控制，80/443 已对所有来源放行。**遗留小动作**：安全组里旧的

@@ -102,6 +102,7 @@ npm run dev
 | `SHIPPED_MEDIA_DIR`                                   | 否            | `content/media`     | 随代码标准内容视频目录；本仓库已无随代码内容                                                                                  |
 | `READALONG_SITE_ADDRESS`                              | 部署 Caddy 时必填 | —                   | Caddy 站点对外地址；Caddy 实际从 VPS `/etc/caddy/domain.env` 读取，如 `https://readaloud.com.cn`。应用 `.env` 中的同名值仅作记录，应用代码不读取 |
 | `READALONG_DEFAULT_SNI`                               | 仅 IP 调试留档     | —                   | 公网 IP，配合 `deploy/Caddyfile.ip-tls` 的自签证书使用；正式域名形态不需要                                                              |
+| `READALONG_ICP_NUMBER`                                | 否            | —                   | ICP 备案号原文（如 `沪ICP备2026061963号-1`）；配置后全站页脚展示并链接工信部备案系统，留空不渲染 |
 
 会话不需要额外密钥：会话 id 为服务端随机不透明字符串，存 SQLite，通过 HttpOnly + Secure Cookie 下发。
 
