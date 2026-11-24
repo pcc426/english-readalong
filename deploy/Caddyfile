@@ -1,10 +1,15 @@
-# 生产环境：站点地址从环境变量读取，值放在 .env 的 READALONG_SITE_ADDRESS。
-# Caddy 通过 systemd EnvironmentFile 加载 .env，配置步骤见 docs/deploy.md「四、Caddy」。
+# 生产环境：主站地址从环境变量读取，值放在 /etc/caddy/domain.env 的 READALONG_SITE_ADDRESS。
+# Caddy 通过 systemd EnvironmentFile 加载，配置步骤见 docs/deploy.md「四、Caddy」。
 #
 # 示例：
-#   READALONG_SITE_ADDRESS=https://english.example.com
+#   READALONG_SITE_ADDRESS=https://readaloud.com.cn
 #
 # 未设置该变量时 Caddy 无法启动（有意为之，避免误用示例域名）。
 {$READALONG_SITE_ADDRESS} {
 	reverse_proxy 127.0.0.1:3000
+}
+
+# www 永久跳转到主域名（301）；该站点的证书同样由 Caddy 自动签发与续期。
+www.readaloud.com.cn {
+	redir {$READALONG_SITE_ADDRESS}{uri} permanent
 }
