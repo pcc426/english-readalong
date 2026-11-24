@@ -26,9 +26,9 @@ apt update && apt install -y caddy
 
 ## 二、域名
 
-1. 域名的 **A 记录** 指向 VPS 公网 IP（`ping <域名>` 确认解析生效）。
-2. 服务器 80/443 端口对外可达（云厂商安全组放行）。
-3. **待办**：国内 VPS 对外提供 Web 服务需完成域名 ICP 备案（见「九、部署待办」）。
+1. 域名的 **A 记录** 指向 VPS 公网 IP（`ping <域名>` 确认解析生效）；www 子域同样配 A 记录，Caddy 会对 www 自动签证书并 301 跳主域。
+2. 服务器 80/443 端口对外可达（云厂商安全组放行；ACME 签发校验要走 80）。
+3. 国内 VPS 对外提供 Web 服务需完成域名 ICP 备案；本站备案已通过（2026-11），备案号页脚展示见 V0.4.3 阶段二。
 
 ## 三、防火墙（辅助防线；V0.2 主访问控制是登录）
 
@@ -51,58 +51,49 @@ ufw enable && ufw status
 
 ## 四、Caddy（HTTPS 与反向代理）
 
-站点地址不再写死在 `deploy/Caddyfile`，而是从 `.env` 的 `READALONG_SITE_ADDRESS`
-读取。Caddy 不自动加载 `.env`，需要让它的 systemd 服务读这份文件（一次性配置）。
+正式形态（V0.4.3，2026-11-24 起）：站点地址放在独立的 `/etc/caddy/domain.env`
+（只含 `READALONG_SITE_ADDRESS` 一个变量，Caddy 进程看不到应用 `.env` 里的讯飞
+密钥），经 systemd drop-in 的 `EnvironmentFile` 加载。`deploy/Caddyfile` 同时
+配置 www 301 跳主域，两个站点的证书都由 Caddy 自动向 Let's Encrypt 申请并续期
+（有效期 90 天，到期前自动续，无需手动管理）。
 
-1. 在本地 `.env` 中设置站点地址：
-
-   ```dotenv
-   # 有域名（推荐，Caddy 自动申请 Let's Encrypt 证书）
-   READALONG_SITE_ADDRESS=https://english.example.com
-   ```
-
-   如果域名还没就绪，可先用公网 IP + 自签证书调试：
-
-   ```dotenv
-   READALONG_SITE_ADDRESS=https://<公网IP>:8443
-   READALONG_DEFAULT_SNI=<公网IP>
-   ```
-
-2. 在 VPS 上让 Caddy 的 systemd 服务加载这份 `.env`（一次性）：
+1. 在 VPS 上准备环境文件与 drop-in（一次性）：
 
    ```bash
+   echo 'READALONG_SITE_ADDRESS=https://readaloud.com.cn' | sudo tee /etc/caddy/domain.env
+   sudo chown root:caddy /etc/caddy/domain.env && sudo chmod 640 /etc/caddy/domain.env
    sudo mkdir -p /etc/systemd/system/caddy.service.d
    sudo tee /etc/systemd/system/caddy.service.d/readalong.conf >/dev/null <<'EOF'
    [Service]
-   EnvironmentFile=/opt/english-readalong/.env
+   EnvironmentFile=/etc/caddy/domain.env
    EOF
    sudo systemctl daemon-reload
    ```
 
-   systemd 以 root 读取该文件，`.env` 保持 `600` 权限即可。
-   注意：这样 Caddy 进程也会看到 `.env` 中的讯飞密钥。如果介意，可以改用
-   `/etc/caddy/readalong.env` 只放 `READALONG_SITE_ADDRESS`（IP 调试版再加
-   `READALONG_DEFAULT_SNI`），并把上面的 `EnvironmentFile` 指向它。
-
-3. 安装对应的 Caddyfile（本地执行）：
+2. 安装 Caddyfile（本地执行；或在服务器仓库 `git show origin/main:deploy/Caddyfile`
+   输出到 `/etc/caddy/Caddyfile`）：
 
    ```bash
-   # 域名 + 自动 HTTPS
    scp deploy/Caddyfile <user@VPS>:/etc/caddy/Caddyfile
-
-   # 或：公网 IP + 自签证书调试
-   scp deploy/Caddyfile.ip-tls <user@VPS>:/etc/caddy/Caddyfile
    ```
 
-4. 启动并检查：
+3. 校验并启动：
 
    ```bash
+   # shell 里 caddy validate 不读 EnvironmentFile，需手动带上变量
+   ssh <user@VPS> "READALONG_SITE_ADDRESS=https://readaloud.com.cn caddy validate --config /etc/caddy/Caddyfile"
    ssh <user@VPS> "sudo systemctl restart caddy && sudo systemctl status caddy"
    ```
 
-   `systemctl restart` 会读取最新的 `.env`；只 `reload` 不会重新加载
-   `EnvironmentFile`。之后修改站点地址，也要再 `restart` 一次。
-   证书由 Caddy 自动签发与续期，无需手动管理。
+   `systemctl restart` 才会重新加载 `EnvironmentFile`；只 `reload` 不会。
+   之后修改站点地址，改 `domain.env` 后也要再 `restart` 一次。
+
+### 备案前的 IP + 自签调试（已废弃，仅留档）
+
+没有域名时可用 `deploy/Caddyfile.ip-tls` + 公网 IP:8443 自签证书调试：
+`domain.env` 需同时放 `READALONG_SITE_ADDRESS=https://<公网IP>:8443` 与
+`READALONG_DEFAULT_SNI=<公网IP>`，iPad/浏览器会提示证书不受信任。
+正式域名上线后 8443 入口已关闭，应在云厂商安全组删除对应规则。
 
 ## 五、凭据环境变量（.env）
 
@@ -125,8 +116,8 @@ ufw enable && ufw status
 | `CONTENT_DATA_DIR` | 可选 | 运行时内容目录（自定义包与运行时标准包），默认 `data/content` |
 | `UPLOADS_DIR` | 可选 | 上传视频运行时目录，默认 `data/uploads` |
 | `SHIPPED_MEDIA_DIR` | 可选 | 随代码标准内容视频目录，默认 `content/media`；本仓库已无随代码内容 |
-| `READALONG_SITE_ADDRESS` | 部署 Caddy 时必填 | Caddy 站点对外地址，由 `deploy/Caddyfile` 从环境变量读取，如 `https://english.example.com`；IP 调试版填 `https://<公网IP>:8443` |
-| `READALONG_DEFAULT_SNI` | 仅 IP 调试版 | 公网 IP，配合 `deploy/Caddyfile.ip-tls` 的自签证书使用 |
+| `READALONG_SITE_ADDRESS` | 部署 Caddy 时必填 | Caddy 站点对外地址，Caddy 实际从 `/etc/caddy/domain.env` 读取（见第四节），如 `https://readaloud.com.cn`；应用 `.env` 中的同名变量仅作站点记录，应用代码不读取，`deploy.sh` 仍会随 `.env` 同步。IP 调试留档用法填 `https://<公网IP>:8443` |
+| `READALONG_DEFAULT_SNI` | 仅 IP 调试留档 | 公网 IP，配合 `deploy/Caddyfile.ip-tls` 的自签证书使用；正式域名形态不需要 |
 
 获取方式：[xfyun.cn 控制台](https://www.xfyun.cn/) → 对应服务页 → 服务管理里取 APPID / APIKey / APISecret。
 
@@ -270,15 +261,15 @@ V0.1 练习链路的 7 条快速冒烟仍有效：
 
 ## 九、部署待办（spec 遗留，如实记录）
 
-以下两项为 V0.2 spec 明确留到部署阶段合并处理的待办，**不阻塞功能验收**，
-但正式对外（受邀家庭跨网访问）前应完成：
+以下两项为 V0.2 spec 明确留到部署阶段合并处理的待办，**不阻塞功能验收**：
 
-1. **域名备案**：国内 VPS 对外提供 Web 服务需完成域名 ICP 备案；备案期间部分
-   厂商会要求网站可访问域名与主体一致。当前调试阶段先用现有环境跑通功能。
+1. **域名备案**：已完成（2026-11）。`readaloud.com.cn`（含 www）已解析到 VPS，
+   Caddy 切换为自动 HTTPS（Let's Encrypt，自动续期），旧 IP:8443 自签入口关闭。
+   备案号在网页页脚的展示为 V0.4.3 阶段二，待备案号原文后上线。
 2. **防火墙 / IP 白名单调整**：ADR-0003 以登录鉴权取代白名单作为主访问控制后，
-   防火墙策略需重新定档：是否继续只放行家庭 IP（最严）、放行受邀家庭出口 IP
-   （中）、或全放行 80/443 仅靠登录+限速（最宽）。待备案落地后一并调整 ufw 与
-   云厂商安全组。
+   实际定档为「全放行 80/443，仅靠登录 + 限速」（最宽档）：主机不启用 ufw/firewalld，
+   边界由腾讯云安全组控制，80/443 已对所有来源放行。**遗留小动作**：安全组里旧的
+   8443 调试规则确认无回滚需要后删除。
 
 ## 十、常见问题
 
@@ -291,10 +282,10 @@ V0.1 练习链路的 7 条快速冒烟仍有效：
 - **动态 IP 变了打不开**：查新 IP（`curl ip.sb`）→ 更新 ufw 规则。
 - **证书没签下来**：域名解析未生效或 80 端口被防火墙挡住（签发时 Caddy 需要可
   从家庭 IP 可达 80/443）。
-- **Caddy 启动报错 / 站点地址为空**：确认 `/opt/english-readalong/.env` 里有
-  `READALONG_SITE_ADDRESS`，且 systemd drop-in 的 `EnvironmentFile` 指向正确路径；
-  改完 `.env` 后 `sudo systemctl restart caddy`。注意 `caddy validate` 在 shell 里
-  执行时不会读 `EnvironmentFile`。
+- **Caddy 启动报错 / 站点地址为空**：确认 `/etc/caddy/domain.env` 里有
+  `READALONG_SITE_ADDRESS`，且 systemd drop-in 的 `EnvironmentFile` 指向该文件；
+  改完 `domain.env` 后 `sudo systemctl restart caddy`（reload 不重读 EnvironmentFile）。
+  注意 `caddy validate` 在 shell 里执行时不会读 `EnvironmentFile`，需手动带变量。
 - **ffmpeg 缺失**：上传时长校验（ffprobe）与「转写失败：…」里的抽音轨错误 →
   服务器 `apt install -y ffmpeg`。
 - **VPS 磁盘增长**：自定义视频存 `data/uploads/`，单文件上限 200MB；留意磁盘，

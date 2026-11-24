@@ -100,8 +100,8 @@ npm run dev
 | `CONTENT_DATA_DIR`                                    | 否            | `data/content`      | 运行时内容包目录：自定义内容按账号分目录，另有 `standard/` 存放运行时制作的标准内容                                                        |
 | `UPLOADS_DIR`                                         | 否            | `data/uploads`      | 上传视频目录，按账号分目录                                                                                           |
 | `SHIPPED_MEDIA_DIR`                                   | 否            | `content/media`     | 随代码标准内容视频目录；本仓库已无随代码内容                                                                                  |
-| `READALONG_SITE_ADDRESS`                              | 部署 Caddy 时必填 | —                   | Caddy 站点对外地址，由 `deploy/Caddyfile` 从环境变量读取，如 `https://english.example.com`；IP 调试版填 `https://<公网IP>:8443` |
-| `READALONG_DEFAULT_SNI`                               | 仅 IP 调试版     | —                   | 公网 IP，配合 `deploy/Caddyfile.ip-tls` 的自签证书使用                                                              |
+| `READALONG_SITE_ADDRESS`                              | 部署 Caddy 时必填 | —                   | Caddy 站点对外地址；Caddy 实际从 VPS `/etc/caddy/domain.env` 读取，如 `https://readaloud.com.cn`。应用 `.env` 中的同名值仅作记录，应用代码不读取 |
+| `READALONG_DEFAULT_SNI`                               | 仅 IP 调试留档     | —                   | 公网 IP，配合 `deploy/Caddyfile.ip-tls` 的自签证书使用；正式域名形态不需要                                                              |
 
 会话不需要额外密钥：会话 id 为服务端随机不透明字符串，存 SQLite，通过 HttpOnly + Secure Cookie 下发。
 
@@ -191,10 +191,10 @@ npm run typecheck
 
 - 服务器需要 Node 22、ffmpeg、pm2、Caddy（或其他能提供 HTTPS 的反向代理）
 - **iPad / 手机麦克风要求 HTTPS**，纯 IP 不可用
-- Caddy 站点地址从 `.env` 的 `READALONG_SITE_ADDRESS` 读取；临时用 IP 调试时配合 `deploy/Caddyfile.ip-tls`，配置步骤见 [docs/deploy.md](docs/deploy.md)
+- Caddy 站点地址从 VPS `/etc/caddy/domain.env` 的 `READALONG_SITE_ADDRESS` 读取（经 systemd `EnvironmentFile` 加载），正式域名自动签发并续期 Let's Encrypt 证书，www 自动 301 跳主域；备案前的 IP 自签调试留档见 `deploy/Caddyfile.ip-tls`，配置步骤见 [docs/deploy.md](docs/deploy.md)
 - 服务器 `.env` 必须配齐讯飞两套凭据；缺 LFASR 凭据时生产环境会明确报错
 - 首次部署：`npm ci` → `npm run build` → `npx tsx --env-file=.env scripts/create-admin.ts ...` → `pm2 start npm --name english-readalong -- start`
-- 后续发版：本地执行 `./scripts/deploy.sh <user@host>`。站点地址默认读 `.env` 的 `READALONG_SITE_ADDRESS`；脚本用 rsync 同步代码，**不会覆盖或删除服务器上的 `data/`**
+- 后续发版：本地执行 `./scripts/deploy.sh <user@host>`。代码走 `git fetch && reset --hard origin/main`，`.env` 单独 rsync 同步，**不会覆盖或删除服务器上的 `data/`**
 
 部署后建议执行一次：
 
