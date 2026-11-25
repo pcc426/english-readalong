@@ -1,7 +1,12 @@
 const BEIJING_OFFSET_MS = 8 * 60 * 60 * 1000;
 
-/** SQLite datetime('now') 是 UTC 的 "YYYY-MM-DD HH:MM:SS"；补 Z 再解析。 */
+/** SQLite datetime('now') 是 UTC 的 "YYYY-MM-DD HH:MM:SS"；补 T/Z 再解析。 */
 export function parseDbUtc(value: string): Date {
+  // 纯日期串（如 beijingToday 自身的输出）补成完整 ISO；直接拼 Z 会得到非标准的
+  // "YYYY-MM-DDZ"，JavaScriptCore（Safari/iPad）解析为 Invalid Date，V8 则宽松接受。
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return new Date(`${value}T00:00:00Z`);
+  }
   const normalized = value.includes("T") ? value : value.replace(" ", "T");
   return new Date(normalized.endsWith("Z") ? normalized : `${normalized}Z`);
 }

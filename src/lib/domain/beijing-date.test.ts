@@ -10,6 +10,7 @@ import {
   monthDates,
   monthLabel,
   monthRange,
+  parseDbUtc,
   shiftDate,
   shiftMonth,
 } from "./beijing-date";
@@ -60,5 +61,15 @@ describe("beijing-date", () => {
   it("beijingToday 使用注入时钟", () => {
     expect(beijingToday(new Date("2026-11-04T16:30:00Z"))).toBe("2026-11-05");
     expect(beijingMonthOf("2026-11-04 16:30:00")).toBe("2026-11");
+  });
+
+  it("纯日期串按 UTC 零点解析，不产生 Safari 拒绝的 YYYY-MM-DDZ 形式", () => {
+    // 回归：new Date("2026-11-25Z") 在 JavaScriptCore（Safari/iPad）是 Invalid Date，
+    // 曾导致 GrowthView 的 beijingMonthOf(beijingToday()) 渲染时抛 RangeError
+    expect(parseDbUtc("2026-11-25").toISOString()).toBe("2026-11-25T00:00:00.000Z");
+    expect(beijingDateOf("2026-11-25")).toBe("2026-11-25");
+    expect(beijingMonthOf(beijingToday(new Date("2026-11-04T16:30:00Z")))).toBe(
+      "2026-11"
+    );
   });
 });
